@@ -1,0 +1,242 @@
+import mongoose, { Schema, Document, Model } from 'mongoose';
+
+// ==========================================
+// Order Model - Burmese Digital Store
+// ==========================================
+
+export interface IDeliveredKey {
+  serialKey?: string;
+  loginEmail?: string;
+  loginPassword?: string;
+  additionalInfo?: string;
+}
+
+export interface IVpnPlanData {
+  serverId: string;
+  planId: string;
+  devices: number;
+  months: number;
+  protocol?: string;
+}
+
+export interface IVpnKeyData {
+  clientEmail: string;
+  clientUUID: string;
+  subId: string;
+  subLink: string;
+  configLink: string;
+  protocol: string;
+  expiryTime: number; // unix ms
+  provisionedAt?: Date;
+}
+
+export type VpnProvisionStatus = 'pending' | 'provisioned' | 'failed' | 'revoked';
+
+export type FraudFlag = 'duplicate_txid' | 'duplicate_screenshot' | 'amount_time_suspicious' | 'first_time_user' | 'high_amount';
+
+export interface IVerificationChecklist {
+  amountVerified?: boolean;
+  timeVerified?: boolean;
+  accountVerified?: boolean;
+  txidVerified?: boolean;
+  payerVerified?: boolean;
+  completedAt?: Date;
+  completedBy?: mongoose.Types.ObjectId;
+}
+
+export interface IOrderDocument extends Document {
+  user: mongoose.Types.ObjectId;
+  product?: mongoose.Types.ObjectId; // optional for VPN orders
+  orderType: 'product' | 'vpn';
+  quantity: number;
+  totalAmount: number;
+  paymentMethod: 'kpay' | 'wavemoney' | 'cbpay' | 'ayapay';
+  paymentScreenshot: string;
+  transactionId: string;
+  ocrVerified: boolean;
+  ocrExtractedData?: {
+    amount?: string;
+    transactionId?: string;
+    confidence: number;
+  };
+  status: 'pending' | 'verifying' | 'completed' | 'rejected' | 'refunded';
+  deliveredKeys: IDeliveredKey[];
+  // VPN-specific fields
+  vpnPlan?: IVpnPlanData;
+  vpnKey?: IVpnKeyData;
+  vpnProvisionStatus?: VpnProvisionStatus;
+  adminNote?: string;
+  couponCode?: string;
+  discountAmount?: number;
+  // Payment verification & fraud detection fields
+  paymentExpiresAt?: Date;
+  screenshotHash?: string;
+  fraudFlags: FraudFlag[];
+  requiresManualReview: boolean;
+  reviewReason?: string;
+  verificationChecklist?: IVerificationChecklist;
+  rejectReason?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const OrderSchema: Schema = new Schema(
+  {
+    user: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: [true, 'User is required'],
+    },
+    product: {
+      type: Schema.Types.ObjectId,
+      ref: 'Product',
+      required: false, // optional for VPN orders
+    },
+    orderType: {
+      type: String,
+      enum: ['product', 'vpn'],
+      default: 'product',
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      default: 1,
+      min: [1, 'Quantity must be at least 1'],
+    },
+    totalAmount: {
+      type: Number,
+      required: [true, 'Total amount is required'],
+      min: [0, 'Amount cannot be negative'],
+    },
+    paymentMethod: {
+      type: String,
+      required: [true, 'Payment method is required'],
+      enum: {
+        values: ['kpay', 'wavemoney', 'cbpay', 'ayapay'],
+        message: '{VALUE} is not a valid payment method',
+      },
+    },
+    paymentScreenshot: {
+      type: String,
+      required: [true, 'Payment screenshot is required'],
+    },
+    transactionId: {
+      type: String,
+      trim: true,
+    },
+    ocrVerified: {
+      type: Boolean,
+      default: false,
+    },
+    ocrExtractedData: {
+      amount: String,
+      transactionId: String,
+      confidence: {
+        type: Number,
+        default: 0,
+      },
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'verifying', 'completed', 'rejected', 'refunded'],
+      default: 'pending',
+    },
+    deliveredKeys: [
+      {
+        serialKey: String,
+        loginEmail: String,
+        loginPassword: String,
+        additionalInfo: String,
+      },
+    ],
+    // VPN-specific fields
+    vpnPlan: {
+      serverId: String,
+      planId: String,
+      devices: Number,
+      months: Number,
+      protocol: String,
+    },
+    vpnKey: {
+      clientEmail: String,
+      clientUUID: String,
+      subId: String,
+      subLink: String,
+      configLink: String,
+      protocol: String,
+      expiryTime: Number,
+      provisionedAt: Date,
+    },
+    vpnProvisionStatus: {
+      type: String,
+      enum: ['pending', 'provisioned', 'failed', 'revoked'],
+    },
+    adminNote: {
+      type: String,
+      maxlength: [500, 'Admin note cannot exceed 500 characters'],
+    },
+    couponCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // Payment verification & fraud detection fields
+    paymentExpiresAt: {
+      type: Date,
+    },
+    screenshotHash: {
+      type: String,
+      index: true,
+    },
+    fraudFlags: {
+      type: [String],
+      enum: ['duplicate_txid', 'duplicate_screenshot', 'amount_time_suspicious', 'first_time_user', 'high_amount'],
+      default: [],
+    },
+    requiresManualReview: {
+      type: Boolean,
+      default: false,
+    },
+    reviewReason: {
+      type: String,
+      trim: true,
+    },
+    verificationChecklist: {
+      amountVerified: Boolean,
+      timeVerified: Boolean,
+      accountVerified: Boolean,
+      txidVerified: Boolean,
+      payerVerified: Boolean,
+      completedAt: Date,
+      completedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    },
+    rejectReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Reject reason cannot exceed 500 characters'],
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// Indexes
+OrderSchema.index({ user: 1, status: 1 });
+OrderSchema.index({ status: 1, createdAt: -1 });
+OrderSchema.index({ transactionId: 1 });
+OrderSchema.index({ orderType: 1, status: 1 });
+OrderSchema.index({ paymentExpiresAt: 1 }, { sparse: true });
+OrderSchema.index({ screenshotHash: 1 }, { sparse: true });
+OrderSchema.index({ fraudFlags: 1 }, { sparse: true });
+OrderSchema.index({ requiresManualReview: 1, status: 1 });
+
+const Order: Model<IOrderDocument> =
+  mongoose.models.Order || mongoose.model<IOrderDocument>('Order', OrderSchema);
+
+export default Order;

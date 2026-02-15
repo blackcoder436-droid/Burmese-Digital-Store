@@ -1,0 +1,371 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+Myanmar:wght@400;500;600;700;800;900&display=swap');
+
+@layer base {
+  body {
+    @apply bg-dark-950 text-gray-200 antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  html[lang='my'] body {
+    font-family: 'Noto Sans Myanmar', 'Pyidaungsu', 'Myanmar Text', 'Inter', system-ui, -apple-system, sans-serif;
+    line-height: 1.7;
+  }
+
+  * {
+    @apply border-dark-600;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-dark-950;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-dark-600 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-purple-600;
+  }
+
+  ::selection {
+    @apply bg-purple-500/30 text-white;
+  }
+}
+
+@layer components {
+  /* ===== CARDS - Gaming Store Style ===== */
+  .game-card {
+    @apply bg-dark-800/80 border border-dark-600/50 rounded-2xl
+           backdrop-blur-sm shadow-card
+           transition-all duration-500 ease-out;
+  }
+  .game-card:hover {
+    @apply border-purple-500/50 shadow-card-hover -translate-y-2;
+  }
+
+  .glass-panel {
+    @apply bg-gradient-to-b from-dark-800/90 to-dark-900/90
+           border border-white/5 rounded-2xl backdrop-blur-md;
+  }
+
+  /* ===== BUTTONS - Bold & Dynamic ===== */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3
+           font-semibold text-sm rounded-xl
+           transition-all duration-200 
+           active:scale-95
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  .btn-primary {
+    @apply btn bg-gradient-to-r from-purple-600 to-cyan-500 text-white
+           hover:from-purple-500 hover:to-cyan-400
+           shadow-glow-sm hover:shadow-glow;
+  }
+
+  .btn-electric {
+    @apply btn bg-gradient-to-r from-purple-600 to-cyan-500 text-white
+           hover:from-purple-500 hover:to-cyan-400
+           shadow-[0_0_20px_rgba(108,92,231,0.3)]
+           hover:shadow-[0_0_30px_rgba(108,92,231,0.5)];
+  }
+
+  .btn-secondary {
+    @apply btn bg-dark-700 text-gray-200 border border-dark-600
+           hover:bg-dark-600 hover:border-purple-500/50 hover:text-white;
+  }
+
+  .btn-ghost {
+    @apply btn text-gray-400 hover:text-purple-300 hover:bg-purple-500/10;
+  }
+
+  .btn-danger {
+    @apply btn bg-gradient-to-r from-red-600 to-red-700 text-white
+           hover:from-red-500 hover:to-red-600;
+  }
+
+  .btn-success {
+    @apply btn bg-gradient-to-r from-emerald-600 to-emerald-700 text-white
+           hover:from-emerald-500 hover:to-emerald-600;
+  }
+
+  /* ===== INPUTS - Tech Style ===== */
+  .input-field {
+    @apply w-full px-4 py-3 bg-dark-900 border border-dark-600
+           rounded-xl text-white placeholder-gray-500
+           focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20
+           transition-all duration-200;
+  }
+
+  .input-label {
+    @apply block text-sm font-medium text-gray-300 mb-2;
+  }
+
+  /* ===== BADGES - Category Colors ===== */
+  .badge {
+    @apply inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wide;
+  }
+
+  .badge-vpn {
+    @apply badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/30;
+  }
+  .badge-streaming {
+    @apply badge bg-violet-500/20 text-violet-400 border border-violet-500/30;
+  }
+  .badge-gaming {
+    @apply badge bg-rose-500/20 text-rose-400 border border-rose-500/30;
+  }
+  .badge-software {
+    @apply badge bg-sky-500/20 text-sky-400 border border-sky-500/30;
+  }
+  .badge-gift-card {
+    @apply badge bg-amber-500/20 text-amber-400 border border-amber-500/30;
+  }
+  .badge-other {
+    @apply badge bg-gray-500/20 text-gray-400 border border-gray-500/30;
+  }
+
+  /* ===== STATUS - Order states ===== */
+  .status-pending {
+    @apply badge bg-amber-500/20 text-amber-400 border border-amber-500/30;
+  }
+  .status-verifying {
+    @apply badge bg-blue-500/20 text-blue-400 border border-blue-500/30;
+  }
+  .status-completed {
+    @apply badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/30;
+  }
+  .status-rejected {
+    @apply badge bg-red-500/20 text-red-400 border border-red-500/30;
+  }
+  .status-refunded {
+    @apply badge bg-gray-500/20 text-gray-400 border border-gray-500/30;
+  }
+
+  /* ===== TYPOGRAPHY ===== */
+  .heading-xl {
+    @apply text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-[1.22] tracking-tight;
+  }
+  .heading-lg {
+    @apply text-3xl sm:text-4xl font-bold text-white;
+  }
+  .heading-md {
+    @apply text-2xl sm:text-3xl font-bold text-white;
+  }
+  .heading-sm {
+    @apply text-xl font-semibold text-white;
+  }
+
+  html[lang='my'] .heading-xl,
+  html[lang='my'] .heading-lg,
+  html[lang='my'] .heading-md,
+  html[lang='my'] .heading-sm {
+    letter-spacing: 0;
+  }
+
+  html[lang='my'] .heading-xl {
+    line-height: 1.35;
+  }
+
+  html[lang='my'] .heading-lg {
+    line-height: 1.32;
+  }
+
+  html[lang='my'] .heading-md,
+  html[lang='my'] .heading-sm {
+    line-height: 1.3;
+  }
+
+  .text-accent-gradient {
+    @apply bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent;
+  }
+
+  /* ===== NAVIGATION ===== */
+  .nav-link {
+    @apply text-gray-400 font-medium hover:text-purple-300 transition-colors duration-200;
+  }
+  .nav-link-active {
+    @apply text-purple-400;
+  }
+
+  /* ===== PRICE TAG ===== */
+  .price-tag {
+    @apply text-2xl font-black text-purple-400;
+  }
+  .price-tag-lg {
+    @apply text-3xl sm:text-4xl font-black text-purple-400;
+  }
+
+  /* ===== GLOW EFFECTS ===== */
+  .glow-border {
+    @apply border border-purple-500/30;
+    box-shadow: 0 0 15px rgba(108, 92, 231, 0.1), inset 0 0 15px rgba(108, 92, 231, 0.05);
+  }
+
+  .neon-text {
+    text-shadow: 0 0 10px rgba(108, 92, 231, 0.5), 0 0 20px rgba(108, 92, 231, 0.3);
+  }
+
+  /* ===== CARD SHIMMER EFFECT ===== */
+  .card-shimmer {
+    position: relative;
+  }
+  .card-shimmer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(108, 92, 231, 0.03),
+      rgba(108, 92, 231, 0.06),
+      rgba(108, 92, 231, 0.03),
+      transparent
+    );
+    transition: none;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+  .card-shimmer:hover::before {
+    animation: shimmer-slide 0.8s ease-out forwards;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .bg-mesh {
+    background-image: 
+      radial-gradient(at 40% 20%, rgba(108, 92, 231, 0.08) 0px, transparent 50%),
+      radial-gradient(at 80% 0%, rgba(108, 92, 231, 0.08) 0px, transparent 50%),
+      radial-gradient(at 0% 50%, rgba(108, 92, 231, 0.05) 0px, transparent 50%);
+  }
+
+  .animate-in {
+    animation: slideUp 0.3s ease-out, fadeIn 0.5s ease-out;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ===== Scroll Fade-In Animation ===== */
+.scroll-fade {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.scroll-fade.scroll-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Directional variants */
+.scroll-fade-left {
+  opacity: 0;
+  transform: translateX(-40px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.scroll-fade-left.scroll-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.scroll-fade-right {
+  opacity: 0;
+  transform: translateX(40px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.scroll-fade-right.scroll-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Scale variant */
+.scroll-fade-scale {
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.scroll-fade-scale.scroll-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ===== Global Ambient Animations ===== */
+
+/* Tech network SVG background helper (optional) */
+.tech-bg {
+  opacity: 0.18;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Fade-in helper for sections */
+.fade-section {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.fade-section.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ===== VPN Page Animations ===== */
+.vpn-fade {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.vpn-fade.vpn-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes vpn-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+@keyframes vpn-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes vpn-pulse-node {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.5); opacity: 1; }
+}
+@keyframes vpn-fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer-slide {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+@keyframes gentle-glow {
+  0%, 100% { box-shadow: 0 0 15px rgba(108, 92, 231, 0.1); }
+  50% { box-shadow: 0 0 30px rgba(108, 92, 231, 0.2), 0 0 60px rgba(108, 92, 231, 0.05); }
+}
