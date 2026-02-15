@@ -17,6 +17,9 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 const protectedRoutes = ['/account', '/api/orders'];
 const adminRoutes = ['/admin', '/api/admin'];
 
+// Public admin routes (no auth required - secured by ADMIN_SECRET)
+const publicAdminRoutes = ['/api/admin/seed'];
+
 async function verifyTokenEdge(token: string): Promise<JWTPayload | null> {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET, {
@@ -40,7 +43,7 @@ export async function middleware(request: NextRequest) {
   );
   const isAdminRoute = adminRoutes.some((route) =>
     pathname.startsWith(route)
-  );
+  ) && !publicAdminRoutes.some((route) => pathname === route);
 
   if (isProtected || isAdminRoute) {
     if (!token) {
