@@ -86,12 +86,20 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const response = NextResponse.next();
-
   // --- Generate CSP Nonce ---
   // crypto.randomUUID() is available in Edge Runtime
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
-  // Pass nonce to layout.tsx via custom header
+
+  // Forward nonce via REQUEST headers so Next.js can auto-apply it
+  // to its generated inline scripts during server rendering
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
+
+  // Also set on response so client-side code can read it
   response.headers.set('x-nonce', nonce);
 
   // --- Security Headers ---

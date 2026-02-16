@@ -47,16 +47,26 @@ CRON_WRAPPER="${APP_DIR}/scripts/run-backup.sh"
 cat > "${CRON_WRAPPER}" << 'WRAPPER'
 #!/bin/bash
 # Extract only the variables we need from .env.local
-# (avoids bash errors from values with spaces like "Burmese Digital Store")
+# Uses sed to handle special chars in MongoDB URIs (?, &, +, $, etc.)
 ENV_FILE="/var/www/burmese-digital-store/.env.local"
 
 extract_env() {
-  grep "^${1}=" "${ENV_FILE}" 2>/dev/null | head -1 | cut -d'=' -f2-
+  local val
+  val=$(sed -n "s/^${1}=//p" "${ENV_FILE}" 2>/dev/null | head -1 | tr -d '\r' | sed "s/^['\"]//;s/['\"]$//")
+  echo "$val"
 }
 
 export MONGODB_URI="$(extract_env MONGODB_URI)"
 export TELEGRAM_BOT_TOKEN="$(extract_env TELEGRAM_BOT_TOKEN)"
 export TELEGRAM_CHAT_ID="$(extract_env TELEGRAM_CHAT_ID)"
+
+# Debug: verify extraction worked (masked)
+if [ -z "$MONGODB_URI" ]; then
+  echo "[ERROR] MONGODB_URI extraction failed from ${ENV_FILE}" >> /var/log/mongo-backup.log
+  echo "[DEBUG] File exists: $(test -f ${ENV_FILE} && echo yes || echo no)" >> /var/log/mongo-backup.log
+  echo "[DEBUG] MONGODB_URI line: $(grep -c '^MONGODB_URI=' ${ENV_FILE} 2>/dev/null) matches" >> /var/log/mongo-backup.log
+  exit 1
+fi
 
 # Run backup
 /var/www/burmese-digital-store/scripts/backup-to-telegram.sh >> /var/log/mongo-backup.log 2>&1
