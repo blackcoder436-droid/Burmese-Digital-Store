@@ -9,13 +9,14 @@ import { sanitizeString, isValidObjectId } from '@/lib/security';
 // PUT /api/admin/products/[id] - Update product
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const limited = await apiLimiter(request);
   if (limited) return limited;
 
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    if (!isValidObjectId(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid product ID' },
         { status: 400 }
@@ -42,7 +43,7 @@ export async function PUT(
     }
 
     const product = await Product.findByIdAndUpdate(
-      params.id,
+      id,
       { $set: updateData },
       { new: true, runValidators: true }
     );
@@ -83,13 +84,14 @@ export async function PUT(
 // DELETE /api/admin/products/[id] - Delete product
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const limited = await apiLimiter(request);
   if (limited) return limited;
 
   try {
-    if (!isValidObjectId(params.id)) {
+    const { id } = await params;
+    if (!isValidObjectId(id)) {
       return NextResponse.json(
         { success: false, error: 'Invalid product ID' },
         { status: 400 }
@@ -99,7 +101,7 @@ export async function DELETE(
     const admin = await requireAdmin();
     await connectDB();
 
-    const product = await Product.findByIdAndDelete(params.id);
+    const product = await Product.findByIdAndDelete(id);
 
     if (!product) {
       return NextResponse.json(
@@ -113,7 +115,7 @@ export async function DELETE(
         admin: admin.userId,
         action: 'product_deleted',
         target: `${product.name} (${product.category})`,
-        metadata: { productId: params.id },
+        metadata: { productId: id },
       });
     } catch { /* ignore */ }
 

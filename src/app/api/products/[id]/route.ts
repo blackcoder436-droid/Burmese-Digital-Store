@@ -6,16 +6,17 @@ import { apiLimiter } from '@/lib/rateLimit';
 // GET /api/products/[id] - Get single product
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const limited = await apiLimiter(request);
   if (limited) return limited;
 
   try {
+    const { id } = await params;
     await connectDB();
 
     const product = await Product.findOne({
-      _id: params.id,
+      _id: id,
       active: true,
     })
       .select('-details.loginPassword -details.serialKey') // Hide sensitive info
