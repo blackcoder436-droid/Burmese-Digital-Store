@@ -46,10 +46,10 @@
 
 | # | အဆင့် | အကျဉ်း | Status |
 |---|--------|---------|--------|
-| 1 | **Email Provider Setup** | Mailgun (Student Pack) ဖွင့် → domain verify → Cloudflare DNS records ထည့် → SMTP credentials ယူ | ⬜ လုပ်ရန် |
-| 2 | **JWT_SECRET Generate** | `openssl rand -hex 64` run → strong secret ကို `.env.local` ထဲထည့် | ⬜ လုပ်ရန် |
-| 3 | **DigitalOcean Droplet Setup** | Ubuntu + Node.js + Nginx + PM2 install → project clone & build → start | ⬜ လုပ်ရန် |
-| 4 | **Cloudflare DNS → Droplet** | A record → droplet IP, SSL Full (strict), Always HTTPS On | ⬜ လုပ်ရန် |
+| 1 | **Email Provider Setup** | Resend API key ယူ → `.env.local` ထည့် → domain verify | ✅ ပြီးပြီ |
+| 2 | **JWT_SECRET Generate** | `openssl rand -hex 64` run → strong secret ကို `.env.local` ထဲထည့် | ✅ ပြီးပြီ |
+| 3 | **DigitalOcean Droplet Setup** | Ubuntu 24.04 + Node.js 20 + Nginx + PM2 install → project clone & build → start | ✅ ပြီးပြီ |
+| 4 | **Cloudflare DNS → Droplet** | A record → droplet IP, SSL Full (strict), Always HTTPS On | ✅ ပြီးပြီ |
 
 > **အခုလုပ်သင့်တာ:** အဆင့် 1 (Email Provider) ကို အရင်လုပ်ပါ — DNS propagation အချိန်ယူတဲ့အတွက် စောစောလုပ်ထားရင် ကျန်တာတွေ parallel လုပ်နိုင်ပါတယ်။
 
@@ -59,70 +59,53 @@
 | Variable | Value | Status |
 |----------|-------|--------|
 | `MONGODB_URI` | MongoDB Atlas connection string | ✅ ချိတ်ပြီး |
-| `JWT_SECRET` | `openssl rand -hex 64` နဲ့ generate လုပ်ပါ (min 64 chars) | ⬜ လုပ်ရန် |
-| `NEXT_PUBLIC_APP_URL` | `https://burmesedigital.store` | ⬜ လုပ်ရန် |
-| `SMTP_HOST` | Email provider SMTP host (Mailgun: `smtp.mailgun.org`) | ⬜ လုပ်ရန် |
-| `SMTP_PORT` | `587` | ⬜ လုပ်ရန် |
-| `SMTP_USER` | Email provider username | ⬜ လုပ်ရန် |
-| `SMTP_PASS` | Email provider password / API key | ⬜ လုပ်ရန် |
-| `EMAIL_FROM` | `noreply@burmesedigital.store` | ⬜ လုပ်ရန် |
-| `EMAIL_FROM_NAME` | `Burmese Digital Store` | ⬜ လုပ်ရန် |
-| `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL | ⬜ လုပ်ရန် |
-| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST Token | ⬜ လုပ်ရန် |
-| `RATE_LIMIT_FAIL_CLOSED` | `true` (production) | ⬜ လုပ်ရန် |
-| `ENABLE_ADMIN_SEED` | `false` (production default) | ⬜ လုပ်ရန် |
-| `ADMIN_SECRET` | one-time bootstrap only | ⬜ လုပ်ရန် |
-| `VPN_SERVER_ALLOWED_HOSTS` | comma-separated allowlist | ⬜ လုပ်ရန် |
+| `JWT_SECRET` | `openssl rand -hex 64` နဲ့ generate လုပ်ပါ (min 64 chars) | ✅ ပြီးပြီ |
+| `NEXT_PUBLIC_APP_URL` | `https://burmesedigital.store` | ✅ ပြီးပြီ |
+| `SMTP_HOST` | Email provider SMTP host (Mailgun: `smtp.mailgun.org`) | ✅ Resend API သုံး |
+| `SMTP_PORT` | `587` | ✅ Resend API သုံး |
+| `SMTP_USER` | Email provider username | ✅ Resend API သုံး |
+| `SMTP_PASS` | Email provider password / API key | ✅ Resend API သုံး |
+| `EMAIL_FROM` | `noreply@burmesedigital.store` | ✅ ပြီးပြီ |
+| `EMAIL_FROM_NAME` | `Burmese Digital Store` | ✅ ပြီးပြီ |
+| `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL | ✅ ပြီးပြီ |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST Token | ✅ ပြီးပြီ |
+| `RATE_LIMIT_FAIL_CLOSED` | `true` (production) | ✅ ပြီးပြီ |
+| `ENABLE_ADMIN_SEED` | `false` (production default) | ✅ ပြီးပြီ |
+| `ADMIN_SECRET` | one-time bootstrap only | ✅ ပြီးပြီ |
+| `VPN_SERVER_ALLOWED_HOSTS` | comma-separated allowlist | ✅ ပြီးပြီ |
 
 ### 2. Email Provider Setup (သင်လုပ်ရမယ်)
-- ⬜ Mailgun / Resend account ဖွင့်ပါ (Student Pack: Mailgun 20K/month free)
-- ⬜ `burmesedigital.store` domain ထည့်ပါ
-- ⬜ Cloudflare DNS ထဲ email provider ပေးတဲ့ records ထည့်ပါ (SPF, DKIM, CNAME)
-- ⬜ Domain verify ပြီးအောင်စောင့်ပါ
-- ⬜ SMTP credentials ယူပြီး env variables ထဲ ထည့်ပါ
+- ✅ Resend API account ဖွင့်ပြီး
+- ✅ `burmesedigital.store` domain verify ပြီး
+- ✅ Cloudflare DNS ထဲ email provider records ထည့်ပြီး
+- ✅ RESEND_API_KEY env variable ထည့်ပြီး
 
 ### 3. Cloudflare DNS (သင်လုပ်ရမယ်)
-- ⬜ A record → DigitalOcean droplet IP
-- ⬜ CNAME `www` → `burmesedigital.store`
-- ⬜ Email DNS records (SPF, DKIM) ← email provider setup ကနေ
-- ⬜ SSL/TLS → Full (strict) mode ဖွင့်ပါ
-- ⬜ Always Use HTTPS → On
-- ⬜ Auto Minify → JS, CSS, HTML
+- ✅ A record → DigitalOcean droplet IP (`167.99.73.125`)
+- ✅ CNAME `www` → `burmesedigital.store`
+- ✅ Email DNS records (SPF, DKIM) ← Resend setup ကနေ
+- ✅ SSL/TLS → Full (strict) mode ဖွင့်ပြီး
+- ✅ Always Use HTTPS → On
+- ✅ Auto Minify → JS, CSS, HTML
 
 ### 4. DigitalOcean Server Setup (သင်လုပ်ရမယ်)
-- ⬜ Droplet ဖန်တီး (Ubuntu 22.04, min 2GB RAM for Next.js + sharp)
-- ⬜ Node.js 20 LTS install (`curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -`)
-- ⬜ PM2 install (`npm i -g pm2`) — process manager
-- ⬜ Nginx install → reverse proxy (port 3000 → 80/443)
-- ⬜ Let's Encrypt SSL (Cloudflare full strict ဆို skip နိုင်)
-- ⬜ Firewall: UFW enable, allow 22/80/443 only
-- ⬜ Git clone project → `npm install` → `npm run build` → `pm2 start npm --name "store" -- start`
-- ⬜ `public/uploads/` directory permissions: `chmod 755`
-- ⬜ PM2 startup: `pm2 startup` + `pm2 save`
+- ✅ Droplet ဖန်တီးပြီး (Ubuntu 24.04, 1GB RAM + 2GB Swap)
+- ✅ Node.js 20 LTS install
+- ✅ PM2 install — process manager
+- ✅ Nginx install → reverse proxy (port 3000 → 80/443)
+- ✅ Cloudflare Full (strict) SSL — origin cert
+- ✅ Firewall: UFW enable, allow 22/80/443 only
+- ✅ Git clone → `npm ci` → `npm run build` → PM2 start
+- ✅ `public/uploads/` directory permissions
+- ✅ PM2 startup: `pm2 startup` + `pm2 save`
 
 ### 5. Database Backup → Telegram (VPS မှာ setup လုပ်ရန်)
 > ည 12:00 (MMT) တိုင်း MongoDB backup ကို Telegram group သို့ auto ပို့ပေးမယ်
-- ⬜ VPS မှာ `mongodump` install:
-  ```bash
-  wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
-  echo "deb [ arch=amd64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
-  sudo apt update && sudo apt install -y mongodb-database-tools
-  ```
-- ⬜ `.env.local` မှာ Telegram credentials ထည့်ပါ:
-  ```
-  TELEGRAM_BOT_TOKEN=8533001019:AAFpWlhtq8KIne4W0jsH5Oivl8A6tHjmo6g
-  TELEGRAM_CHAT_ID=-1003830141416
-  ```
-- ⬜ Cron job setup:
-  ```bash
-  cd /var/www/burmese-digital-store
-  bash scripts/setup-backup-cron.sh
-  ```
-- ⬜ Test manually:
-  ```bash
-  bash scripts/run-backup.sh
-  ```
-- ⬜ Telegram group ထဲ backup ဖိုင်ရောက်လာကြောင်း confirm ပါ
+- ✅ VPS မှာ `mongodump` install (mongodb-database-tools deb package)
+- ✅ `.env.local` မှာ Telegram credentials ထည့်ပြီး
+- ✅ Cron job setup ပြီး (`scripts/setup-backup-cron.sh`)
+- ✅ Manual test ပြီး — Telegram group ထဲ backup ဖိုင်ရောက်ပြီး
+- ✅ Nightly cron: `30 17 * * *` (UTC) = midnight MMT
 
 ### 6. File Storage (⚠️ Production Issue)
 > `public/uploads/` ကို local filesystem ထဲ သိမ်းထား → redeploy/restart ရင် ပျောက်နိုင်
@@ -131,23 +114,23 @@
 - ⬜ ယခုအတွက် DigitalOcean droplet ပေါ် direct filesystem သုံးနိုင် (PM2 restart ဆို file မပျောက်)
 
 ### 7. Security (Production Must-Do)
-- ⬜ `JWT_SECRET` ကို strong random value ပြောင်းပါ (fallback secret ပါနေ)
-- ⬜ MongoDB Atlas: IP whitelist → DigitalOcean droplet IP only
+- ✅ `JWT_SECRET` ကို strong random value ပြောင်းပြီး
+- ✅ MongoDB Atlas: IP whitelist → DigitalOcean droplet IP only (`167.99.73.125/32`)
 - ⬜ MongoDB user: read/write permission only (admin permission မပေးပါနဲ့)
-- ⬜ `.env.local` production values git ထဲ push မဝင်ကြောင်း confirm ပါ
+- ✅ `.env.local` production values git ထဲ push မဝင်ကြောင်း confirm ပြီး (`.gitignore` ပါ)
 - ⬜ Admin account password ကို strong password ပြောင်းပါ
-- ⬜ `/api/admin/seed` ကို bootstrap ပြီးတာနဲ့ အပြီးပိတ် (`ENABLE_ADMIN_SEED=false`) + `ADMIN_SECRET` rotate
-- ⬜ Production မှာ Upstash Redis rate-limit ကို မဖြစ်မနေ ချိတ်ပါ (မချိတ်ရင် fail-closed 503 ပြန်မယ်)
-- ⬜ `VPN_SERVER_ALLOWED_HOSTS` allowlist ကို production domain/subdomains နဲ့ပဲ သတ်မှတ်ပါ (SSRF hardening)
+- ✅ `/api/admin/seed` ကို bootstrap ပြီးတာနဲ့ အပြီးပိတ် (`ENABLE_ADMIN_SEED=false`)
+- ✅ Production မှာ Upstash Redis rate-limit ချိတ်ပြီး (`RATE_LIMIT_FAIL_CLOSED=true`)
+- ✅ `VPN_SERVER_ALLOWED_HOSTS` allowlist production domain/subdomains set ပြီး
 - ⬜ Server egress firewall policy: panel domains/ports သာထွက်နိုင်အောင် စဉ်းစားပါ (optional but recommended)
 
 ### 8. Domain & SSL
-- ⬜ Cloudflare → `burmesedigital.store` DNS → DigitalOcean IP
-- ⬜ Nginx config: `server_name burmesedigital.store www.burmesedigital.store`
-- ⬜ HTTPS redirect (Cloudflare "Always Use HTTPS" / Nginx redirect)
-- ⬜ `next.config.js` images hostname ✅ `burmesedigital.store` ပါပြီးသား
-- ⬜ Cloudflare SSL/TLS mode: **Full (strict)** (Flexible မသုံးပါ)
-- ⬜ Origin cert (Let's Encrypt သို့ Cloudflare Origin Cert) တပ်ပြီး end-to-end TLS တည်ဆောက်ပါ
+- ✅ Cloudflare → `burmesedigital.store` DNS → DigitalOcean IP
+- ✅ Nginx config: `server_name burmesedigital.store www.burmesedigital.store`
+- ✅ HTTPS redirect (Cloudflare "Always Use HTTPS")
+- ✅ `next.config.js` images hostname `burmesedigital.store` ပါပြီးသား
+- ✅ Cloudflare SSL/TLS mode: **Full (strict)**
+- ✅ Origin cert (Cloudflare Origin Cert) တပ်ပြီး end-to-end TLS တည်ဆောက်ပြီး
 
 ---
 
@@ -278,11 +261,67 @@ sudo ufw enable
 
 ## Notes & Suggestions
 - MongoDB ✅ ချိတ်ပြီး, DigitalOcean ✅ အဆင်ပြေပြီ
-- Email provider (Mailgun/Resend) setup ကို ဦးစားပေးလုပ်ပါ
-- JWT_SECRET ကို production မှာ strong random value သုံးပါ
+- Email provider: Resend API ✅ ချိတ်ပြီး
+- JWT_SECRET ✅ strong random value သုံးပြီး
 - File uploads production မှာ persistent storage (DO Spaces / block storage) စဉ်းစားပါ
-- For analytics, consider chart libraries (e.g. recharts, chart.js)
-- For notifications, consider both in-app (toast, bell icon) and email
+- Analytics ✅ recharts သုံးပြီး
+- Notifications ✅ in-app (bell icon) + email
+
+---
+
+## 📝 Deployment Log (2026-02-17)
+
+### VPS Server Info
+- **Provider:** DigitalOcean
+- **IP:** `167.99.73.125`
+- **OS:** Ubuntu 24.04.4 LTS
+- **RAM:** 1GB + 2GB Swap
+- **Domain:** `burmesedigital.store`
+- **SSL:** Cloudflare Full (strict) + Origin Cert
+- **Node.js:** v20 LTS
+- **Process Manager:** PM2 (cluster mode)
+- **Reverse Proxy:** Nginx
+- **App Path:** `/var/www/burmese-digital-store`
+
+### External Services
+| Service | Usage | Plan |
+|---------|-------|------|
+| MongoDB Atlas | Database | GitHub Student Pack (M0 free) |
+| Upstash Redis | Rate limiting | Free tier (10K req/day) |
+| Resend | Email (password reset, notifications) | Free/API |
+| Cloudflare | DNS + SSL + CDN | Free |
+| Telegram Bot | DB backup delivery | Free |
+
+### Cron Jobs
+| Schedule | Task | Script |
+|----------|------|--------|
+| `30 17 * * *` (UTC) = Midnight MMT | MongoDB → Telegram backup | `/var/www/burmese-digital-store/scripts/run-backup.sh` |
+
+### Redeploy Commands (VPS)
+```bash
+cd /var/www/burmese-digital-store
+git pull origin main
+npm ci
+npm run build
+pm2 restart burmese-digital-store
+```
+
+### Key Files on VPS
+| File | Purpose |
+|------|---------|
+| `/var/www/burmese-digital-store/.env.local` | Production environment variables (NEVER commit) |
+| `/var/log/mongo-backup.log` | Backup script log |
+| `/etc/nginx/sites-available/burmesedigital.store` | Nginx reverse proxy config |
+| `/var/www/burmese-digital-store/ecosystem.config.js` | PM2 config |
+
+### Issues Encountered & Fixed
+1. **Build OOM Kill** — 1GB RAM insufficient for Next.js build → Fixed with 2GB swap (`/swapfile`)
+2. **Next.js 15 params type** — `{ params: { id: string } }` → `{ params: Promise<{ id: string }> }` + `await params`
+3. **Backup .env.local sourcing** — `source .env.local` fails on values with spaces → Fixed with `sed`-based extraction
+4. **CSP nonce not applied** — Middleware set nonce on response only → Fixed: forward via request headers for Next.js auto-apply
+5. **503 on all APIs** — `RATE_LIMIT_FAIL_CLOSED` not set + no Upstash Redis → Fixed: added Upstash + `RATE_LIMIT_FAIL_CLOSED=true`
+6. **MongoDB connection refused** — Atlas IP whitelist missing VPS IP → Added `167.99.73.125/32`
+7. **mongodump repo not found** — Ubuntu 24.04 (noble) has no MongoDB 7.0 apt repo → Fixed: direct .deb package install
 
 ---
 
@@ -483,8 +522,8 @@ Reset:    POST {panel_url}{panel_path}/panel/api/inbounds/{inboundId}/resetClien
 ### H) Testing
 
 - ✅ Unit tests for `xui.ts` (17 tests — provision, revoke, stats, config links, retry, data limits, subscription)
-- ⬜ Integration test with staging panel (create + verify + delete)
-- ⬜ E2E: order → approve → provision → user sees key
+- ✅ Integration test with staging panel (create + verify + delete)
+- ✅ E2E: order → approve → provision → user sees key
 
 ### Execution Plan
 1. ✅ **A** — env vars + static config files (servers, plans)
