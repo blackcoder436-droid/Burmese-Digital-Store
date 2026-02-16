@@ -81,7 +81,7 @@
 - ✅ RESEND_API_KEY env variable ထည့်ပြီး
 
 ### 3. Cloudflare DNS (သင်လုပ်ရမယ်)
-- ✅ A record → DigitalOcean droplet IP (`167.99.73.125`)
+- ✅ A record → DigitalOcean droplet IP (VPS IP set)
 - ✅ CNAME `www` → `burmesedigital.store`
 - ✅ Email DNS records (SPF, DKIM) ← Resend setup ကနေ
 - ✅ SSL/TLS → Full (strict) mode ဖွင့်ပြီး
@@ -115,7 +115,7 @@
 
 ### 7. Security (Production Must-Do)
 - ✅ `JWT_SECRET` ကို strong random value ပြောင်းပြီး
-- ✅ MongoDB Atlas: IP whitelist → DigitalOcean droplet IP only (`167.99.73.125/32`)
+- ✅ MongoDB Atlas: IP whitelist → DigitalOcean droplet IP only (VPS IP set)
 - ⬜ MongoDB user: read/write permission only (admin permission မပေးပါနဲ့)
 - ✅ `.env.local` production values git ထဲ push မဝင်ကြောင်း confirm ပြီး (`.gitignore` ပါ)
 - ⬜ Admin account password ကို strong password ပြောင်းပါ
@@ -273,7 +273,7 @@ sudo ufw enable
 
 ### VPS Server Info
 - **Provider:** DigitalOcean
-- **IP:** `167.99.73.125`
+- **IP:** `<VPS_IP>` (see DigitalOcean dashboard)
 - **OS:** Ubuntu 24.04.4 LTS
 - **RAM:** 1GB + 2GB Swap
 - **Domain:** `burmesedigital.store`
@@ -320,7 +320,7 @@ pm2 restart burmese-digital-store
 3. **Backup .env.local sourcing** — `source .env.local` fails on values with spaces → Fixed with `sed`-based extraction
 4. **CSP nonce not applied** — Middleware set nonce on response only → Fixed: forward via request headers for Next.js auto-apply
 5. **503 on all APIs** — `RATE_LIMIT_FAIL_CLOSED` not set + no Upstash Redis → Fixed: added Upstash + `RATE_LIMIT_FAIL_CLOSED=true`
-6. **MongoDB connection refused** — Atlas IP whitelist missing VPS IP → Added `167.99.73.125/32`
+6. **MongoDB connection refused** — Atlas IP whitelist missing VPS IP → Added VPS IP to whitelist
 7. **mongodump repo not found** — Ubuntu 24.04 (noble) has no MongoDB 7.0 apt repo → Fixed: direct .deb package install
 
 ---
