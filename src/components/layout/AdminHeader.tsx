@@ -64,11 +64,12 @@ export default function AdminHeader() {
               alt="Burmese Digital Store"
               width={36}
               height={36}
+              priority
               className="rounded-xl shadow-glow-sm group-hover:shadow-glow transition-shadow duration-300"
             />
             <div className="flex items-center gap-2">
               <span className="text-lg font-bold text-white hidden sm:inline">
-                Burmese<span className="text-accent-gradient"> Digital</span>
+                Burmese<span className="text-accent-gradient"> Digital Store</span>
               </span>
               <span className="px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/25 text-[11px] font-semibold text-purple-400 uppercase tracking-wider">
                 Admin

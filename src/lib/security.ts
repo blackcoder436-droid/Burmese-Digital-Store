@@ -1,4 +1,5 @@
 import path from 'path';
+import net from 'net';
 
 // ==========================================
 // Security Utilities - Burmese Digital Store
@@ -126,6 +127,131 @@ export function isValidEmail(email: string): boolean {
  */
 export function isValidObjectId(id: string): boolean {
   return /^[0-9a-fA-F]{24}$/.test(id);
+}
+
+// --- SSRF / URL validation ---
+
+const DEFAULT_BLOCKED_HOSTNAMES = new Set([
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '::1',
+  '[::1]',
+  '169.254.169.254',
+  'metadata.google.internal',
+]);
+
+function isPrivateIpv4(ip: string): boolean {
+  const parts = ip.split('.').map((p) => Number(p));
+  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+
+  const [a, b] = parts;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 0) return true;
+  if (a === 169 && b === 254) return true; // link-local
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  return false;
+}
+
+function isPrivateIpv6(ip: string): boolean {
+  const normalized = ip.toLowerCase();
+  if (normalized === '::1') return true;
+  if (normalized.startsWith('fe80:')) return true; // link-local
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true; // unique local
+  return false;
+}
+
+export function isPrivateIp(ip: string): boolean {
+  const ipVersion = net.isIP(ip);
+  if (ipVersion === 4) return isPrivateIpv4(ip);
+  if (ipVersion === 6) return isPrivateIpv6(ip);
+  return false;
+}
+
+export function parseUrlSafe(rawUrl: string): URL | null {
+  try {
+    return new URL(rawUrl);
+  } catch {
+    return null;
+  }
+}
+
+export function hostnameMatchesAllowlist(hostname: string, allowlist: string[]): boolean {
+  const h = hostname.toLowerCase();
+  for (const entryRaw of allowlist) {
+    const entry = entryRaw.trim().toLowerCase();
+    if (!entry) continue;
+
+    // Support patterns:
+    // - exact host: example.com
+    // - suffix: .example.com (matches subdomains only)
+    // - wildcard: *.example.com (matches subdomains only)
+    if (entry.startsWith('*.')) {
+      const suffix = entry.slice(1); // ".example.com"
+      if (h.endsWith(suffix) && h !== suffix.slice(1)) return true;
+      continue;
+    }
+    if (entry.startsWith('.')) {
+      const suffix = entry;
+      if (h.endsWith(suffix) && h !== suffix.slice(1)) return true;
+      continue;
+    }
+
+    if (h === entry) return true;
+    if (h.endsWith(`.${entry}`)) return true;
+  }
+  return false;
+}
+
+export function validateExternalHttpUrl(rawUrl: string, opts?: {
+  allowHttpInProd?: boolean;
+  requiredAllowlistEnv?: string;
+}): { ok: true; url: URL } | { ok: false; error: string } {
+  const parsed = parseUrlSafe(rawUrl);
+  if (!parsed) return { ok: false, error: 'Invalid URL format' };
+
+  const allowHttpInProd = opts?.allowHttpInProd === true;
+  const proto = parsed.protocol;
+  if (proto !== 'https:' && proto !== 'http:') {
+    return { ok: false, error: 'URL must use http or https' };
+  }
+  if (process.env.NODE_ENV === 'production' && proto === 'http:' && !allowHttpInProd) {
+    return { ok: false, error: 'URL must use https in production' };
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (DEFAULT_BLOCKED_HOSTNAMES.has(hostname)) {
+    return { ok: false, error: 'URL hostname is not allowed' };
+  }
+
+  // Block obvious private-network IP literals
+  if (net.isIP(hostname) && isPrivateIp(hostname)) {
+    return { ok: false, error: 'URL must not point to private/internal IPs' };
+  }
+
+  // Optional allowlist gating
+  const envName = opts?.requiredAllowlistEnv || 'VPN_SERVER_ALLOWED_HOSTS';
+  const allowlistRaw = (process.env[envName] || '').trim();
+  if (allowlistRaw) {
+    const allowlist = allowlistRaw.split(',').map((s) => s.trim()).filter(Boolean);
+    if (allowlist.length > 0 && !hostnameMatchesAllowlist(hostname, allowlist)) {
+      return { ok: false, error: `URL hostname is not in allowlist (${envName})` };
+    }
+  }
+
+  return { ok: true, url: parsed };
+}
+
+export function validatePanelPath(panelPath: string): boolean {
+  if (typeof panelPath !== 'string') return false;
+  const p = panelPath.trim();
+  if (!p.startsWith('/')) return false;
+  if (p.includes('..')) return false;
+  if (p.includes('\\')) return false;
+  if (p.includes('://')) return false;
+  return p.length <= 100;
 }
 
 // --- Upload-specific constants ---

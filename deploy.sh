@@ -75,15 +75,24 @@ NEXT_PUBLIC_APP_NAME=Burmese Digital Store
 
 # Admin Seed Secret
 ADMIN_SECRET=CHANGE_THIS_TO_YOUR_ADMIN_SECRET
+# Keep disabled in production except first bootstrap window
+ENABLE_ADMIN_SEED=false
 
 # 3x-UI VPN Panel
 XUI_USERNAME=YOUR_XUI_USERNAME
 XUI_PASSWORD=YOUR_XUI_PASSWORD
 
+# SSRF hardening: allowlist for outbound VPN panel domains
+VPN_SERVER_ALLOWED_HOSTS=burmesedigital.store
+
 # Resend Email
 RESEND_API_KEY=re_YOUR_RESEND_KEY
 EMAIL_FROM=noreply@burmesedigital.store
 EMAIL_FROM_NAME=Burmese Digital Store
+
+# Rate limiting hardening
+# In production, keep fail-closed true so sensitive endpoints don't run unthrottled
+RATE_LIMIT_FAIL_CLOSED=true
 ENVEOF
     echo ""
     echo "⚠️  IMPORTANT: Edit $APP_DIR/.env.local with your real values!"
@@ -115,8 +124,13 @@ cat > /etc/nginx/sites-available/burmesedigital.store << 'NGINXEOF'
 server {
     listen 80;
     server_name burmesedigital.store www.burmesedigital.store;
+    server_tokens off;
 
-    # Cloudflare handles SSL, so we just proxy to Next.js
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Reverse proxy to Next.js app
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
@@ -132,6 +146,11 @@ server {
 
         # File upload limit (for payment screenshots, avatars)
         client_max_body_size 10M;
+    }
+
+    # Deny hidden files
+    location ~ /\.(?!well-known).* {
+        deny all;
     }
 
     # Static files & uploads
@@ -160,9 +179,10 @@ echo "  App:    http://burmesedigital.store"
 echo "  PM2:    pm2 status / pm2 logs"
 echo "  Nginx:  systemctl status nginx"
 echo ""
-echo "  Cloudflare SSL mode should be set to:"
-echo "    'Flexible' (Cloudflare → HTTP → your server)"
-echo "    or 'Full' if you add a self-signed cert"
+echo "  IMPORTANT TLS HARDENING:"
+echo "    Configure an origin certificate (Let's Encrypt or Cloudflare Origin Cert)"
+echo "    and set Cloudflare SSL mode to 'Full (strict)'."
+echo "    Do NOT use 'Flexible' in production."
 echo ""
 echo "  To redeploy after code changes:"
 echo "    cd $APP_DIR && git pull && npm ci && npm run build && pm2 restart burmese-digital-store"

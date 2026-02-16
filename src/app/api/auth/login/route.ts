@@ -5,6 +5,7 @@ import { comparePassword, generateToken, COOKIE_NAME } from '@/lib/auth';
 import { authLimiter } from '@/lib/rateLimit';
 import { isValidEmail } from '@/lib/security';
 import { createLogger } from '@/lib/logger';
+import { trackLoginFailure } from '@/lib/monitoring';
 
 const log = createLogger({ route: '/api/auth/login' });
 
@@ -52,6 +53,9 @@ export async function POST(request: NextRequest) {
     );
 
     if (!user) {
+      // S10: Track failed login attempt
+      const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+      trackLoginFailure(ip, email);
       return NextResponse.json(
         { success: false, error: 'Invalid email or password' },
         { status: 401 }
@@ -61,6 +65,9 @@ export async function POST(request: NextRequest) {
     // Compare passwords
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
+      // S10: Track failed login attempt
+      const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+      trackLoginFailure(ip, email);
       return NextResponse.json(
         { success: false, error: 'Invalid email or password' },
         { status: 401 }

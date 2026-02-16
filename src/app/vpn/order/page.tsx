@@ -52,10 +52,56 @@ function VpnOrderPageContent() {
   const [paymentMethod, setPaymentMethod] = useState('kpay');
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [couponCode, setCouponCode] = useState('');
+  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponError, setCouponError] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountInfo, setDiscountInfo] = useState<{ type: string; value: number } | null>(null);
   const [copiedAccount, setCopiedAccount] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  // Computed final price
+  const finalPrice = plan ? Math.max(0, plan.price - discountAmount) : 0;
+
+  // Validate coupon against API
+  async function applyCoupon() {
+    if (!couponCode.trim() || !plan) return;
+    setCouponLoading(true);
+    setCouponError('');
+    setCouponApplied(false);
+    setDiscountAmount(0);
+    setDiscountInfo(null);
+    try {
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: couponCode, amount: plan.price, category: 'vpn' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDiscountAmount(data.data.discountAmount);
+        setDiscountInfo({ type: data.data.discountType, value: data.data.discountValue });
+        setCouponApplied(true);
+      } else {
+        setCouponError(data.error || 'Invalid coupon');
+      }
+    } catch {
+      setCouponError('Network error');
+    } finally {
+      setCouponLoading(false);
+    }
+  }
+
+  // Clear coupon
+  function clearCoupon() {
+    setCouponCode('');
+    setCouponApplied(false);
+    setCouponError('');
+    setDiscountAmount(0);
+    setDiscountInfo(null);
+  }
 
   // Auto-select first server when loaded
   useEffect(() => {
@@ -231,10 +277,65 @@ function VpnOrderPageContent() {
                     </p>
                   </div>
                 </div>
-                <p className="text-lg sm:text-xl font-extrabold text-purple-400 shrink-0">{plan.price.toLocaleString()} <span className="text-xs sm:text-sm text-gray-400">Ks</span></p>
+                <div className="text-right shrink-0">
+                  {couponApplied ? (
+                    <>
+                      <p className="text-xs text-gray-500 line-through">{plan.price.toLocaleString()} Ks</p>
+                      <p className="text-lg sm:text-xl font-extrabold text-emerald-400">{finalPrice.toLocaleString()} <span className="text-xs sm:text-sm text-gray-400">Ks</span></p>
+                      <p className="text-[10px] text-emerald-400/80">-{discountAmount.toLocaleString()} Ks ({discountInfo?.type === 'percentage' ? `${discountInfo.value}%` : `${discountInfo?.value?.toLocaleString()} Ks`})</p>
+                    </>
+                  ) : (
+                    <p className="text-lg sm:text-xl font-extrabold text-purple-400">{plan.price.toLocaleString()} <span className="text-xs sm:text-sm text-gray-400">Ks</span></p>
+                  )}
+                </div>
               </div>
 
-              <div className="flex items-center gap-3 bg-[#0a0a1f]/70 rounded-2xl px-3.5 py-3 mb-4 border border-amber-500/20">
+              {/* Coupon Code - right below price */}
+              <div className="mb-4">
+                <label className="text-xs text-gray-400 mb-2 block font-medium">{tr('Coupon Code (optional)', 'Coupon Code (ရှိလျှင်)')}</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(e) => {
+                      setCouponCode(e.target.value.toUpperCase());
+                      if (couponApplied) clearCoupon();
+                    }}
+                    placeholder="e.g. VPN20"
+                    disabled={couponApplied}
+                    className="flex-1 px-3 py-2 bg-[#0a0a1f] border border-purple-500/15 rounded-lg text-sm text-white placeholder-gray-600 focus:border-purple-500 focus:outline-none transition-all disabled:opacity-50"
+                  />
+                  {couponApplied ? (
+                    <button
+                      type="button"
+                      onClick={clearCoupon}
+                      className="px-3 py-2 rounded-lg text-xs font-medium bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all"
+                    >
+                      {tr('Remove', 'ဖယ်ရှား')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={applyCoupon}
+                      disabled={!couponCode.trim() || couponLoading}
+                      className="px-3 py-2 rounded-lg text-xs font-medium bg-purple-500/10 border border-purple-500/30 text-purple-300 hover:bg-purple-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {couponLoading ? '...' : tr('Apply', 'သုံးမည်')}
+                    </button>
+                  )}
+                </div>
+                {couponApplied && (
+                  <p className="text-xs text-emerald-400 mt-1.5">
+                    ✓ {tr('Coupon applied!', 'Coupon အသုံးပြုပြီး!')} -{discountAmount.toLocaleString()} Ks {tr('discount', 'လျှော့စျေး')}
+                  </p>
+                )}
+                {couponError && (
+                  <p className="text-xs text-red-400 mt-1.5">{couponError}</p>
+                )}
+              </div>
+
+              {/* Transfer account info */}
+              <div className="flex items-center gap-3 bg-[#0a0a1f]/70 rounded-2xl px-3.5 py-3 mb-3 border border-amber-500/20">
                 <span className="text-base mt-0.5">💳</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] text-amber-400/80 mb-1 tracking-wide uppercase">{tr('Transfer to', 'ငွေလွှဲရန်')}</p>
@@ -254,6 +355,15 @@ function VpnOrderPageContent() {
                   {copiedAccount ? tr('Copied', 'ကူးပြီး') : tr('Copy', 'ကူး')}
                 </button>
               </div>
+
+              {/* Amount to transfer reminder */}
+              {couponApplied && (
+                <div className="mb-4 p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                  <p className="text-xs text-emerald-400 text-center font-medium">
+                    💰 {tr('Please transfer', 'ငွေလွှဲရန်')} <span className="font-bold text-sm">{finalPrice.toLocaleString()} Ks</span> {tr('only (after discount)', 'သာ (discount နှုတ်ပြီး)')}
+                  </p>
+                </div>
+              )}
 
               <div className="mb-4">
                 <label className="text-xs text-gray-400 mb-2 block font-medium">{tr('Payment Method', 'ငွေပေးချေနည်း')}</label>
@@ -280,18 +390,7 @@ function VpnOrderPageContent() {
               <div className="mb-4">
                 <label className="text-xs text-gray-400 mb-2 block font-medium">{tr('Payment Screenshot', 'ငွေပေးချေမှု Screenshot')}</label>
                 <p className="text-xs text-gray-500 mb-2">{tr('Upload clear screenshot with account, amount and time visible', 'Account, amount, time တွေထင်ရှားတဲ့ screenshot တင်ပါ')}</p>
-                <PaymentUpload onUpload={(file) => setScreenshotFile(file)} expectedAmount={plan.price} />
-              </div>
-
-              <div className="mb-4">
-                <label className="text-xs text-gray-400 mb-2 block font-medium">{tr('Coupon Code (optional)', 'Coupon Code (ရှိလျှင်)')}</label>
-                <input
-                  type="text"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. VPN20"
-                  className="w-full px-3 py-2 bg-[#0a0a1f] border border-purple-500/15 rounded-lg text-sm text-white placeholder-gray-600 focus:border-purple-500 focus:outline-none transition-all"
-                />
+                <PaymentUpload onUpload={(file) => setScreenshotFile(file)} expectedAmount={finalPrice} />
               </div>
 
               {submitError && <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{submitError}</div>}

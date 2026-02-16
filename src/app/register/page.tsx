@@ -21,13 +21,13 @@ export default function RegisterPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          router.push(data.data.user.role === 'admin' ? '/admin' : '/account');
+          window.location.href = data.data.user.role === 'admin' ? '/admin' : '/account';
         } else {
           setChecking(false);
         }
       })
       .catch(() => setChecking(false));
-  }, [router]);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,8 +53,8 @@ export default function RegisterPage() {
       const data = await res.json();
       if (data.success) {
         toast.success(tr('Account created!', 'အကောင့်ဖွင့်ပြီးပါပြီ!'));
-        router.refresh();
-        router.push('/account');
+        window.location.href = '/account';
+        return;
       } else {
         toast.error(data.error || tr('Registration failed', 'စာရင်းသွင်းမှု မအောင်မြင်ပါ'));
       }

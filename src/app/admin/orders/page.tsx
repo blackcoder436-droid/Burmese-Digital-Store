@@ -52,6 +52,8 @@ interface Order {
   requiresManualReview?: boolean;
   reviewReason?: string;
   paymentExpiresAt?: string;
+  couponCode?: string;
+  discountAmount?: number;
   rejectReason?: string;
   verificationChecklist?: {
     amountVerified?: boolean;
@@ -282,6 +284,13 @@ export default function AdminOrdersPage() {
                   <p className="text-purple-400 font-bold text-lg">
                     {selectedOrder.totalAmount?.toLocaleString()} MMK
                   </p>
+                  {selectedOrder.couponCode && selectedOrder.discountAmount && selectedOrder.discountAmount > 0 && (
+                    <div className="mt-1">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                        🎟️ {selectedOrder.couponCode} (-{selectedOrder.discountAmount.toLocaleString()} MMK)
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <p className="text-gray-500 mb-1">{tr('Payment', 'ငွေပေးချေမှု')}</p>

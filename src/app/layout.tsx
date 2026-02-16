@@ -42,7 +42,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="my" className="dark">
-      <body className="min-h-screen flex flex-col bg-[#0a0a1a]">
+      <body className="min-h-screen flex flex-col bg-[#0a0a1a]" suppressHydrationWarning>
         {/* ── Global animated tech network background ── */}
         <div className="fixed inset-0 pointer-events-none z-0" aria-hidden="true">
           <TechBackground />

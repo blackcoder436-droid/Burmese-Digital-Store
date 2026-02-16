@@ -56,43 +56,37 @@ export default function ProductCard({ product }: { product: Product }) {
         <div className="absolute top-0 left-0 w-0 group-hover:w-full h-[2px] bg-gradient-to-r from-purple-500 to-cyan-500 transition-all duration-500 ease-out" />
         
         {/* Product Image */}
-        {product.image && product.image !== '/images/default-product.png' ? (
-          <div className="relative w-full h-36 overflow-hidden">
-            <Image
-              src={product.image}
-              alt={product.name}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-500"
-              unoptimized
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-dark-900/80 to-transparent" />
-            {/* Category badge overlaid on image */}
-            <div className="absolute top-3 left-3">
-              <span className={categoryBadge[product.category] || 'badge-other'}>
-                {categoryLabel[product.category] || product.category}
-              </span>
-            </div>
-            <div className="absolute top-3 right-3">
-              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${inStock ? 'bg-emerald-500/20 text-emerald-400 backdrop-blur-sm' : 'bg-red-500/20 text-red-400 backdrop-blur-sm'}`}>
-                {inStock ? tr(`${product.stock} in stock`, `လက်ကျန် ${product.stock}`) : tr('Out of stock', 'ကုန်သွားပါပြီ')}
-              </span>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="p-5 flex flex-col flex-1">
-          {/* Category + Stock (only when no image) */}
-          {(!product.image || product.image === '/images/default-product.png') && (
-            <div className="flex items-center justify-between mb-4 relative">
-              <span className={categoryBadge[product.category] || 'badge-other'}>
-                {categoryLabel[product.category] || product.category}
-              </span>
-              <span className={`text-xs font-bold ${inStock ? 'text-emerald-400' : 'text-red-400'}`}>
-                {inStock ? tr(`${product.stock} in stock`, `လက်ကျန် ${product.stock}`) : tr('Out of stock', 'ကုန်သွားပါပြီ')}
-              </span>
+        <div className="relative w-full h-40 overflow-hidden bg-dark-800">
+          {product.image && product.image !== '/images/default-product.png' ? (
+            <>
+              <Image
+                src={product.image}
+                alt={product.name}
+                fill
+                className="object-cover group-hover:scale-105 transition-transform duration-500"
+                unoptimized
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-dark-900/80 to-transparent" />
+            </>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <ShoppingBag className="w-12 h-12 text-dark-600" />
             </div>
           )}
+          {/* Category badge overlaid on image */}
+          <div className="absolute top-3 left-3">
+            <span className={categoryBadge[product.category] || 'badge-other'}>
+              {categoryLabel[product.category] || product.category}
+            </span>
+          </div>
+          <div className="absolute top-3 right-3">
+            <span className={`text-xs font-bold px-2 py-1 rounded-lg ${inStock ? 'bg-emerald-500/20 text-emerald-400 backdrop-blur-sm' : 'bg-red-500/20 text-red-400 backdrop-blur-sm'}`}>
+              {inStock ? tr(`${product.stock} in stock`, `လက်ကျန် ${product.stock}`) : tr('Out of stock', 'ကုန်သွားပါပြီ')}
+            </span>
+          </div>
+        </div>
 
+        <div className="p-5 flex flex-col flex-1">
         {/* Name */}
         <h3 className="text-base font-bold text-white mb-2 group-hover:text-purple-300 transition-colors duration-300 line-clamp-1 relative">
           {product.name}

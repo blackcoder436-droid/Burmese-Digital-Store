@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ProductCard from '@/components/ProductCard';
-import { Search, ChevronLeft, ChevronRight, Loader2, Package, X, Filter, ChevronDown } from 'lucide-react';
+import MobileCarousel from '@/components/MobileCarousel';
+import { Search, ChevronLeft, ChevronRight, Loader2, Package, X, Filter, ChevronDown, ArrowRight } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
 
@@ -30,6 +31,47 @@ function useDebounce<T>(value: T, delay: number): T {
     return () => clearTimeout(timer);
   }, [value, delay]);
   return debouncedValue;
+}
+
+// Category labels for carousel headers
+const CATEGORY_LABELS: Record<string, { en: string; my: string }> = {
+  vpn: { en: 'VPN', my: 'VPN' },
+  streaming: { en: 'Streaming', my: 'Streaming' },
+  gaming: { en: 'Gaming', my: 'Gaming' },
+  software: { en: 'Software', my: 'Software' },
+  'gift-card': { en: 'Gift Cards', my: 'Gift Cards' },
+  other: { en: 'Other', my: 'အခြား' },
+};
+
+const MANY_PRODUCTS_THRESHOLD = 8;
+
+// Auto-scrolling horizontal carousel for mobile
+function ProductCarousel({ products, title, onCategoryClick }: {
+  products: Product[];
+  title?: string;
+  onCategoryClick?: () => void;
+}) {
+  if (products.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      {title && (
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-bold text-white">{title}</h3>
+          {onCategoryClick && (
+            <button onClick={onCategoryClick} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors">
+              အားလုံးကြည့်မည် <ArrowRight className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      )}
+      <MobileCarousel className="-mx-4 px-4" interval={3500}>
+        {products.map((product) => (
+          <ProductCard key={product._id} product={product} />
+        ))}
+      </MobileCarousel>
+    </div>
+  );
 }
 
 export default function ShopPage() {
@@ -191,12 +233,12 @@ function ShopContent() {
                 >
                   <Filter className="w-3 h-3" />
                   <span className="hidden sm:inline">{selectedCategoryLabel}</span>
-                  <ChevronDown className={`w-3 h-3 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showCategoryDropdown ? 'rotate-0' : 'rotate-180'}`} />
                 </button>
 
-                {/* Dropdown */}
+                {/* Dropdown — opens upward to avoid overflow */}
                 {showCategoryDropdown && (
-                  <div className="absolute right-0 top-full mt-1.5 w-48 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl shadow-black/50 overflow-hidden z-50">
+                  <div className="absolute right-0 bottom-full mb-1.5 w-48 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl shadow-black/50 overflow-hidden z-50">
                     {categories.map((cat) => {
                       const count = getCategoryCount(cat.value);
                       const isActive = category === cat.value;
@@ -249,23 +291,23 @@ function ShopContent() {
           </div>
         )}
 
-        {/* Products Grid */}
+        {/* Products */}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="game-card overflow-hidden animate-pulse">
-                <div className="h-40 bg-dark-700/50" />
-                <div className="p-4 space-y-3">
-                  <div className="h-3 bg-dark-700/50 rounded w-16" />
-                  <div className="h-4 bg-dark-700/50 rounded w-3/4" />
-                  <div className="h-3 bg-dark-700/50 rounded w-full" />
-                  <div className="flex justify-between mt-4">
-                    <div className="h-5 bg-dark-700/50 rounded w-24" />
-                    <div className="h-5 bg-dark-700/50 rounded w-16" />
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="game-card overflow-hidden animate-pulse">
+                  <div className="h-40 bg-dark-700/50" />
+                  <div className="p-4 space-y-3">
+                    <div className="h-3 bg-dark-700/50 rounded w-16" />
+                    <div className="h-4 bg-dark-700/50 rounded w-3/4" />
+                    <div className="h-3 bg-dark-700/50 rounded w-full" />
+                    <div className="flex justify-between mt-4">
+                      <div className="h-5 bg-dark-700/50 rounded w-24" />
+                      <div className="h-5 bg-dark-700/50 rounded w-16" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         ) : products.length === 0 ? (
           <div className="text-center py-24">
@@ -285,17 +327,53 @@ function ShopContent() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-              {products.map((product, i) => (
-                <div key={product._id} className="scroll-fade" data-delay={`${i * 60}`}>
-                  <ProductCard product={product} />
+            {/* Mobile: carousel when many products */}
+            {totalProducts > MANY_PRODUCTS_THRESHOLD && !hasActiveFilters ? (
+              <>
+                {/* Mobile: category carousels */}
+                <div className="sm:hidden">
+                  {(() => {
+                    const grouped: Record<string, Product[]> = {};
+                    products.forEach((p) => {
+                      if (!grouped[p.category]) grouped[p.category] = [];
+                      grouped[p.category].push(p);
+                    });
+                    return Object.keys(grouped).map((cat) => (
+                      <ProductCarousel
+                        key={cat}
+                        products={grouped[cat]}
+                        title={tr(CATEGORY_LABELS[cat]?.en || cat, CATEGORY_LABELS[cat]?.my || cat)}
+                        onCategoryClick={() => {
+                          setCategory(cat);
+                          setPage(1);
+                        }}
+                      />
+                    ));
+                  })()}
                 </div>
-              ))}
-            </div>
+                {/* Desktop: grid */}
+                <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                  {products.map((product, i) => (
+                    <div key={product._id} className="scroll-fade" data-delay={`${i * 60}`}>
+                      <ProductCard product={product} />
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              /* Normal grid for all screens when few products or filters active */
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {products.map((product, i) => (
+                  <div key={product._id} className="scroll-fade" data-delay={`${i * 60}`}>
+                    <ProductCard product={product} />
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-4 mt-12">
+              <div className={`flex items-center justify-center gap-4 mt-12 ${totalProducts > MANY_PRODUCTS_THRESHOLD && !hasActiveFilters ? 'hidden sm:flex' : ''}`}>
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}

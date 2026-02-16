@@ -5,6 +5,7 @@ import { hashPassword } from '@/lib/auth';
 import { rateLimit } from '@/lib/rateLimit';
 import { isValidEmail } from '@/lib/security';
 import { timingSafeEqual } from 'crypto';
+import { trackSeedEndpointHit } from '@/lib/monitoring';
 
 const seedLimiter = rateLimit({ windowMs: 900000, maxRequests: 3, prefix: 'seed' });
 
@@ -15,6 +16,16 @@ export async function POST(request: NextRequest) {
   if (limited) return limited;
 
   try {
+    if (process.env.ENABLE_ADMIN_SEED !== 'true') {
+      // S10: Track seed endpoint hit even when disabled
+      const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+      trackSeedEndpointHit(ip, false);
+      return NextResponse.json(
+        { success: false, error: 'Admin bootstrap is disabled' },
+        { status: 404 }
+      );
+    }
+
     const { secret, email, password, name } = await request.json();
 
     const ADMIN_SECRET = process.env.ADMIN_SECRET;
@@ -33,6 +44,9 @@ export async function POST(request: NextRequest) {
       secret.length !== ADMIN_SECRET.length ||
       !timingSafeEqual(Buffer.from(secret), Buffer.from(ADMIN_SECRET))
     ) {
+      // S10: Track failed seed attempt
+      const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+      trackSeedEndpointHit(ip, false);
       return NextResponse.json(
         { success: false, error: 'Invalid admin secret' },
         { status: 403 }
@@ -47,6 +61,15 @@ export async function POST(request: NextRequest) {
     }
 
     await connectDB();
+
+    // One-time bootstrap: if any admin already exists, this endpoint is no longer usable
+    const existingAdminCount = await User.countDocuments({ role: 'admin' });
+    if (existingAdminCount > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Admin bootstrap already completed' },
+        { status: 403 }
+      );
+    }
 
     // Check if user exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });

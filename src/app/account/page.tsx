@@ -291,14 +291,10 @@ export default function AccountPage() {
               </p>
             </div>
           </div>
-          <Link href="/shop" className="btn-primary">
-            <ShoppingBag className="w-5 h-5" />
-            {tr('Browse Shop', 'ဆိုင်ကြည့်မည်')}
-          </Link>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-10">
+        <div className="grid grid-cols-3 gap-3 sm:gap-5 mb-10">
           {[
             { icon: ShoppingBag, label: tr('Total Orders', 'အော်ဒါစုစုပေါင်း'), value: stats.totalOrders, color: 'text-purple-400', bg: 'bg-purple-500/20' },
             { icon: CheckCircle, label: tr('Completed', 'ပြီးဆုံးသည်'), value: stats.completed, color: 'text-emerald-400', bg: 'bg-emerald-500/20' },
@@ -306,14 +302,14 @@ export default function AccountPage() {
           ].map((stat, i) => {
             const Icon = stat.icon;
             return (
-              <div key={stat.label} className="scroll-fade game-card p-6" data-delay={`${i * 100}`}>
-                <div className="flex items-center space-x-4">
-                  <div className={`w-14 h-14 ${stat.bg} rounded-2xl flex items-center justify-center`}>
-                    <Icon className={`w-6 h-6 ${stat.color}`} />
+              <div key={stat.label} className="scroll-fade game-card p-3 sm:p-6" data-delay={`${i * 100}`}>
+                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:space-x-4 text-center sm:text-left">
+                  <div className={`w-10 h-10 sm:w-14 sm:h-14 ${stat.bg} rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0`}>
+                    <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${stat.color}`} />
                   </div>
                   <div>
-                    <p className="text-3xl font-black text-white">{stat.value}</p>
-                    <p className="text-sm text-gray-500 font-medium">{stat.label}</p>
+                    <p className="text-xl sm:text-3xl font-black text-white">{stat.value}</p>
+                    <p className="text-[10px] sm:text-sm text-gray-500 font-medium leading-tight">{stat.label}</p>
                   </div>
                 </div>
               </div>

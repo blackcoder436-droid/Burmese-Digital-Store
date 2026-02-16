@@ -35,6 +35,21 @@ function buildRateLimitResponse(retryAfterSec: number, maxRequests: number): Nex
   );
 }
 
+function buildRateLimitUnavailableResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'Rate limiting service unavailable',
+    },
+    {
+      status: 503,
+      headers: {
+        'Retry-After': '60',
+      },
+    }
+  );
+}
+
 // ---- Upstash Redis (production) ----
 
 const useRedis =
@@ -123,6 +138,8 @@ export function rateLimit(options: RateLimitOptions = {}) {
   } = options;
 
   const windowSec = Math.ceil(windowMs / 1000);
+  const failClosedInProd =
+    process.env.NODE_ENV === 'production' && process.env.RATE_LIMIT_FAIL_CLOSED !== 'false';
 
   // Upstash limiter (created lazily once)
   let upstashLimiter: Ratelimit | null = null;
@@ -133,6 +150,10 @@ export function rateLimit(options: RateLimitOptions = {}) {
   return async function checkRateLimit(
     request: NextRequest
   ): Promise<NextResponse | null> {
+    if (!upstashLimiter && failClosedInProd) {
+      return buildRateLimitUnavailableResponse();
+    }
+
     // --- Upstash path ---
     if (upstashLimiter) {
       const ip = getClientIp(request);
@@ -145,7 +166,12 @@ export function rateLimit(options: RateLimitOptions = {}) {
         }
         return null;
       } catch (err) {
-        // Redis unreachable — fall through to in-memory
+        if (failClosedInProd) {
+          console.error('[RateLimit] Upstash error in production (fail-closed):', err);
+          return buildRateLimitUnavailableResponse();
+        }
+
+        // Redis unreachable — fall through to in-memory in non-production
         console.warn('[RateLimit] Upstash error, falling back to in-memory:', err);
       }
     }

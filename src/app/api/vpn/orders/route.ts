@@ -5,6 +5,7 @@ import { getAuthUser } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ route: '/api/vpn/orders' });
@@ -134,7 +135,7 @@ export async function POST(request: NextRequest) {
     await mkdir(uploadsDir, { recursive: true });
 
     const ext = safeExtension(screenshot.type) || 'png';
-    const filename = `vpn-${authUser.userId}-${Date.now()}.${ext}`;
+    const filename = `vpn-pay-${randomUUID()}.${ext}`;
     const filepath = path.join(uploadsDir, filename);
 
     if (!isPathWithinDir(filepath, uploadsDir)) {

@@ -96,13 +96,14 @@ export default function Navbar() {
               alt="Burmese Digital Store"
               width={40}
               height={40}
+              priority
               className="rounded-xl shadow-glow-sm group-hover:shadow-glow transition-shadow duration-300 sm:w-11 sm:h-11"
             />
             <span className="hidden sm:inline text-xl font-bold text-white whitespace-nowrap">
               Burmese<span className="text-accent-gradient"> Digital Store</span>
             </span>
             <span className="sm:hidden text-base font-bold text-white truncate">
-              Burmese<span className="text-accent-gradient"> Store</span>
+              Burmese<span className="text-accent-gradient"> Digital Store</span>
             </span>
           </Link>
 
@@ -283,7 +284,51 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            {!user && (
+            {user ? (
+              <div className="pt-4 mt-3 border-t border-dark-600/50 space-y-1">
+                <Link
+                  href="/account"
+                  onClick={() => setIsOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
+                    pathname === '/account'
+                      ? 'text-purple-400 bg-purple-500/10'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <User className="w-4 h-4" />
+                  {tr('Profile', 'ပရိုဖိုင်')}
+                </Link>
+                <Link
+                  href="/account/orders"
+                  onClick={() => setIsOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
+                    pathname === '/account/orders'
+                      ? 'text-purple-400 bg-purple-500/10'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  {tr('My Orders', 'ကျွန်ုပ်အော်ဒါများ')}
+                </Link>
+                {user.role === 'admin' && (
+                  <Link
+                    href="/admin"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition-all"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    {tr('Admin Panel', 'အက်ဒမင်')}
+                  </Link>
+                )}
+                <button
+                  onClick={() => { setIsOpen(false); handleLogout(); }}
+                  className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-sm font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+                >
+                  <LogOut className="w-4 h-4" />
+                  {tr('Log Out', 'ထွက်မည်')}
+                </button>
+              </div>
+            ) : (
               <div className="pt-4 mt-3 border-t border-dark-600/50 space-y-3">
                 <Link
                   href="/login"

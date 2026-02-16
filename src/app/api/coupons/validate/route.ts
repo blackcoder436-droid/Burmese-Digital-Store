@@ -51,8 +51,18 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     // Only expose known validation errors, not internal details
-    const safeMessages = ['Invalid coupon', 'Coupon expired', 'Coupon usage limit reached', 'Minimum order amount not met'];
-    const message = safeMessages.find(m => error.message?.includes(m)) || 'Invalid coupon';
+    // Only expose known validation error prefixes, not internal details
+    const safePatterns = [
+      'Invalid coupon',
+      'not yet active',
+      'expired',
+      'usage limit',
+      'already used',
+      'Minimum order amount',
+      'does not apply',
+    ];
+    const isSafe = safePatterns.some(p => error.message?.includes(p));
+    const message = isSafe ? error.message : 'Invalid coupon';
     return NextResponse.json(
       { success: false, error: message },
       { status: 400 }

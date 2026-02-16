@@ -70,7 +70,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     url: 'https://us.burmesedigital.store:8080',
     panelPath: '/mka',
     domain: 'us.burmesedigital.store',
-    subPort: 8080,
+    subPort: 2096,
     protocol: 'trojan',
     enabledProtocols: ['trojan', 'vless', 'vmess', 'shadowsocks'],
     online: true,
@@ -111,7 +111,20 @@ async function refreshCache(): Promise<Record<string, VpnServer>> {
     } else {
       const map: Record<string, VpnServer> = {};
       for (const doc of docs) {
-        map[doc.serverId] = docToServer(doc as unknown as IVpnServerDocument);
+        const server = docToServer(doc as unknown as IVpnServerDocument);
+
+        // Auto-fix: if DB subPort equals panel port (8080) instead of the correct
+        // subscription port (2096), correct it in-memory and persist fix to DB.
+        // This handles servers seeded with wrong subPort before the bug was fixed.
+        if (server.subPort === 8080) {
+          server.subPort = 2096;
+          VpnServerModel.updateOne(
+            { serverId: server.id },
+            { $set: { subPort: 2096 } }
+          ).catch(() => {}); // fire-and-forget
+        }
+
+        map[server.id] = server;
       }
       cacheServers = map;
     }

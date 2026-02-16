@@ -5,6 +5,7 @@ import User from '@/models/User';
 import { sendPasswordResetEmail } from '@/lib/email';
 import { rateLimit } from '@/lib/rateLimit';
 import { isValidEmail } from '@/lib/security';
+import { trackPasswordResetRequest } from '@/lib/monitoring';
 
 // ==========================================
 // Forgot Password API - Burmese Digital Store
@@ -28,6 +29,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // S10: Track password reset request for monitoring
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+    trackPasswordResetRequest(ip, email);
 
     await connectDB();
 

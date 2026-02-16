@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/lib/language';
+import MobileCarousel from '@/components/MobileCarousel';
 
 /* pricing data (1-5 devices x 6 durations) */
 const pricing: Record<number, { months: number; price: string; popular?: boolean }[]> = {
@@ -199,6 +200,46 @@ export default function VPNPage() {
     return `${devices} Device${devices > 1 ? 's' : ''} / ${dur}`;
   };
 
+  const pricingCard = (p: typeof pricing[1][0], i: number, extraClass = '') => {
+    const feats = ['Unlimited Data'];
+    if (activeDevice > 1) feats.push(`${activeDevice} Devices Simultaneous`);
+    feats.push('All Servers Access', 'Multi-Protocol Support');
+    if (p.popular) feats.push('Popular Choice');
+    if (p.months === 12) feats.push('Maximum Savings');
+    feats.push('24/7 Service');
+
+    return (
+      <div key={`${activeDevice}-${p.months}`}
+        className={`flex flex-col bg-[#12122a] border rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(108,92,231,0.15)] relative overflow-hidden ${p.popular ? 'border-purple-500 shadow-[0_0_40px_rgba(108,92,231,0.15)]' : 'border-purple-500/15'} ${extraClass}`}
+        style={{ animation: 'vpn-fadeInUp 0.4s ease forwards', animationDelay: `${i * 0.05}s` }}>
+        {p.popular && (
+          <div className="flex justify-center py-1.5 bg-gradient-to-r from-purple-600 to-cyan-500">
+            <span className="text-white text-xs font-semibold">Popular</span>
+          </div>
+        )}
+        <div className="p-5 sm:p-8 flex flex-col flex-1">
+        <div className="text-xs sm:text-sm text-purple-300 font-semibold mb-1.5">{monthLabel(p.months)}</div>
+        <div className="text-3xl sm:text-4xl font-extrabold text-white mb-1">{p.price} <span className="text-sm sm:text-base font-medium text-gray-500">Ks</span></div>
+        <div className="text-xs text-gray-500 mb-4 sm:mb-6">{perLabel(activeDevice, p.months)}</div>
+        <ul className="space-y-1.5 sm:space-y-2 mb-6 sm:mb-8 flex-1">
+          {feats.map((feat) => (
+            <li key={feat} className="flex items-center gap-2 text-xs sm:text-sm text-gray-400">
+              <span className="text-cyan-400 font-bold text-xs">{'\u2713'}</span>
+              {feat}
+            </li>
+          ))}
+        </ul>
+        <button
+          onClick={() => router.push(`/vpn/order?devices=${activeDevice}&months=${p.months}`)}
+          className={`w-full flex items-center justify-center gap-2 py-2.5 sm:py-3.5 rounded-lg text-sm sm:text-base font-semibold transition-all ${p.popular ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-[0_4px_20px_rgba(108,92,231,0.3)] hover:shadow-[0_8px_30px_rgba(108,92,231,0.4)] hover:-translate-y-0.5' : 'border border-purple-500/20 text-white hover:bg-purple-500/10 hover:border-purple-500 hover:-translate-y-0.5'}`}
+        >
+          {tr('Buy Now', '\u101D\u101A\u103A\u101A\u1030\u1019\u100A\u103A')}
+        </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div ref={wrapRef} className="min-h-screen relative overflow-hidden">
       {/* Background effects */}
@@ -285,16 +326,28 @@ export default function VPNPage() {
       </section>
 
       {/* ======== FEATURES ======== */}
-      <section className="py-20 relative z-[1]" id="features">
+      <section className="py-12 sm:py-20 relative z-[1]" id="features">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="vpn-fade text-center mb-16">
+          <div className="vpn-fade text-center mb-8 sm:mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\u2728'} Features</div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight mb-3 sm:mb-4">
               {tr('Why Choose Burmese Digital Store?', '\u1018\u102C\u1000\u103C\u1031\u102C\u1004\u103A\u1037 Burmese Digital Store \u1000\u102D\u102F \u101B\u103D\u1031\u1038\u1001\u103B\u101A\u103A\u101E\u1004\u103A\u1037\u101E\u101C\u1032?')}
             </h2>
-            <p className="text-gray-400 max-w-xl mx-auto">{tr('We provide the best VPN experience', '\u1021\u1000\u1031\u102C\u1004\u103A\u1038\u1006\u102F\u1036\u1038 VPN \u1021\u1010\u103D\u1031\u1037\u1021\u1000\u103C\u102F\u1036\u1000\u102D\u102F \u1015\u1031\u1038\u1005\u103D\u1019\u103A\u1038\u1015\u102B\u101E\u100A\u103A')}</p>
+            <p className="text-gray-400 max-w-xl mx-auto text-sm sm:text-base">{tr('We provide the best VPN experience', '\u1021\u1000\u1031\u102C\u1004\u103A\u1038\u1006\u102F\u1036\u1038 VPN \u1021\u1010\u103D\u1031\u1037\u1021\u1000\u103C\u102F\u1036\u1000\u102D\u102F \u1015\u1031\u1038\u1005\u103D\u1019\u103A\u1038\u1015\u102B\u101E\u100A\u103A')}</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {/* Mobile: carousel */}
+          <MobileCarousel className="sm:hidden -mx-4 px-4">
+            {features.map((f, i) => (
+              <div key={i} className="group bg-[#12122a] border border-purple-500/15 rounded-2xl p-5 relative overflow-hidden h-full">
+                <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-purple-600 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center text-2xl mb-4">{f.icon}</div>
+                <h3 className="text-base font-bold text-white mb-2">{tr(f.titleEn, f.titleMy)}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{tr(f.descEn, f.descMy)}</p>
+              </div>
+            ))}
+          </MobileCarousel>
+          {/* Desktop: grid */}
+          <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {features.map((f, i) => (
               <div key={i} className="vpn-fade group bg-[#12122a] border border-purple-500/15 rounded-2xl p-8 transition-all duration-300 hover:bg-[#1a1a3e] hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(108,92,231,0.15)] relative overflow-hidden"
                 style={{ transitionDelay: `${(i % 3) * 0.1}s` }}>
@@ -356,47 +409,13 @@ export default function VPNPage() {
             ))}
           </div>
 
-          {/* Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-            {pricing[activeDevice].map((p, i) => {
-              const feats = ['Unlimited Data'];
-              if (activeDevice > 1) feats.push(`${activeDevice} Devices Simultaneous`);
-              feats.push('All Servers Access', 'Multi-Protocol Support');
-              if (p.popular) feats.push('Popular Choice');
-              if (p.months === 12) feats.push('Maximum Savings');
-              feats.push('24/7 Service');
-
-              return (
-                <div key={`${activeDevice}-${p.months}`}
-                  className={`flex flex-col bg-[#12122a] border rounded-2xl p-5 sm:p-8 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(108,92,231,0.15)] relative ${p.popular ? 'border-purple-500 shadow-[0_0_40px_rgba(108,92,231,0.15)]' : 'border-purple-500/15'}`}
-                  style={{ animation: 'vpn-fadeInUp 0.4s ease forwards', animationDelay: `${i * 0.05}s` }}>
-                  {p.popular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-cyan-500 text-white text-xs font-semibold px-5 py-1 rounded-full">
-                      Popular
-                    </div>
-                  )}
-                  <div className="text-xs sm:text-sm text-purple-300 font-semibold mb-1.5">{monthLabel(p.months)}</div>
-                  <div className="text-3xl sm:text-4xl font-extrabold text-white mb-1">{p.price} <span className="text-sm sm:text-base font-medium text-gray-500">Ks</span></div>
-                  <div className="text-xs text-gray-500 mb-4 sm:mb-6">{perLabel(activeDevice, p.months)}</div>
-                  <ul className="space-y-1.5 sm:space-y-2 mb-6 sm:mb-8 flex-1">
-                    {feats.map((feat) => (
-                      <li key={feat} className="flex items-center gap-2 text-xs sm:text-sm text-gray-400">
-                        <span className="text-cyan-400 font-bold text-xs">{'\u2713'}</span>
-                        {feat}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => {
-                      router.push(`/vpn/order?devices=${activeDevice}&months=${p.months}`);
-                    }}
-                    className={`w-full flex items-center justify-center gap-2 py-2.5 sm:py-3.5 rounded-lg text-sm sm:text-base font-semibold transition-all ${p.popular ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-[0_4px_20px_rgba(108,92,231,0.3)] hover:shadow-[0_8px_30px_rgba(108,92,231,0.4)] hover:-translate-y-0.5' : 'border border-purple-500/20 text-white hover:bg-purple-500/10 hover:border-purple-500 hover:-translate-y-0.5'}`}
-                  >
-                    {tr('Buy Now', 'ဝယ်ယူမည်')}
-                  </button>
-                </div>
-              );
-            })}
+          {/* Cards - Mobile carousel */}
+          <MobileCarousel key={activeDevice} className="sm:hidden -mx-4 px-4">
+            {pricing[activeDevice].map((p, i) => pricingCard(p, i))}
+          </MobileCarousel>
+          {/* Cards - Desktop grid */}
+          <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+            {pricing[activeDevice].map((p, i) => pricingCard(p, i))}
           </div>
 
           <p className="vpn-fade text-center text-gray-500 text-sm mt-8">

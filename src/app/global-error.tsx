@@ -11,22 +11,68 @@ export default function GlobalError({
 }) {
   return (
     <html lang="my" className="dark">
-      <body className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a1a] text-white px-4">
+      <body style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#0a0a1a',
+        color: 'white',
+        padding: '1rem',
+        margin: 0,
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Background glow */}
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '400px',
+          height: '400px',
+          background: 'rgba(239, 68, 68, 0.05)',
+          borderRadius: '50%',
+          filter: 'blur(120px)',
+          pointerEvents: 'none',
+        }} />
+
         <div
-          className="text-center max-w-md"
           style={{
+            textAlign: 'center',
+            maxWidth: '28rem',
+            position: 'relative',
+            zIndex: 1,
             animation: 'fadeInUp 0.6s ease-out both',
           }}
         >
-          {/* Icon */}
-          <div
-            className="w-24 h-24 mx-auto mb-6 flex items-center justify-center rounded-2xl"
-            style={{
+          {/* Icon with glow */}
+          <div style={{ position: 'relative', width: '7rem', height: '7rem', margin: '0 auto 2rem' }}>
+            <div style={{
+              position: 'absolute',
+              inset: 0,
               background: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
-            }}
-          >
-            <ShieldAlert className="w-10 h-10" style={{ color: '#f87171' }} />
+              borderRadius: '1rem',
+              filter: 'blur(16px)',
+              animation: 'pulse 2s ease-in-out infinite',
+            }} />
+            <div
+              style={{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '1rem',
+                background: '#12122a',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+              }}
+            >
+              <ShieldAlert style={{ width: '3rem', height: '3rem', color: '#f87171' }} />
+            </div>
           </div>
 
           <h1
@@ -39,31 +85,48 @@ export default function GlobalError({
           >
             Critical Error
           </h1>
-          <p style={{ color: '#9ca3af', marginBottom: '2rem', lineHeight: 1.6 }}>
+          <p style={{ color: '#9ca3af', marginBottom: '0.75rem', lineHeight: 1.6 }}>
             Something went seriously wrong. Please refresh the page.
           </p>
+
+          {error.digest && (
+            <p style={{ color: '#4b5563', fontSize: '0.75rem', fontFamily: 'monospace', marginBottom: '1.5rem' }}>
+              Error ID: {error.digest}
+            </p>
+          )}
+
           <button
             onClick={reset}
-            className="inline-flex items-center gap-2 px-6 py-3 font-semibold rounded-xl transition-all duration-300"
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              fontWeight: 600,
+              borderRadius: '0.75rem',
               background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
               color: 'white',
               border: 'none',
               cursor: 'pointer',
+              fontSize: '0.875rem',
+              transition: 'transform 0.2s',
             }}
             onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
             onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw style={{ width: '1rem', height: '1rem' }} />
             Refresh Page
           </button>
         </div>
 
-        {/* Inline keyframes since globals.css may not be available */}
         <style>{`
           @keyframes fadeInUp {
             from { opacity: 0; transform: translateY(24px); }
             to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
           }
         `}</style>
       </body>

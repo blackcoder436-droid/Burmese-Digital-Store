@@ -1,6 +1,7 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
+import MobileCarousel from '@/components/MobileCarousel';
 import {
   ArrowRight,
   CheckCircle,
@@ -18,6 +19,85 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
+
+const howItWorksSteps = [
+  {
+    icon: ShoppingBag,
+    titleEn: 'Choose Product',
+    titleMy: 'ပစ္စည်းရွေးချယ်ရန်',
+    descEn: 'Browse our catalog of VPNs, streaming, gaming, and more.',
+    descMy: 'VPN, streaming, gaming နှင့် အခြားပစ္စည်းများကို ရွေးချယ်ပါ။',
+    step: '01',
+    color: 'from-blue-500 to-cyan-500',
+  },
+  {
+    icon: CreditCard,
+    titleEn: 'Make Payment',
+    titleMy: 'ငွေပေးချေပါ',
+    descEn: 'Pay via KBZ Pay, WaveMoney, CB Pay, or AYA Pay.',
+    descMy: 'KBZ Pay, WaveMoney, CB Pay သို့မဟုတ် AYA Pay ဖြင့်ပေးချေပါ။',
+    step: '02',
+    color: 'from-violet-500 to-purple-500',
+  },
+  {
+    icon: Zap,
+    titleEn: 'Auto Verification',
+    titleMy: 'အလိုအလျောက်စစ်ဆေးမှု',
+    descEn: 'Our system verifies your payment screenshot instantly.',
+    descMy: 'သင့်ငွေပေးချေမှု screenshot ကို စနစ်ကချက်ချင်းစစ်ဆေးပါသည်။',
+    step: '03',
+    color: 'from-amber-500 to-orange-500',
+  },
+  {
+    icon: Key,
+    titleEn: 'Get Your Keys',
+    titleMy: 'သင့် Key များရယူပါ',
+    descEn: 'Receive your account details or serial keys right away.',
+    descMy: 'အကောင့်အချက်အလက် သို့မဟုတ် serial key များကိုချက်ချင်းရယူပါ။',
+    step: '04',
+    color: 'from-emerald-500 to-green-500',
+  },
+];
+
+function StepCard({ feature, index, tr }: { feature: typeof howItWorksSteps[0]; index: number; tr: (en: string, my: string) => string }) {
+  const Icon = feature.icon;
+  return (
+    <div className="scroll-fade game-card p-6 group relative overflow-hidden card-shimmer snap-center" data-delay={`${150 * index}`}>
+      <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-[0.07] transition-opacity duration-500`} />
+      <div className={`absolute top-0 left-0 w-0 group-hover:w-full h-[2px] bg-gradient-to-r ${feature.color} transition-all duration-500 ease-out`} />
+      <div className="absolute top-4 right-4 text-5xl font-black text-dark-700 group-hover:text-dark-600/80 transition-colors duration-500">
+        {feature.step}
+      </div>
+      <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 group-hover:shadow-xl transition-all duration-500`}>
+        <Icon className="w-7 h-7 text-white" />
+      </div>
+      <h3 className="text-lg font-bold text-white mb-2 relative group-hover:text-purple-200 transition-colors duration-300">
+        {tr(feature.titleEn, feature.titleMy)}
+      </h3>
+      <p className="text-sm text-gray-400 leading-relaxed relative">{tr(feature.descEn, feature.descMy)}</p>
+    </div>
+  );
+}
+
+function HowItWorksCarousel({ tr }: { tr: (en: string, my: string) => string }) {
+  return (
+    <>
+      {/* Mobile: carousel */}
+      <MobileCarousel className="sm:hidden -mx-4 px-4">
+        {howItWorksSteps.map((feature, index) => (
+          <StepCard key={feature.step} feature={feature} index={index} tr={tr} />
+        ))}
+      </MobileCarousel>
+
+      {/* Desktop: grid */}
+      <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {howItWorksSteps.map((feature, index) => (
+          <StepCard key={feature.step} feature={feature} index={index} tr={tr} />
+        ))}
+      </div>
+    </>
+  );
+}
 
 export default function HomePage() {
   const { tr } = useLanguage();
@@ -98,68 +178,10 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              {
-                icon: ShoppingBag,
-                title: tr('Choose Product', 'ပစ္စည်းရွေးချယ်ရန်'),
-                desc: tr('Browse our catalog of VPNs, streaming, gaming, and more.', 'VPN, streaming, gaming နှင့် အခြားပစ္စည်းများကို ရွေးချယ်ပါ။'),
-                step: '01',
-                color: 'from-blue-500 to-cyan-500',
-              },
-              {
-                icon: CreditCard,
-                title: tr('Make Payment', 'ငွေပေးချေပါ'),
-                desc: tr('Pay via KBZ Pay, WaveMoney, CB Pay, or AYA Pay.', 'KBZ Pay, WaveMoney, CB Pay သို့မဟုတ် AYA Pay ဖြင့်ပေးချေပါ။'),
-                step: '02',
-                color: 'from-violet-500 to-purple-500',
-              },
-              {
-                icon: Zap,
-                title: tr('Auto Verification', 'အလိုအလျောက်စစ်ဆေးမှု'),
-                desc: tr('Our system verifies your payment screenshot instantly.', 'သင့်ငွေပေးချေမှု screenshot ကို စနစ်ကချက်ချင်းစစ်ဆေးပါသည်။'),
-                step: '03',
-                color: 'from-amber-500 to-orange-500',
-              },
-              {
-                icon: Key,
-                title: tr('Get Your Keys', 'သင့် Key များရယူပါ'),
-                desc: tr('Receive your account details or serial keys right away.', 'အကောင့်အချက်အလက် သို့မဟုတ် serial key များကိုချက်ချင်းရယူပါ။'),
-                step: '04',
-                color: 'from-emerald-500 to-green-500',
-              },
-            ].map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <div key={feature.title} className="scroll-fade game-card p-6 group relative overflow-hidden card-shimmer" data-delay={`${150 * (index)}`}>
-                  {/* Gradient Overlay */}
-                  <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-[0.07] transition-opacity duration-500`} />
-                  
-                  {/* Top accent line */}
-                  <div className={`absolute top-0 left-0 w-0 group-hover:w-full h-[2px] bg-gradient-to-r ${feature.color} transition-all duration-500 ease-out`} />
-                  
-                  {/* Step Number */}
-                  <div className="absolute top-4 right-4 text-5xl font-black text-dark-700 group-hover:text-dark-600/80 transition-colors duration-500">
-                    {feature.step}
-                  </div>
-                  
-                  {/* Icon */}
-                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-5 shadow-lg group-hover:scale-110 group-hover:shadow-xl transition-all duration-500`}>
-                    <Icon className="w-7 h-7 text-white" />
-                  </div>
-                  
-                  <h3 className="text-lg font-bold text-white mb-2 relative group-hover:text-purple-200 transition-colors duration-300">
-                    {feature.title}
-                  </h3>
-                  <p className="text-sm text-gray-400 leading-relaxed relative">{feature.desc}</p>
-                </div>
-              );
-            })}
-          </div>
+          <HowItWorksCarousel tr={tr} />
         </div>
       </section>
 
-      {/* Categories */}
       <section className="py-20 sm:py-28 bg-dark-900/50 border-y border-dark-600/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="scroll-fade text-center mb-16">

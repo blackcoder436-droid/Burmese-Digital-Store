@@ -3,9 +3,10 @@ import { jwtVerify } from 'jose';
 import type { JWTPayload } from '@/types';
 
 // ==========================================
-// Middleware - Route Protection
+// Middleware - Route Protection + CSP Nonce
 // Burmese Digital Store
 // Uses 'jose' for Edge Runtime compatible JWT
+// CSP nonce-based script protection (S5)
 // ==========================================
 
 if (!process.env.JWT_SECRET) {
@@ -14,11 +15,12 @@ if (!process.env.JWT_SECRET) {
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
 // Routes that require authentication
-const protectedRoutes = ['/account', '/api/orders'];
+const protectedRoutes = ['/account', '/api/orders', '/vpn/order'];
 const adminRoutes = ['/admin', '/api/admin'];
 
 // Public admin routes (no auth required - secured by ADMIN_SECRET)
-const publicAdminRoutes = ['/api/admin/seed'];
+const ENABLE_ADMIN_SEED = process.env.ENABLE_ADMIN_SEED === 'true';
+const publicAdminRoutes = ENABLE_ADMIN_SEED ? ['/api/admin/seed'] : [];
 
 async function verifyTokenEdge(token: string): Promise<JWTPayload | null> {
   try {
@@ -54,7 +56,9 @@ export async function middleware(request: NextRequest) {
           { status: 401 }
         );
       }
-      return NextResponse.redirect(new URL('/login', request.url));
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search);
+      return NextResponse.redirect(loginUrl);
     }
 
     const user = await verifyTokenEdge(token);
@@ -65,7 +69,9 @@ export async function middleware(request: NextRequest) {
           { status: 401 }
         );
       }
-      return NextResponse.redirect(new URL('/login', request.url));
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search);
+      return NextResponse.redirect(loginUrl);
     }
 
     // Check admin access
@@ -82,6 +88,12 @@ export async function middleware(request: NextRequest) {
 
   const response = NextResponse.next();
 
+  // --- Generate CSP Nonce ---
+  // crypto.randomUUID() is available in Edge Runtime
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  // Pass nonce to layout.tsx via custom header
+  response.headers.set('x-nonce', nonce);
+
   // --- Security Headers ---
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-Frame-Options', 'DENY');
@@ -95,15 +107,17 @@ export async function middleware(request: NextRequest) {
     'Strict-Transport-Security',
     'max-age=63072000; includeSubDomains; preload'
   );
-  // Content-Security-Policy: allow self, inline styles (Tailwind), and images from self + data URIs
-  // Note: 'unsafe-eval' removed for production hardening. Next.js production works without it.
+  // Content-Security-Policy: nonce-based script protection (S5)
+  // 'unsafe-inline' removed from script-src in production — nonce replaces it
+  // 'strict-dynamic' allows nonce-approved scripts to load their children
   const isDev = process.env.NODE_ENV === 'development';
   const scriptSrc = isDev
-    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-    : "script-src 'self' 'unsafe-inline'";
+    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval'`
+    : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`;
+  const styleSrc = `style-src 'self' 'unsafe-inline'`; // Tailwind needs unsafe-inline for styles
   response.headers.set(
     'Content-Security-Policy',
-    `default-src 'self'; ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
+    `default-src 'self'; ${scriptSrc}; ${styleSrc}; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
   );
 
   return response;

@@ -60,7 +60,7 @@ export async function POST() {
         url: 'https://us.burmesedigital.store:8080',
         panelPath: '/mka',
         domain: 'us.burmesedigital.store',
-        subPort: 8080,
+        subPort: 2096,
         protocol: 'trojan',
         enabled: true,
         online: true,
@@ -68,12 +68,26 @@ export async function POST() {
     ];
 
     let created = 0;
+    let updated = 0;
     let skipped = 0;
 
     for (const server of defaults) {
       const exists = await VpnServer.findOne({ serverId: server.serverId });
       if (exists) {
-        skipped++;
+        // Fix any stale values (e.g. wrong subPort) on existing records
+        let needsUpdate = false;
+        if (exists.subPort !== server.subPort) needsUpdate = true;
+        if (exists.domain !== server.domain) needsUpdate = true;
+
+        if (needsUpdate) {
+          await VpnServer.updateOne(
+            { serverId: server.serverId },
+            { $set: { subPort: server.subPort, domain: server.domain } }
+          );
+          updated++;
+        } else {
+          skipped++;
+        }
         continue;
       }
       await VpnServer.create(server);
@@ -84,8 +98,8 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
-      message: `Seed complete: ${created} created, ${skipped} already existed`,
-      data: { created, skipped },
+      message: `Seed complete: ${created} created, ${updated} updated, ${skipped} unchanged`,
+      data: { created, updated, skipped },
     });
   } catch (err) {
     return NextResponse.json(

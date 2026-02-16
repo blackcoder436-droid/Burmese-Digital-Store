@@ -12,6 +12,7 @@ import User from '@/models/User';
 import { createLogger } from '@/lib/logger';
 import { expireOverdueOrders } from '@/lib/fraud-detection';
 import { isValidObjectId as isValidOid } from 'mongoose';
+import { releaseFromQuarantine, deleteFromQuarantine } from '@/lib/quarantine';
 
 const log = createLogger({ route: '/api/admin/orders' });
 
@@ -301,6 +302,20 @@ export async function PATCH(request: NextRequest) {
     order.status = status;
     if (adminNote) order.adminNote = adminNote;
     if (rejectReason) order.rejectReason = rejectReason;
+
+    // S7: Release/delete quarantined screenshot based on status
+    if (order.paymentScreenshot) {
+      const screenshotRelPath = order.paymentScreenshot.startsWith('/')
+        ? order.paymentScreenshot.slice(1)
+        : order.paymentScreenshot;
+      if (status === 'completed') {
+        // Release screenshot from quarantine to public directory
+        await releaseFromQuarantine(screenshotRelPath);
+      } else if (status === 'rejected') {
+        // Delete quarantined screenshot on rejection
+        await deleteFromQuarantine(screenshotRelPath);
+      }
+    }
 
     // Save verification checklist if provided (on approve)
     if (verificationChecklist && status === 'completed') {

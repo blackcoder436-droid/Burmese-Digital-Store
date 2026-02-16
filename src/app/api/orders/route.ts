@@ -6,6 +6,7 @@ import { getAuthUser } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ route: '/api/orders' });
@@ -13,6 +14,7 @@ import { extractPaymentInfo } from '@/lib/ocr';
 import { getSiteSettings } from '@/models/SiteSettings';
 import { validateCoupon, recordCouponUsage } from '@/models/Coupon';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
+import { saveToQuarantine } from '@/lib/quarantine';
 
 import {
   validateImageUpload,
@@ -201,25 +203,16 @@ export async function POST(request: NextRequest) {
 
     const totalAmount = Math.max(0, subtotal - discountAmount);
 
-    // Save screenshot
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'payments');
-    await mkdir(uploadsDir, { recursive: true });
-
+    // Save screenshot to quarantine (S7 — not publicly accessible until admin approval)
     const ext = safeExtension(screenshot.type) || 'png';
-    const filename = `${authUser.userId}-${Date.now()}.${ext}`;
-    const filepath = path.join(uploadsDir, filename);
+    const filename = `pay-${randomUUID()}.${ext}`;
+    const relativePath = `uploads/payments/${filename}`;
 
-    // Path safety check
-    if (!isPathWithinDir(filepath, uploadsDir)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid file path' },
-        { status: 400 }
-      );
-    }
+    const { publicPath: screenshotUrl } = await saveToQuarantine(screenshotBuffer, relativePath);
 
-    await writeFile(filepath, screenshotBuffer);
-
-    const screenshotUrl = `/uploads/payments/${filename}`;
+    // Also save to public for OCR processing (temp copy if OCR enabled)
+    // OCR needs filesystem access; quarantine path is used
+    const quarantinePath = path.join(process.cwd(), 'quarantine', relativePath);
 
     // Compute screenshot hash for duplicate detection
     const screenshotHash = computeScreenshotHash(screenshotBuffer);
@@ -232,9 +225,9 @@ export async function POST(request: NextRequest) {
     let orderStatus: 'pending' | 'verifying' = 'pending';
 
     if (ocrEnabled) {
-      // Run OCR on the screenshot
+      // Run OCR on the quarantined screenshot
       try {
-        ocrData = await extractPaymentInfo(filepath);
+        ocrData = await extractPaymentInfo(quarantinePath);
       } catch (ocrError) {
         log.error('OCR processing failed', { error: ocrError instanceof Error ? ocrError.message : String(ocrError) });
       }

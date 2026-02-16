@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { sanitizeString, isValidObjectId } from '@/lib/security';
 import { logActivity } from '@/models/ActivityLog';
+import { trackAdminPrivilegeChange } from '@/lib/monitoring';
 
 // GET /api/admin/users - List all users (admin)
 export async function GET(request: NextRequest) {
@@ -159,6 +160,13 @@ export async function PATCH(request: NextRequest) {
     // Log role change
     try {
       if (role !== undefined) {
+        // S10: Track privilege change for monitoring
+        trackAdminPrivilegeChange(
+          admin.userId,
+          user._id.toString(),
+          role === 'admin' ? 'promote' : 'demote',
+          user.email
+        );
         await logActivity({
           admin: admin.userId,
           action: role === 'admin' ? 'user_promoted' : 'user_demoted',

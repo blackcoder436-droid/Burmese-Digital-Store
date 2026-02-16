@@ -6,7 +6,8 @@ import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
 import { invalidateServerCache } from '@/lib/vpn-servers';
 import { createLogger } from '@/lib/logger';
-import { sanitizeString } from '@/lib/security';
+import { sanitizeString, validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
+import { trackVpnServerChange } from '@/lib/monitoring';
 
 const log = createLogger({ route: '/api/admin/servers' });
 
@@ -84,27 +85,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // SSRF protection: validate URL is a proper HTTPS external URL
-    try {
-      const parsedUrl = new URL(url);
-      if (!['https:', 'http:'].includes(parsedUrl.protocol)) {
-        return NextResponse.json(
-          { success: false, error: 'Server URL must use http or https protocol' },
-          { status: 400 }
-        );
-      }
-      // Block internal/metadata IPs
-      const blockedHosts = ['127.0.0.1', 'localhost', '0.0.0.0', '169.254.169.254', '[::1]', 'metadata.google.internal'];
-      const hostname = parsedUrl.hostname.toLowerCase();
-      if (blockedHosts.includes(hostname) || hostname.startsWith('10.') || hostname.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) {
-        return NextResponse.json(
-          { success: false, error: 'Server URL must not point to internal/private addresses' },
-          { status: 400 }
-        );
-      }
-    } catch {
+    const urlCheck = validateExternalHttpUrl(url, { requiredAllowlistEnv: 'VPN_SERVER_ALLOWED_HOSTS' });
+    if (!urlCheck.ok) {
+      return NextResponse.json({ success: false, error: urlCheck.error }, { status: 400 });
+    }
+
+    if (!validatePanelPath(panelPath)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid server URL format' },
+        { success: false, error: 'Invalid panelPath' },
         { status: 400 }
       );
     }
@@ -158,6 +146,9 @@ export async function POST(request: NextRequest) {
 
     log.info('VPN server created', { serverId, name, protocol });
 
+    // S10: Track VPN server configuration change
+    trackVpnServerChange(admin.userId, serverId, 'create', { name, protocol, url });
+
     return NextResponse.json({ success: true, data: { server } }, { status: 201 });
   } catch (err) {
     log.error('Failed to create server', { error: err });
@@ -206,24 +197,21 @@ export async function PATCH(request: NextRequest) {
     if (body.flag !== undefined) { server.flag = (body.flag || '').trim(); updates.push('flag'); }
     if (body.url !== undefined) {
       const newUrl = sanitizeString(body.url).replace(/\/$/, '');
-      // SSRF protection on URL update
-      try {
-        const parsedUrl = new URL(newUrl);
-        if (!['https:', 'http:'].includes(parsedUrl.protocol)) {
-          return NextResponse.json({ success: false, error: 'Server URL must use http or https protocol' }, { status: 400 });
-        }
-        const blockedHosts = ['127.0.0.1', 'localhost', '0.0.0.0', '169.254.169.254', '[::1]', 'metadata.google.internal'];
-        const hostname = parsedUrl.hostname.toLowerCase();
-        if (blockedHosts.includes(hostname) || hostname.startsWith('10.') || hostname.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) {
-          return NextResponse.json({ success: false, error: 'Server URL must not point to internal/private addresses' }, { status: 400 });
-        }
-      } catch {
-        return NextResponse.json({ success: false, error: 'Invalid server URL format' }, { status: 400 });
+      const check = validateExternalHttpUrl(newUrl, { requiredAllowlistEnv: 'VPN_SERVER_ALLOWED_HOSTS' });
+      if (!check.ok) {
+        return NextResponse.json({ success: false, error: check.error }, { status: 400 });
       }
       server.url = newUrl;
       updates.push('url');
     }
-    if (body.panelPath !== undefined) { server.panelPath = sanitizeString(body.panelPath); updates.push('panelPath'); }
+    if (body.panelPath !== undefined) {
+      const newPanelPath = sanitizeString(body.panelPath);
+      if (!validatePanelPath(newPanelPath)) {
+        return NextResponse.json({ success: false, error: 'Invalid panelPath' }, { status: 400 });
+      }
+      server.panelPath = newPanelPath;
+      updates.push('panelPath');
+    }
     if (body.domain !== undefined) { server.domain = sanitizeString(body.domain); updates.push('domain'); }
     if (body.subPort !== undefined) { server.subPort = parseInt(body.subPort) || 2096; updates.push('subPort'); }
     if (body.trojanPort !== undefined) { server.trojanPort = body.trojanPort ? parseInt(body.trojanPort) : undefined; updates.push('trojanPort'); }
@@ -256,6 +244,9 @@ export async function PATCH(request: NextRequest) {
     });
 
     log.info('VPN server updated', { serverId, updates });
+
+    // S10: Track VPN server configuration change
+    trackVpnServerChange(admin.userId, serverId, 'update', { updates });
 
     return NextResponse.json({ success: true, data: { server } });
   } catch (err) {
@@ -328,6 +319,9 @@ export async function DELETE(request: NextRequest) {
     });
 
     log.info('VPN server deleted', { serverId });
+
+    // S10: Track VPN server configuration change
+    trackVpnServerChange(admin.userId, serverId, 'delete');
 
     return NextResponse.json({ success: true, message: 'Server deleted' });
   } catch (err) {

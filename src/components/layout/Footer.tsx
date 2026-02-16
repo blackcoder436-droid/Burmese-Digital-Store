@@ -19,6 +19,7 @@ export default function Footer() {
                 alt="Burmese Digital Store"
                 width={36}
                 height={36}
+                loading="lazy"
                 className="rounded-lg"
               />
               <span className="text-lg font-bold text-white">

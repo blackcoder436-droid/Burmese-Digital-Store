@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEnabledServers, type VpnServer } from '@/lib/vpn-servers';
 import { apiLimiter } from '@/lib/rateLimit';
 import { getAuthUser } from '@/lib/auth';
+import { validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
 
 // ==========================================
 // GET /api/vpn/health
@@ -26,6 +27,17 @@ const CACHE_TTL_MS = 60_000; // 60 seconds
 async function pingPanel(server: VpnServer): Promise<ServerHealth> {
   const start = Date.now();
   try {
+    const urlCheck = validateExternalHttpUrl(server.url, { requiredAllowlistEnv: 'VPN_SERVER_ALLOWED_HOSTS' });
+    if (!urlCheck.ok || !validatePanelPath(server.panelPath)) {
+      return {
+        id: server.id,
+        name: server.name,
+        flag: server.flag,
+        online: false,
+        checkedAt: new Date().toISOString(),
+      };
+    }
+
     // Ping the panel login page (lightweight GET)
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);

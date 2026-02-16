@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto';
 import { Agent } from 'undici';
 import { createLogger } from '@/lib/logger';
 import { getServer, type VpnServer } from '@/lib/vpn-servers';
+import { validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
 
 const log = createLogger({ module: 'xui' });
 
@@ -37,6 +38,7 @@ interface XuiInbound {
   port: number;
   remark: string;
   settings: string; // JSON string
+  streamSettings: string; // JSON string — contains network, security, wsSettings, etc.
   [key: string]: unknown;
 }
 
@@ -80,6 +82,13 @@ class XuiSession {
 
   constructor(server: VpnServer) {
     this.server = server;
+
+    const urlCheck = validateExternalHttpUrl(server.url, { requiredAllowlistEnv: 'VPN_SERVER_ALLOWED_HOSTS' });
+    if (!urlCheck.ok || !validatePanelPath(server.panelPath)) {
+      // Defensive: prevent SSRF even if server record was tampered
+      throw new Error('Blocked VPN panel endpoint');
+    }
+
     this.baseUrl = `${server.url}${server.panelPath}`;
   }
 
@@ -234,11 +243,33 @@ class XuiSession {
       };
       const protoCode = protoCodes[inboundProtocol] || 'VPN';
 
-      // Client name format: username - {devices}D / Web ({protocol})
+      // Client name format: username - {devices}D / Web ({protocol}) Key{N}
+      // Append Key number to avoid 3xUI duplicate email errors
       const deviceLabel = `${devices}D`;
-      const clientName = username
+      const baseName = username
         ? `${username} - ${deviceLabel} / Web (${protoCode})`
         : `User_${userId} - ${deviceLabel} / Web (${protoCode})`;
+
+      // Count existing clients with same base name across all inbounds
+      const allInbounds = await this.getInbounds();
+      let keyNum = 1;
+      for (const ib of allInbounds) {
+        try {
+          const ibSettings = JSON.parse(ib.settings || '{}');
+          const clients = ibSettings.clients || [];
+          for (const c of clients) {
+            const email = c.email || '';
+            // Match exact base name or base name + " Key{N}" suffix
+            if (email === baseName || email.startsWith(`${baseName} Key`)) {
+              const match = email.match(/ Key(\d+)$/);
+              const num = match ? parseInt(match[1], 10) : 1;
+              if (num >= keyNum) keyNum = num + 1;
+            }
+          }
+        } catch { /* skip parse errors */ }
+      }
+
+      const clientName = `${baseName} Key${keyNum}`;
 
       const clientUUID = randomUUID();
       const subId = generateSubId();
@@ -277,31 +308,45 @@ class XuiSession {
 
       log.info('VPN client created', { server: this.server.id, clientName });
 
-      // Extract shadowsocks method from inbound settings if needed
-      let ssMethod = 'chacha20-ietf-poly1305'; // default
-      if (inboundProtocol === 'shadowsocks') {
+      // Generate subscription link (3X-UI built-in)
+      const subLink = `https://${this.server.domain}:${this.server.subPort}/sub/${subId}`;
+
+      // Fetch actual config key (trojan://, vmess://, etc.) from 3X-UI subscription endpoint.
+      // Wait briefly for 3X-UI to register the new client before fetching.
+      let configLink = subLink; // fallback to sub link if all retries fail
+      const SUB_FETCH_RETRIES = 3;
+      const SUB_FETCH_DELAY_MS = 2000; // 2 seconds between attempts
+
+      for (let attempt = 1; attempt <= SUB_FETCH_RETRIES; attempt++) {
+        // Wait before fetching — gives 3X-UI time to register the client
+        await new Promise((resolve) => setTimeout(resolve, SUB_FETCH_DELAY_MS));
+
         try {
-          const inboundSettings = JSON.parse(inbound.settings || '{}');
-          if (inboundSettings.method) {
-            ssMethod = inboundSettings.method;
+          const subRes = await this.fetchSubscription(subLink);
+          if (subRes) {
+            configLink = subRes;
+            log.info('Fetched config link from 3X-UI sub endpoint', {
+              server: this.server.id,
+              attempt,
+            });
+            break; // success — stop retrying
           }
-        } catch {
-          // Use default
+          log.warn('Sub endpoint returned empty', { server: this.server.id, attempt });
+        } catch (err: unknown) {
+          log.warn('Failed to fetch from sub endpoint', {
+            server: this.server.id,
+            attempt,
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       }
 
-      // Generate links
-      const subLink = `https://${this.server.domain}:${this.server.subPort}/sub/${subId}`;
-      const configLink = buildConfigLink({
-        protocol: inboundProtocol,
-        clientUUID,
-        clientName,
-        server: this.server,
-        port: inbound.port,
-        remark: inbound.remark || 'VPN',
-        expiryDays,
-        ssMethod,
-      });
+      if (configLink === subLink) {
+        log.error('All sub fetch attempts failed — configLink set to subLink as fallback', {
+          server: this.server.id,
+          subLink,
+        });
+      }
 
       return {
         success: true,
@@ -371,6 +416,45 @@ class XuiSession {
     }
     return null;
   }
+
+  // ---- Fetch config link from 3X-UI subscription endpoint ----
+  // 3X-UI /sub/{subId} returns base64-encoded config URI(s)
+  async fetchSubscription(subUrl: string): Promise<string | null> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      const requestOptions: RequestInit & { dispatcher?: Agent } = {
+        signal: controller.signal,
+      };
+      if (tlsAgent) {
+        requestOptions.dispatcher = tlsAgent;
+      }
+
+      const res = await fetch(subUrl, requestOptions);
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        log.warn('Sub endpoint returned non-OK status', { status: res.status, subUrl });
+        return null;
+      }
+
+      const body = await res.text();
+      if (!body.trim()) return null;
+
+      // 3X-UI returns base64-encoded config URIs (one per line after decoding)
+      const decoded = Buffer.from(body.trim(), 'base64').toString('utf-8');
+      const lines = decoded.split('\n').map((l) => l.trim()).filter(Boolean);
+
+      // Return first config URI (trojan://, vless://, vmess://, ss://)
+      return lines[0] || null;
+    } catch (error: unknown) {
+      log.warn('fetchSubscription error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
 }
 
 // ==========================================
@@ -416,49 +500,6 @@ function buildClientSettings(opts: {
   return { ...base, id: clientUUID, flow: protocol === 'vless' ? '' : undefined };
 }
 
-function buildConfigLink(opts: {
-  protocol: string;
-  clientUUID: string;
-  clientName: string;
-  server: VpnServer;
-  port: number;
-  remark: string;
-  expiryDays: number;
-  ssMethod?: string;
-}): string {
-  const { protocol, clientUUID, clientName, server, port, remark, expiryDays, ssMethod = 'chacha20-ietf-poly1305' } = opts;
-  const encodedRemark = encodeURIComponent(`${remark}-${clientName}-${expiryDays}D`);
-
-  if (protocol === 'trojan') {
-    const trojanPort = server.trojanPort || port;
-    return `trojan://${clientUUID}@${server.domain}:${trojanPort}?security=none&type=tcp#${encodedRemark}`;
-  }
-  if (protocol === 'vless') {
-    return `vless://${clientUUID}@${server.domain}:${port}?type=tcp&security=none#${encodedRemark}`;
-  }
-  if (protocol === 'vmess') {
-    const vmessConfig = {
-      v: '2',
-      ps: `${remark}-${clientName}`,
-      add: server.domain,
-      port: String(port),
-      id: clientUUID,
-      aid: '0',
-      net: 'tcp',
-      type: 'none',
-      tls: '',
-    };
-    return `vmess://${Buffer.from(JSON.stringify(vmessConfig)).toString('base64')}`;
-  }
-  if (protocol === 'shadowsocks') {
-    // ss://BASE64(method:password)@server:port?type=tcp#remark
-    const userInfo = Buffer.from(`${ssMethod}:${clientUUID}`).toString('base64');
-    return `ss://${userInfo}@${server.domain}:${port}?type=tcp#${encodedRemark}`;
-  }
-  // Fallback: subscription link
-  return `https://${server.domain}:${server.subPort}/sub/${opts.clientUUID}`;
-}
-
 // ==========================================
 // Exported facade functions
 // ==========================================
@@ -476,9 +517,17 @@ async function getSession(serverId: string): Promise<XuiSession | null> {
     return null;
   }
 
-  const session = new XuiSession(server);
-  sessionCache.set(serverId, session);
-  return session;
+  try {
+    const session = new XuiSession(server);
+    sessionCache.set(serverId, session);
+    return session;
+  } catch (err: unknown) {
+    log.error('Failed to create XUI session (blocked endpoint)', {
+      serverId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 /**

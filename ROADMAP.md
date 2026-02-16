@@ -13,6 +13,9 @@
 - Admin Activity Log (track admin actions — orders, products, users, settings, coupons)
 - Export Data (CSV export for orders, users, products)
 - UI/UX Polish (skeleton loading, SEO meta tags, page metadata)
+- SEO/Performance (image avif/webp, priority/lazy loading, page metadata for auth/legal pages)
+- Account page mobile UX (3-column compact stats grid)
+- Error/404 pages UX improvement (background glows, animations, error digest display)
 - Payment QR/Account display (admin manage payment accounts, checkout shows payment info with copy)
 - User Profile editing + Phone field (edit name/phone, change password)
 - Product images support (upload with sharp resize, display in cards + detail page)
@@ -64,6 +67,12 @@
 | `SMTP_PASS` | Email provider password / API key | ⬜ လုပ်ရန် |
 | `EMAIL_FROM` | `noreply@burmesedigital.store` | ⬜ လုပ်ရန် |
 | `EMAIL_FROM_NAME` | `Burmese Digital Store` | ⬜ လုပ်ရန် |
+| `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL | ⬜ လုပ်ရန် |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST Token | ⬜ လုပ်ရန် |
+| `RATE_LIMIT_FAIL_CLOSED` | `true` (production) | ⬜ လုပ်ရန် |
+| `ENABLE_ADMIN_SEED` | `false` (production default) | ⬜ လုပ်ရန် |
+| `ADMIN_SECRET` | one-time bootstrap only | ⬜ လုပ်ရန် |
+| `VPN_SERVER_ALLOWED_HOSTS` | comma-separated allowlist | ⬜ လုပ်ရန် |
 
 ### 2. Email Provider Setup (သင်လုပ်ရမယ်)
 - ⬜ Mailgun / Resend account ဖွင့်ပါ (Student Pack: Mailgun 20K/month free)
@@ -91,24 +100,88 @@
 - ⬜ `public/uploads/` directory permissions: `chmod 755`
 - ⬜ PM2 startup: `pm2 startup` + `pm2 save`
 
-### 5. File Storage (⚠️ Production Issue)
+### 5. Database Backup → Telegram (VPS မှာ setup လုပ်ရန်)
+> ည 12:00 (MMT) တိုင်း MongoDB backup ကို Telegram group သို့ auto ပို့ပေးမယ်
+- ⬜ VPS မှာ `mongodump` install:
+  ```bash
+  wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -
+  echo "deb [ arch=amd64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+  sudo apt update && sudo apt install -y mongodb-database-tools
+  ```
+- ⬜ `.env.local` မှာ Telegram credentials ထည့်ပါ:
+  ```
+  TELEGRAM_BOT_TOKEN=8533001019:AAFpWlhtq8KIne4W0jsH5Oivl8A6tHjmo6g
+  TELEGRAM_CHAT_ID=-1003830141416
+  ```
+- ⬜ Cron job setup:
+  ```bash
+  cd /var/www/burmese-digital-store
+  bash scripts/setup-backup-cron.sh
+  ```
+- ⬜ Test manually:
+  ```bash
+  bash scripts/run-backup.sh
+  ```
+- ⬜ Telegram group ထဲ backup ဖိုင်ရောက်လာကြောင်း confirm ပါ
+
+### 6. File Storage (⚠️ Production Issue)
 > `public/uploads/` ကို local filesystem ထဲ သိမ်းထား → redeploy/restart ရင် ပျောက်နိုင်
 - ⬜ **DigitalOcean Spaces** (S3-compatible) သို့ migrate လုပ်ရန် — OR
 - ⬜ **Persistent volume** mount လုပ်ရန် (DigitalOcean block storage)
 - ⬜ ယခုအတွက် DigitalOcean droplet ပေါ် direct filesystem သုံးနိုင် (PM2 restart ဆို file မပျောက်)
 
-### 6. Security (Production Must-Do)
+### 7. Security (Production Must-Do)
 - ⬜ `JWT_SECRET` ကို strong random value ပြောင်းပါ (fallback secret ပါနေ)
 - ⬜ MongoDB Atlas: IP whitelist → DigitalOcean droplet IP only
 - ⬜ MongoDB user: read/write permission only (admin permission မပေးပါနဲ့)
 - ⬜ `.env.local` production values git ထဲ push မဝင်ကြောင်း confirm ပါ
 - ⬜ Admin account password ကို strong password ပြောင်းပါ
+- ⬜ `/api/admin/seed` ကို bootstrap ပြီးတာနဲ့ အပြီးပိတ် (`ENABLE_ADMIN_SEED=false`) + `ADMIN_SECRET` rotate
+- ⬜ Production မှာ Upstash Redis rate-limit ကို မဖြစ်မနေ ချိတ်ပါ (မချိတ်ရင် fail-closed 503 ပြန်မယ်)
+- ⬜ `VPN_SERVER_ALLOWED_HOSTS` allowlist ကို production domain/subdomains နဲ့ပဲ သတ်မှတ်ပါ (SSRF hardening)
+- ⬜ Server egress firewall policy: panel domains/ports သာထွက်နိုင်အောင် စဉ်းစားပါ (optional but recommended)
 
-### 7. Domain & SSL
+### 8. Domain & SSL
 - ⬜ Cloudflare → `burmesedigital.store` DNS → DigitalOcean IP
 - ⬜ Nginx config: `server_name burmesedigital.store www.burmesedigital.store`
 - ⬜ HTTPS redirect (Cloudflare "Always Use HTTPS" / Nginx redirect)
 - ⬜ `next.config.js` images hostname ✅ `burmesedigital.store` ပါပြီးသား
+- ⬜ Cloudflare SSL/TLS mode: **Full (strict)** (Flexible မသုံးပါ)
+- ⬜ Origin cert (Let's Encrypt သို့ Cloudflare Origin Cert) တပ်ပြီး end-to-end TLS တည်ဆောက်ပါ
+
+---
+
+## 🔐 Security Hardening Phase 3 — Production Readiness (Next)
+
+> production တင်ပြီးနောက်ပိုင်းမှာ attack surface လျော့ဖို့ + ops လုပ်ငန်းစဉ်တည်ငြိမ်ဖို့
+
+### S5 — CSP Nonce Migration (HIGH)
+- ✅ `Content-Security-Policy` ကို nonce-based scripts သို့ migrate လုပ်ပြီး
+- ✅ Production မှာ `script-src 'unsafe-inline'` ကိုဖြုတ်ပြီး nonce + strict-dynamic သုံးထားပြီး
+
+### S6 — Log Redaction + Retention (MEDIUM)
+- ✅ Logger layer မှာ `authorization/cookie/token/password/resetToken` pattern တွေ redaction ထည့်ပြီး
+- ✅ Production log retention policy (90 days default) + `LOG_RETENTION_DAYS` env configurable
+
+### S7 — Uploads Malware Scanning / Quarantine (MEDIUM)
+- ✅ Payment screenshot upload ကို quarantine folder (`/quarantine/`) ထဲထားပြီး admin approve/reject ပေါ်မူတည်ပြီး release/delete လုပ်ပြီး
+- ✅ Admin-only screenshot preview API (`/api/admin/screenshot`) for quarantined files
+
+### S8 — CI Security Gates (MEDIUM)
+- ✅ CI မှာ `npm audit --omit=dev --audit-level=high` enforce ထားပြီး (high/critical ဖြစ်ရင် fail)
+- ✅ Secret scanning (Gitleaks) + dependency review workflow ထည့်ပြီး
+
+### S9 — Incident Runbooks (LOW-MEDIUM)
+- ✅ `SECURITY.md` (reporting + support policy)
+- ✅ `INCIDENT_RESPONSE.md` (roles, triage, comms)
+- ✅ `SECRET_ROTATION.md` (JWT/ADMIN_SECRET/Upstash/S3 credentials rotation)
+
+### S10 — Monitoring & Alerts (LOW-MEDIUM)
+- ✅ Alert rules: repeated login failures, reset-password spikes, seed endpoint hits, 503 rate-limit spikes
+- ✅ Admin actions monitoring: user promote/demote, server URL changes, export usage
+
+### S11 — Windows Dev Reliability (LOW)
+- ⬜ Project ကို OneDrive sync folder ပြင်ပသို့ရွှေ့ရန် (Next.js `.next/trace` EPERM issue လျော့)
 
 ---
 
@@ -409,7 +482,7 @@ Reset:    POST {panel_url}{panel_path}/panel/api/inbounds/{inboundId}/resetClien
 
 ### H) Testing
 
-- ⬜ Unit tests for `xui.ts` (mock HTTP, test create/delete/stats)
+- ✅ Unit tests for `xui.ts` (17 tests — provision, revoke, stats, config links, retry, data limits, subscription)
 - ⬜ Integration test with staging panel (create + verify + delete)
 - ⬜ E2E: order → approve → provision → user sees key
 
@@ -421,7 +494,7 @@ Reset:    POST {panel_url}{panel_path}/panel/api/inbounds/{inboundId}/resetClien
 5. ✅ **E** — VPN page + user key display
 6. ✅ **F** — admin VPN management UI
 7. ✅ **G** — security (idempotency, revoke, rate limit, free test limit)
-8. ⬜ **H** — VPN unit/integration tests
+8. ✅ **H** — VPN unit tests (17 tests, all passing)
 
 ---
 

@@ -44,6 +44,12 @@ cp .env.example .env.local
 - `MONGODB_URI` — Your MongoDB connection string
 - `JWT_SECRET` — A strong random secret key
 
+**Security-critical production variables:**
+- `ENABLE_ADMIN_SEED=false` — keep disabled except a short one-time bootstrap window
+- `RATE_LIMIT_FAIL_CLOSED=true` — fail safely if distributed rate limiter is unavailable
+- `ADMIN_SECRET` — required only when temporary bootstrap endpoint is enabled
+- `VPN_SERVER_ALLOWED_HOSTS` — allowlist for outbound 3xUI panel domains (SSRF hardening)
+
 ### 3. Run Development Server
 
 ```bash
@@ -122,3 +128,5 @@ src/
 - Password hashing with bcrypt (12 rounds)
 - Input validation on all routes
 - Admin routes protected by middleware + server-side checks
+- Keep `/api/admin/seed` disabled in production (`ENABLE_ADMIN_SEED=false`) after initial admin setup
+- Use end-to-end TLS and Cloudflare SSL mode `Full (strict)` (do not use Flexible)

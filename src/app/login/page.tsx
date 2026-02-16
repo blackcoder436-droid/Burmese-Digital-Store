@@ -23,13 +23,14 @@ function LoginForm() {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          router.push(data.data.user.role === 'admin' ? '/admin' : (redirectTo || '/account'));
+          const target = data.data.user.role === 'admin' ? '/admin' : (redirectTo || '/account');
+          window.location.href = target;
         } else {
           setChecking(false);
         }
       })
       .catch(() => setChecking(false));
-  }, [router]);
+  }, [redirectTo]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,10 +44,12 @@ function LoginForm() {
       const data = await res.json();
       if (data.success) {
         toast.success(tr('Welcome back!', 'ပြန်လည်ကြိုဆိုပါသည်!'));
-        router.refresh();
-        // Redirect to the page they came from, or default based on role
+        // Use window.location for reliable redirect after login
+        // router.refresh() + router.push() race condition causes redirect to fail
         const safeRedirect = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : null;
-        router.push(data.data.user.role === 'admin' ? '/admin' : (safeRedirect || '/account'));
+        const target = data.data.user.role === 'admin' ? '/admin' : (safeRedirect || '/account');
+        window.location.href = target;
+        return;
       } else {
         toast.error(data.error || tr('Login failed', 'ဝင်ရောက်မှု မအောင်မြင်ပါ'));
       }

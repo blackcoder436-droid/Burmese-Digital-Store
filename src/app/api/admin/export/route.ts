@@ -5,6 +5,7 @@ import User from '@/models/User';
 import Product from '@/models/Product';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
+import { trackDataExport } from '@/lib/monitoring';
 
 // GET /api/admin/export?type=orders|users|products
 export async function GET(request: NextRequest) {
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
   if (limited) return limited;
 
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     await connectDB();
 
     const { searchParams } = new URL(request.url);
@@ -55,6 +56,9 @@ export async function GET(request: NextRequest) {
         ].join(',') + '\n';
       }
 
+      // S10: Track data export
+      trackDataExport(admin.userId, 'orders', orders.length);
+
       return new NextResponse(csv, {
         headers: {
           'Content-Type': 'text/csv; charset=utf-8',
@@ -80,6 +84,9 @@ export async function GET(request: NextRequest) {
           new Date(u.createdAt).toISOString(),
         ].join(',') + '\n';
       }
+
+      // S10: Track data export
+      trackDataExport(admin.userId, 'users', users.length);
 
       return new NextResponse(csv, {
         headers: {
@@ -107,6 +114,9 @@ export async function GET(request: NextRequest) {
           new Date(p.createdAt).toISOString(),
         ].join(',') + '\n';
       }
+
+      // S10: Track data export
+      trackDataExport(admin.userId, 'products', products.length);
 
       return new NextResponse(csv, {
         headers: {
