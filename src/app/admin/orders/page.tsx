@@ -73,7 +73,7 @@ const fraudFlagLabels: Record<string, { label: string; icon: typeof AlertTriangl
 };
 
 export default function AdminOrdersPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -124,7 +124,7 @@ export default function AdminOrdersPage() {
       const data = await res.json();
       if (data.success) setOrders(data.data.orders);
     } catch {
-      toast.error(tr('Failed to fetch orders', 'အော်ဒါများကိုရယူရန် မအောင်မြင်ပါ'));
+      toast.error(t('admin.ordersPage.fetchFailed'));
     } finally {
       setLoading(false);
     }
@@ -141,17 +141,17 @@ export default function AdminOrdersPage() {
 
       const data = await res.json();
       if (data.success) {
-        toast.success(`${tr('Order', 'အော်ဒါ')} ${status}`);
+        toast.success(`${t('admin.ordersPage.order')} ${status}`);
         fetchOrders();
         setSelectedOrder(null);
         setShowRejectDialog(false);
         setRejectReasonInput('');
         setChecklist({ amountVerified: false, timeVerified: false, accountVerified: false, txidVerified: false, payerVerified: false });
       } else {
-        toast.error(data.error || tr('Failed to update order', 'အော်ဒါပြင်ဆင်ခြင်း မအောင်မြင်ပါ'));
+        toast.error(data.error || t('admin.ordersPage.updateFailed'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('admin.ordersPage.somethingWrong'));
     } finally {
       setProcessing(null);
     }
@@ -168,15 +168,15 @@ export default function AdminOrdersPage() {
       const data = await res.json();
       if (data.success) {
         toast.success(action === 'retry_provision'
-          ? tr('VPN key provisioned!', 'VPN Key ထုတ်ပေးပြီး!')
-          : tr('VPN key revoked!', 'VPN Key ပယ်ဖျက်ပြီး!'));
+          ? t('admin.ordersPage.vpnProvisioned')
+          : t('admin.ordersPage.vpnRevoked'));
         fetchOrders();
         setSelectedOrder(null);
       } else {
         toast.error(data.error);
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('admin.ordersPage.somethingWrong'));
     } finally {
       setProcessing(null);
     }
@@ -185,7 +185,7 @@ export default function AdminOrdersPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="heading-lg">{tr('Orders Management', 'အော်ဒါစီမံခန့်ခွဲမှု')}</h1>
+        <h1 className="heading-lg">{t('admin.ordersPage.title')}</h1>
         <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold ${
           ocrEnabled
             ? 'bg-green-500/10 text-green-400 border border-green-500/20'
@@ -194,12 +194,12 @@ export default function AdminOrdersPage() {
           {ocrEnabled ? (
             <>
               <Eye className="w-3.5 h-3.5" />
-              {tr('OCR Auto-Verify: ON', 'OCR အလိုအလျောက်စစ်ဆေး: ဖွင့်')}
+              {t('admin.ordersPage.ocrOn')}
             </>
           ) : (
             <>
               <EyeOff className="w-3.5 h-3.5" />
-              {tr('OCR: OFF — Manual Review', 'OCR: ပိတ် — ကိုယ်တိုင်စစ်ဆေး')}
+              {t('admin.ordersPage.ocrOff')}
             </>
           )}
         </div>
@@ -208,11 +208,11 @@ export default function AdminOrdersPage() {
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         {[
-          { value: '', label: tr('All', 'အားလုံး'), count: orders.length },
-          { value: 'pending', label: tr('Pending', 'စောင့်ဆိုင်းနေသည်') },
-          { value: 'verifying', label: tr('Verifying', 'စစ်ဆေးနေသည်') },
-          { value: 'completed', label: tr('Completed', 'ပြီးဆုံးသည်') },
-          { value: 'rejected', label: tr('Rejected', 'ပယ်ချသည်') },
+          { value: '', label: t('admin.ordersPage.all'), count: orders.length },
+          { value: 'pending', label: t('admin.ordersPage.pending') },
+          { value: 'verifying', label: t('admin.ordersPage.verifying') },
+          { value: 'completed', label: t('admin.ordersPage.completed') },
+          { value: 'rejected', label: t('admin.ordersPage.rejected') },
         ].map((f) => (
           <button
             key={f.value}
@@ -237,7 +237,7 @@ export default function AdminOrdersPage() {
           }`}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
-          {tr('Review Required', 'စစ်ဆေးရန်လိုသည်')}
+          {t('admin.ordersPage.reviewRequired')}
         </button>
       </div>
 
@@ -247,7 +247,7 @@ export default function AdminOrdersPage() {
           <div className="game-card w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 sm:p-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="heading-sm">
-                {tr('Order Details', 'အော်ဒါအသေးစိတ်')}
+                {t('admin.ordersPage.orderDetails')}
               </h2>
               <button
                 onClick={() => setSelectedOrder(null)}
@@ -260,7 +260,7 @@ export default function AdminOrdersPage() {
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-gray-500 mb-1">{tr('Customer', 'ဖောက်သည်')}</p>
+                  <p className="text-gray-500 mb-1">{t('admin.ordersPage.customer')}</p>
                   <p className="text-white font-medium">
                     {selectedOrder.user?.name}
                   </p>
@@ -269,7 +269,7 @@ export default function AdminOrdersPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500 mb-1">{tr('Product', 'ပစ္စည်း')}</p>
+                  <p className="text-gray-500 mb-1">{t('admin.ordersPage.product')}</p>
                   <p className="text-white font-medium">
                     {selectedOrder.orderType === 'vpn' && selectedOrder.vpnPlan
                       ? `VPN ${selectedOrder.vpnPlan.devices}D / ${selectedOrder.vpnPlan.months}M — ${selectedOrder.vpnPlan.serverId.toUpperCase()}`
@@ -280,7 +280,7 @@ export default function AdminOrdersPage() {
                   )}
                 </div>
                 <div>
-                  <p className="text-gray-500 mb-1">{tr('Amount', 'ပမာဏ')}</p>
+                  <p className="text-gray-500 mb-1">{t('admin.ordersPage.amount')}</p>
                   <p className="text-purple-400 font-bold text-lg">
                     {selectedOrder.totalAmount?.toLocaleString()} MMK
                   </p>
@@ -293,19 +293,19 @@ export default function AdminOrdersPage() {
                   )}
                 </div>
                 <div>
-                  <p className="text-gray-500 mb-1">{tr('Payment', 'ငွေပေးချေမှု')}</p>
+                  <p className="text-gray-500 mb-1">{t('admin.ordersPage.payment')}</p>
                   <p className="text-white font-medium">
                     {selectedOrder.paymentMethod?.toUpperCase()}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500 mb-1">{tr('Transaction ID', 'ငွေလွှဲ ID')}</p>
+                  <p className="text-gray-500 mb-1">{t('admin.ordersPage.transactionId')}</p>
                   <p className="text-white font-mono text-xs bg-dark-800 px-2 py-1 rounded-lg inline-block">
                     {selectedOrder.transactionId || 'N/A'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500 mb-1">{tr('OCR Status', 'OCR အခြေအနေ')}</p>
+                  <p className="text-gray-500 mb-1">{t('admin.ordersPage.ocrStatus')}</p>
                   <p
                     className={
                       selectedOrder.ocrVerified
@@ -313,7 +313,7 @@ export default function AdminOrdersPage() {
                         : 'text-amber-400 font-medium'
                     }
                   >
-                    {selectedOrder.ocrVerified ? tr('✓ Verified', '✓ အတည်ပြုပြီး') : tr('⚠ Not Verified', '⚠ မအတည်ပြုရသေး')}
+                    {selectedOrder.ocrVerified ? t('admin.ordersPage.verified') : t('admin.ordersPage.notVerified')}
                     {selectedOrder.ocrExtractedData && (
                       <span className="text-xs text-gray-500 ml-2">
                         ({Math.round(selectedOrder.ocrExtractedData.confidence)}%
@@ -328,7 +328,7 @@ export default function AdminOrdersPage() {
               {selectedOrder.paymentScreenshot && (
                 <div>
                   <p className="text-gray-500 text-sm mb-2">
-                    {tr('Payment Screenshot', 'ငွေပေးချေမှု Screenshot')}
+                    {t('admin.ordersPage.paymentScreenshot')}
                   </p>
                   <img
                     src={selectedOrder.paymentScreenshot}
@@ -342,17 +342,17 @@ export default function AdminOrdersPage() {
               {selectedOrder.ocrExtractedData && (
                 <div className="p-4 bg-dark-800 rounded-xl border border-dark-700">
                   <p className="text-gray-500 text-xs mb-2 font-medium">
-                    {tr('OCR Extracted Data', 'OCR မှထုတ်ယူသောဒေတာ')}
+                    {t('admin.ordersPage.ocrExtractedData')}
                   </p>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <span className="text-gray-500">{tr('Amount:', 'ပမာဏ:')} </span>
+                      <span className="text-gray-500">{t('admin.ordersPage.amountLabel')} </span>
                       <span className="text-white font-mono">
                         {selectedOrder.ocrExtractedData.amount || 'N/A'}
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-500">{tr('Txn ID:', 'ငွေလွှဲ ID:')} </span>
+                      <span className="text-gray-500">{t('admin.ordersPage.txnIdLabel')} </span>
                       <span className="text-white font-mono">
                         {selectedOrder.ocrExtractedData.transactionId || 'N/A'}
                       </span>
@@ -366,7 +366,7 @@ export default function AdminOrdersPage() {
                 <div className="p-4 bg-red-500/5 rounded-xl border border-red-500/20">
                   <div className="flex items-center gap-2 mb-3">
                     <ShieldAlert className="w-4 h-4 text-red-400" />
-                    <span className="text-sm font-semibold text-red-400">{tr('Fraud Flags', 'သတိပေးချက်များ')}</span>
+                    <span className="text-sm font-semibold text-red-400">{t('admin.ordersPage.fraudFlags')}</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {selectedOrder.fraudFlags.map((flag) => {
@@ -390,10 +390,10 @@ export default function AdminOrdersPage() {
               {selectedOrder.paymentExpiresAt && (selectedOrder.status === 'pending' || selectedOrder.status === 'verifying') && (
                 <div className="flex items-center gap-2 text-xs">
                   <Timer className="w-3.5 h-3.5 text-gray-500" />
-                  <span className="text-gray-500">{tr('Payment window expires:', 'ငွေပေးချေရန် အချိန်ကုန်ချိန်:')}</span>
+                  <span className="text-gray-500">{t('admin.ordersPage.paymentExpires')}</span>
                   <span className={`font-semibold ${new Date(selectedOrder.paymentExpiresAt) < new Date() ? 'text-red-400' : 'text-amber-400'}`}>
                     {new Date(selectedOrder.paymentExpiresAt) < new Date()
-                      ? tr('EXPIRED', 'ကုန်ဆုံးပြီး')
+                      ? t('admin.ordersPage.expired')
                       : new Date(selectedOrder.paymentExpiresAt).toLocaleString()}
                   </span>
                 </div>
@@ -405,7 +405,7 @@ export default function AdminOrdersPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Shield className="w-4 h-4 text-purple-400" />
-                      <span className="text-sm font-semibold text-white">{tr('VPN Provision', 'VPN Provision')}</span>
+                      <span className="text-sm font-semibold text-white">{t('admin.ordersPage.vpnProvision')}</span>
                     </div>
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${
                       selectedOrder.vpnProvisionStatus === 'provisioned'
@@ -457,17 +457,17 @@ export default function AdminOrdersPage() {
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg text-purple-300 transition-all disabled:opacity-50"
                       >
                         {processing === selectedOrder._id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
-                        {tr('Retry Provision', 'ပြန်ကြိုးစားမည်')}
+                        {t('admin.ordersPage.retryProvision')}
                       </button>
                     )}
                     {selectedOrder.vpnProvisionStatus === 'provisioned' && (
                       <button
-                        onClick={() => { if (confirm(tr('Revoke this VPN key?', 'ဒီ VPN Key ကို ပယ်ဖျက်မှာ သေချာပါသလား?'))) vpnAction(selectedOrder._id, 'revoke_key'); }}
+                        onClick={() => { if (confirm(t('admin.ordersPage.confirmRevoke'))) vpnAction(selectedOrder._id, 'revoke_key'); }}
                         disabled={processing === selectedOrder._id}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg text-red-400 transition-all disabled:opacity-50"
                       >
                         {processing === selectedOrder._id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
-                        {tr('Revoke Key', 'Key ပယ်ဖျက်မည်')}
+                        {t('admin.ordersPage.revokeKey')}
                       </button>
                     )}
                   </div>
@@ -480,16 +480,32 @@ export default function AdminOrdersPage() {
                 <div className="space-y-4 pt-5 border-t border-dark-700">
                   {/* Verification Checklist */}
                   <div className="p-4 bg-dark-800 rounded-xl border border-dark-700">
-                    <p className="text-xs font-semibold text-gray-400 mb-3">{tr('Verification Checklist', 'စစ်ဆေးချက်များ')}</p>
+                    <div className="flex items-center justify-between mb-3 gap-2">
+                      <p className="text-xs font-semibold text-gray-400">{t('admin.ordersPage.verificationChecklist')}</p>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setChecklist({ amountVerified: true, timeVerified: true, accountVerified: true, txidVerified: true, payerVerified: true })}
+                          className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-purple-500/10 text-purple-300 border border-purple-500/25 hover:bg-purple-500/20 transition-colors"
+                        >
+                          {t('admin.ordersPage.markAll')}
+                        </button>
+                        <button
+                          onClick={() => setChecklist({ amountVerified: false, timeVerified: false, accountVerified: false, txidVerified: false, payerVerified: false })}
+                          className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-dark-700 text-gray-400 border border-dark-600 hover:text-white transition-colors"
+                        >
+                          {t('admin.ordersPage.clear')}
+                        </button>
+                      </div>
+                    </div>
                     <div className="space-y-2">
                       {[
-                        { key: 'amountVerified' as const, label: tr('Amount matches order total', 'ပမာဏ မှန်ကန်သည်') },
-                        { key: 'timeVerified' as const, label: tr('Payment time is recent', 'ငွေပေးချေချိန် မှန်ကန်သည်') },
-                        { key: 'accountVerified' as const, label: tr('Paid to correct account', 'မှန်ကန်သော Account သို့ ပေးပို့သည်') },
-                        { key: 'txidVerified' as const, label: tr('Transaction ID is valid', 'Transaction ID မှန်ကန်သည်') },
-                        { key: 'payerVerified' as const, label: tr('Payer info matches', 'ပေးပို့သူ အချက်အလက် မှန်ကန်သည်') },
+                        { key: 'amountVerified' as const, label: t('admin.ordersPage.amountMatches') },
+                        { key: 'timeVerified' as const, label: t('admin.ordersPage.paymentTimeRecent') },
+                        { key: 'accountVerified' as const, label: t('admin.ordersPage.paidToCorrectAccount') },
+                        { key: 'txidVerified' as const, label: t('admin.ordersPage.txidValid') },
+                        { key: 'payerVerified' as const, label: t('admin.ordersPage.payerInfoMatches') },
                       ].map((item) => (
-                        <label key={item.key} className="flex items-center gap-2 cursor-pointer group">
+                        <label key={item.key} className="flex items-center gap-2 cursor-pointer group p-2 rounded-lg hover:bg-dark-700/60 transition-colors">
                           <input
                             type="checkbox"
                             checked={checklist[item.key]}
@@ -507,7 +523,7 @@ export default function AdminOrdersPage() {
                       onClick={() => {
                         const allChecked = Object.values(checklist).every(Boolean);
                         if (!allChecked) {
-                          toast.error(tr('Please complete all verification checks', 'စစ်ဆေးချက်အားလုံး ပြီးဆုံးအောင်လုပ်ပါ'));
+                          toast.error(t('admin.ordersPage.completeAllChecks'));
                           return;
                         }
                         updateOrderStatus(selectedOrder._id, 'completed', undefined, undefined, checklist);
@@ -521,8 +537,8 @@ export default function AdminOrdersPage() {
                         <CheckCircle className="w-4 h-4" />
                       )}
                       <span>{selectedOrder.orderType === 'vpn'
-                        ? tr('Approve & Provision VPN', 'အတည်ပြု + VPN Key ထုတ်မည်')
-                        : tr('Approve & Deliver', 'အတည်ပြုပြီး ပို့မည်')}</span>
+                        ? t('admin.ordersPage.approveVpn')
+                        : t('admin.ordersPage.approveDeliver')}</span>
                     </button>
                     <button
                       onClick={() => setShowRejectDialog(true)}
@@ -530,7 +546,7 @@ export default function AdminOrdersPage() {
                       className="btn-danger flex-1 flex items-center justify-center space-x-2"
                     >
                       <XCircle className="w-4 h-4" />
-                      <span>{tr('Reject', 'ပယ်ချမည်')}</span>
+                      <span>{t('admin.ordersPage.reject')}</span>
                     </button>
                   </div>
                 </div>
@@ -539,11 +555,11 @@ export default function AdminOrdersPage() {
               {/* Reject Reason Dialog */}
               {showRejectDialog && selectedOrder && (
                 <div className="p-4 bg-red-500/5 rounded-xl border border-red-500/20 space-y-3">
-                  <p className="text-sm font-semibold text-red-400">{tr('Reject Reason (Required)', 'ပယ်ချရသည့်အကြောင်းရင်း (မဖြစ်မနေ)')}</p>
+                  <p className="text-sm font-semibold text-red-400">{t('admin.ordersPage.rejectReasonRequired')}</p>
                   <textarea
                     value={rejectReasonInput}
                     onChange={(e) => setRejectReasonInput(e.target.value)}
-                    placeholder={tr('Enter reason for rejection...', 'ပယ်ချရသည့်အကြောင်းပြချက်ကို ရိုက်ထည့်ပါ...')}
+                    placeholder={t('admin.ordersPage.rejectPlaceholder')}
                     className="w-full px-3 py-2 text-sm bg-dark-800 border border-red-500/20 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-red-500"
                     rows={2}
                   />
@@ -551,7 +567,7 @@ export default function AdminOrdersPage() {
                     <button
                       onClick={() => {
                         if (!rejectReasonInput.trim()) {
-                          toast.error(tr('Reject reason is required', 'ပယ်ချရသည့်အကြောင်းရင်းထည့်ပါ'));
+                          toast.error(t('admin.ordersPage.rejectReasonNeeded'));
                           return;
                         }
                         updateOrderStatus(selectedOrder._id, 'rejected', undefined, rejectReasonInput.trim());
@@ -560,13 +576,13 @@ export default function AdminOrdersPage() {
                       className="px-4 py-2 text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg text-red-400 transition-all disabled:opacity-50"
                     >
                       {processing === selectedOrder._id ? <Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" /> : null}
-                      {tr('Confirm Reject', 'ပယ်ချမှု အတည်ပြုမည်')}
+                      {t('admin.ordersPage.confirmReject')}
                     </button>
                     <button
                       onClick={() => { setShowRejectDialog(false); setRejectReasonInput(''); }}
                       className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
                     >
-                      {tr('Cancel', 'ပယ်ဖျက်မည်')}
+                      {t('admin.ordersPage.cancel')}
                     </button>
                   </div>
                 </div>
@@ -584,7 +600,7 @@ export default function AdminOrdersPage() {
       ) : orders.length === 0 ? (
         <div className="game-card p-16 text-center">
           <Clock className="w-16 h-16 text-dark-600 mx-auto mb-4" />
-          <h3 className="text-xl text-gray-300 font-medium">{tr('No orders found', 'အော်ဒါမတွေ့ပါ')}</h3>
+          <h3 className="text-xl text-gray-300 font-medium">{t('admin.ordersPage.noOrdersFound')}</h3>
         </div>
       ) : (
         <div className="game-card overflow-hidden">
@@ -592,14 +608,14 @@ export default function AdminOrdersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-400 uppercase border-b border-dark-700 bg-dark-800/50">
-                  <th className="p-4 font-semibold">{tr('Customer', 'ဖောက်သည်')}</th>
-                  <th className="p-4 font-semibold">{tr('Product', 'ပစ္စည်း')}</th>
-                  <th className="p-4 font-semibold">{tr('Amount', 'ပမာဏ')}</th>
-                  <th className="p-4 font-semibold">{tr('Payment', 'ငွေပေးချေမှု')}</th>
+                  <th className="p-4 font-semibold">{t('admin.ordersPage.customer')}</th>
+                  <th className="p-4 font-semibold">{t('admin.ordersPage.product')}</th>
+                  <th className="p-4 font-semibold">{t('admin.ordersPage.amount')}</th>
+                  <th className="p-4 font-semibold">{t('admin.ordersPage.payment')}</th>
                   <th className="p-4 font-semibold">OCR</th>
-                  <th className="p-4 font-semibold">{tr('Status', 'အခြေအနေ')}</th>
-                  <th className="p-4 font-semibold">{tr('Date', 'ရက်စွဲ')}</th>
-                  <th className="p-4 font-semibold text-right">{tr('Actions', 'လုပ်ဆောင်ရန်')}</th>
+                  <th className="p-4 font-semibold">{t('admin.ordersPage.status')}</th>
+                  <th className="p-4 font-semibold">{t('admin.ordersPage.date')}</th>
+                  <th className="p-4 font-semibold text-right">{t('admin.ordersPage.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-700">

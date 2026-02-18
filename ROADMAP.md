@@ -21,6 +21,7 @@
 - Product images support (upload with sharp resize, display in cards + detail page)
 - Coupon/Discount code system (create/manage coupons, validate at checkout, apply to orders)
 - Bug fixes (duplicate label fix, admin product input sanitization)
+- Global top-spacing normalization (reduced page-level top padding to prevent navbar/content gap on public + account pages)
 - Login redirect for checkout (unauthenticated users redirected to login then back to product)
 - P0 Security: CSP hardened (unsafe-eval removed in production)
 - P0 Security: Admin mutation rate limiting (all PATCH/PUT/DELETE routes)
@@ -100,6 +101,7 @@
 - ✅ `src/app/api/auth/google/route.ts` — Google ID token verification + auto create/login
 - ✅ Google Sign-In button on Login page (Google Identity Services SDK)
 - ✅ Google Sign-Up button on Register page
+- ✅ Google auth API tests (`__tests__/google-auth-route.test.ts`) for validation, invalid token, existing/new user flows
 - ✅ `GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID` env vars required
 
 ### Telegram Integration
@@ -300,13 +302,19 @@
 - ✅ Zod env validation: `src/lib/env.ts` (server + client env schemas, fail-hard in production)
 - ✅ CORS headers: `CORS_ALLOWED_ORIGINS` env var based whitelist + OPTIONS preflight handling
 - ✅ CI test job: GitHub Actions `vitest run` before build (build depends on test pass)
+- ✅ Navbar notifications bell restored + mobile-friendly notifications shortcut (`/account/notifications`)
+- ✅ Admin header notification bell enabled (`/admin`) with admin-order routing
+- ✅ Account page mobile header/stats readability improved (compact avatar + responsive typography)
+- ✅ Product detail mobile UX polish (`/shop/[id]`: spacing/layout overlap fixes, quantity/total responsive block, payment form mobile-friendly controls)
+- ✅ Product detail top summary UX refinement (readable back-link, stock+duration chips, `1Year` style normalization)
+- ✅ Order email-verification gate is now env-toggle based (`REQUIRE_EMAIL_VERIFICATION_FOR_ORDERS`, currently set to temporary OFF)
 
 ### Remaining TODOs
-- ⬜ API route integration tests (auth, orders, admin)
-- ⬜ Fraud detection unit tests
+- ✅ API route integration tests (`__tests__/api-routes.test.ts`)
+- ✅ Fraud detection unit tests (`__tests__/fraud-detection.test.ts`)
 - ⬜ Component/UI tests (React Testing Library)
-- ⬜ `expireOverdueOrders()` cron/scheduler (currently only triggers on admin page load)
-- ⬜ Migrate existing components from `tr()` to `t()` dictionary-based translations
+- ✅ `expireOverdueOrders()` cron endpoint implemented (`/api/cron/expire-orders`, secret-protected)
+- ◐ Migrate existing components from `tr()` to `t()` dictionary-based translations (login/register + navbar + admin header + admin/dashboard + product card + footer + notification bell + account/notifications + account/vpn-keys completed)
 - ⬜ Product review/rating system
 - ⬜ Real-time notifications (SSE/WebSocket)
 - ⬜ Admin rate limit dashboard (Upstash Redis usage visualization)
@@ -701,6 +709,7 @@ Reset:    POST {panel_url}{panel_path}/panel/api/inbounds/{inboundId}/resetClien
 ## 📱 Future Plan: Web → React Native (Expo) Expansion
 
 > အခု web app ကို stable အောင်အရင်တည်ဆောက်ပြီး၊ နောက်ပိုင်း Android/iOS app အဖြစ် React Native + Expo နဲ့ချဲ့ရန် long-term plan
+> ⏸️ Deferred for later (2026-02-19): current focus remains web/admin features.
 
 ### A) Architecture Readiness (Web-first, Mobile-ready)
 - ⬜ Business logic ကို API-first pattern နဲ့ထားရန် (UI နှင့် logic ခွဲ)

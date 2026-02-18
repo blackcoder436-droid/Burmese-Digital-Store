@@ -13,7 +13,7 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   useScrollFade();
 
   useEffect(() => {
@@ -35,13 +35,10 @@ export default function Error({
         </div>
 
         <h1 className="heading-md text-white mb-3">
-          {tr('Something went wrong', 'တစ်ခုခု မှားယွင်းနေပါသည်')}
+          {t('pages.error.somethingWrong')}
         </h1>
         <p className="text-gray-400 mb-3 leading-relaxed max-w-sm mx-auto">
-          {tr(
-            'An unexpected error occurred. Please try again.',
-            'မမျှော်လင့်ထားသော အမှားတစ်ခု ဖြစ်ပေါ်ခဲ့ပါသည်။ ထပ်ကြိုးစားကြည့်ပါ။'
-          )}
+          {t('pages.error.unexpectedError')}
         </p>
 
         {error.digest && (
@@ -53,11 +50,11 @@ export default function Error({
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <button onClick={reset} className="btn-primary flex items-center gap-2">
             <RefreshCw className="w-4 h-4" />
-            {tr('Try Again', 'ထပ်ကြိုးစားမည်')}
+            {t('pages.error.tryAgain')}
           </button>
           <Link href="/" className="btn-secondary flex items-center gap-2">
             <Home className="w-4 h-4" />
-            {tr('Go Home', 'ပင်မစာမျက်နှာ')}
+            {t('pages.error.goHome')}
           </Link>
         </div>
       </div>

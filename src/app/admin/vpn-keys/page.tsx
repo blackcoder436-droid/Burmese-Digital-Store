@@ -59,7 +59,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 };
 
 export default function AdminVpnKeysPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [keys, setKeys] = useState<VpnKeyEntry[]>([]);
   const [summary, setSummary] = useState<Summary>({ provisioned: 0, failed: 0, revoked: 0, pending: 0, total: 0 });
   const [loading, setLoading] = useState(true);
@@ -125,10 +125,10 @@ export default function AdminVpnKeysPage() {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <Key className="w-6 h-6 text-purple-400" />
-            {tr('VPN Keys Management', 'VPN Keys စီမံခန့်ခွဲမှု')}
+            {t('admin.vpnKeysPage.title')}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            {tr('Manage all VPN keys across servers', 'Server အားလုံးရဲ့ VPN keys တွေကို စီမံပါ')}
+            {t('admin.vpnKeysPage.subtitle')}
           </p>
         </div>
         <button
@@ -142,11 +142,11 @@ export default function AdminVpnKeysPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-8">
         {[
-          { label: tr('Total', 'စုစုပေါင်း'), value: summary.total, color: 'text-white', bg: 'bg-purple-500/10 border-purple-500/20' },
-          { label: tr('Active', 'Active'), value: summary.provisioned, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-          { label: tr('Pending', 'Pending'), value: summary.pending, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
-          { label: tr('Failed', 'Failed'), value: summary.failed, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
-          { label: tr('Revoked', 'Revoked'), value: summary.revoked, color: 'text-gray-400', bg: 'bg-gray-500/10 border-gray-500/20' },
+          { label: t('admin.vpnKeysPage.total'), value: summary.total, color: 'text-white', bg: 'bg-purple-500/10 border-purple-500/20' },
+          { label: t('admin.vpnKeysPage.active'), value: summary.provisioned, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+          { label: t('admin.vpnKeysPage.pending'), value: summary.pending, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+          { label: t('admin.vpnKeysPage.failed'), value: summary.failed, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
+          { label: t('admin.vpnKeysPage.revoked'), value: summary.revoked, color: 'text-gray-400', bg: 'bg-gray-500/10 border-gray-500/20' },
         ].map((card) => (
           <div
             key={card.label}
@@ -162,11 +162,11 @@ export default function AdminVpnKeysPage() {
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="flex gap-2 flex-wrap">
           {[
-            { value: 'all', label: tr('All', 'အားလုံး') },
-            { value: 'provisioned', label: tr('Active', 'Active') },
-            { value: 'pending', label: tr('Pending', 'Pending') },
-            { value: 'failed', label: tr('Failed', 'Failed') },
-            { value: 'revoked', label: tr('Revoked', 'Revoked') },
+            { value: 'all', label: t('shop.page.all') },
+            { value: 'provisioned', label: t('admin.vpnKeysPage.active') },
+            { value: 'pending', label: t('admin.vpnKeysPage.pending') },
+            { value: 'failed', label: t('admin.vpnKeysPage.failed') },
+            { value: 'revoked', label: t('admin.vpnKeysPage.revoked') },
           ].map((f) => (
             <button
               key={f.value}
@@ -189,7 +189,7 @@ export default function AdminVpnKeysPage() {
             onChange={(e) => { setServerFilter(e.target.value); setPage(1); }}
             className="bg-[#12122a] border border-purple-500/[0.08] text-sm text-gray-300 rounded-lg px-3 py-1.5 focus:border-purple-500 focus:outline-none"
           >
-            <option value="">{tr('All Servers', 'Server အားလုံး')}</option>
+            <option value="">{t('admin.vpnKeysPage.allServers')}</option>
             {servers.map((s) => (
               <option key={s} value={s}>{s.toUpperCase()}</option>
             ))}
@@ -207,7 +207,7 @@ export default function AdminVpnKeysPage() {
       ) : keys.length === 0 ? (
         <div className="text-center py-20">
           <Server className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-500">{tr('No VPN keys found', 'VPN key မတွေ့ပါ')}</p>
+          <p className="text-gray-500">{t('admin.vpnKeysPage.noKeysFound')}</p>
         </div>
       ) : (
         <div className="bg-[#12122a] border border-purple-500/[0.08] rounded-2xl overflow-hidden">
@@ -215,13 +215,13 @@ export default function AdminVpnKeysPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-purple-500/[0.08]">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{tr('User', 'User')}</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{tr('Server', 'Server')}</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{tr('Plan', 'Plan')}</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{tr('Status', 'Status')}</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{tr('Expiry', 'သက်တမ်း')}</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{tr('Amount', 'ပမာဏ')}</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{tr('Key', 'Key')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('admin.user')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('admin.server')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('admin.vpnKeysPage.plan')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('admin.status')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('admin.vpnKeysPage.expiry')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('admin.amount')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('admin.vpnKeysPage.key')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-purple-500/[0.05]">
@@ -269,12 +269,12 @@ export default function AdminVpnKeysPage() {
                           <button
                             onClick={() => copyToClipboard(entry.vpnKey!.configLink, entry._id)}
                             className="inline-flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
-                            title="Copy config link"
+                            title={t('admin.vpnKeysPage.copyConfigLink')}
                           >
                             {copiedId === entry._id ? (
-                              <><CheckCircle className="w-3.5 h-3.5" /> Copied</>
+                              <><CheckCircle className="w-3.5 h-3.5" /> {t('common.copied')}</>
                             ) : (
-                              <><Copy className="w-3.5 h-3.5" /> Copy</>
+                              <><Copy className="w-3.5 h-3.5" /> {t('common.copy')}</>
                             )}
                           </button>
                         ) : (
@@ -292,7 +292,7 @@ export default function AdminVpnKeysPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t border-purple-500/[0.08]">
               <span className="text-xs text-gray-500">
-                Page {page} of {totalPages}
+                {t('admin.vpnKeysPage.pageOf').replace('{page}', String(page)).replace('{total}', String(totalPages))}
               </span>
               <div className="flex gap-2">
                 <button

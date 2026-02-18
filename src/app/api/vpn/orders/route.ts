@@ -14,6 +14,7 @@ import { getSiteSettings } from '@/models/SiteSettings';
 import { validateCoupon, recordCouponUsage } from '@/models/Coupon';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import User from '@/models/User';
+import { createNotification, notifyAdmins } from '@/models/Notification';
 
 import {
   validateImageUpload,
@@ -42,13 +43,15 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
-    // Block unverified users from placing orders
-    const dbUser = await User.findById(authUser.userId).select('emailVerified').lean() as { emailVerified?: boolean } | null;
-    if (dbUser && !dbUser.emailVerified) {
-      return NextResponse.json(
-        { success: false, error: 'Please verify your email before placing orders. Check your inbox for the verification link.' },
-        { status: 403 }
-      );
+    const requireEmailVerification = process.env.REQUIRE_EMAIL_VERIFICATION_FOR_ORDERS === 'true';
+    if (requireEmailVerification) {
+      const dbUser = await User.findById(authUser.userId).select('emailVerified').lean() as { emailVerified?: boolean } | null;
+      if (dbUser && !dbUser.emailVerified) {
+        return NextResponse.json(
+          { success: false, error: 'Please verify your email before placing orders. Check your inbox for the verification link.' },
+          { status: 403 }
+        );
+      }
     }
 
     const formData = await request.formData();
@@ -233,6 +236,27 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         log.warn('Failed to record coupon usage', { error: e instanceof Error ? e.message : String(e) });
       }
+    }
+
+    try {
+      await createNotification({
+        user: authUser.userId,
+        type: order.status === 'verifying' ? 'order_verifying' : 'order_placed',
+        title: 'VPN order placed',
+        message: `Your VPN order ${order.orderNumber} is now ${order.status}.`,
+        orderId: order._id,
+      });
+
+      await notifyAdmins({
+        type: 'admin_new_order',
+        title: 'New VPN order',
+        message: `VPN order ${order.orderNumber} from ${authUser.email} (${totalAmount.toLocaleString()} MMK).`,
+        orderId: order._id,
+      });
+    } catch (notificationError: unknown) {
+      log.warn('VPN order notification creation failed (non-blocking)', {
+        error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+      });
     }
 
     // NOTE: VPN orders do NOT auto-complete with OCR — they always require admin approval

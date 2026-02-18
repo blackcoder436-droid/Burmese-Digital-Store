@@ -9,6 +9,7 @@ import { provisionVpnKey, revokeVpnKey } from '@/lib/xui';
 import { getPlan } from '@/lib/vpn-plans';
 import { getServer } from '@/lib/vpn-servers';
 import User from '@/models/User';
+import { createNotification } from '@/models/Notification';
 import { createLogger } from '@/lib/logger';
 import { expireOverdueOrders } from '@/lib/fraud-detection';
 import { isValidObjectId as isValidOid } from 'mongoose';
@@ -138,6 +139,7 @@ export async function PATCH(request: NextRequest) {
         { status: 404 }
       );
     }
+    const previousStatus = order.status;
 
     // If completing the order, deliver keys or provision VPN
     if (status === 'completed' && order.status !== 'completed') {
@@ -328,6 +330,39 @@ export async function PATCH(request: NextRequest) {
 
     await order.save();
 
+    if (previousStatus !== status) {
+      try {
+        const statusToType: Record<string, 'order_placed' | 'order_verifying' | 'order_completed' | 'order_rejected' | 'order_refunded'> = {
+          pending: 'order_placed',
+          verifying: 'order_verifying',
+          completed: 'order_completed',
+          rejected: 'order_rejected',
+          refunded: 'order_refunded',
+        };
+
+        const messageByStatus: Record<string, string> = {
+          pending: `Your order ${order.orderNumber} is pending review.`,
+          verifying: `Your order ${order.orderNumber} is being verified.`,
+          completed: `Your order ${order.orderNumber} has been completed.`,
+          rejected: `Your order ${order.orderNumber} was rejected.${rejectReason ? ` Reason: ${rejectReason}` : ''}`,
+          refunded: `Your order ${order.orderNumber} has been refunded.`,
+        };
+
+        await createNotification({
+          user: order.user,
+          type: statusToType[status] || 'order_verifying',
+          title: `Order ${status}`,
+          message: messageByStatus[status] || `Your order ${order.orderNumber} is now ${status}.`,
+          orderId: order._id,
+        });
+      } catch (notificationError: unknown) {
+        log.warn('Admin status notification failed (non-blocking)', {
+          error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+          orderId,
+        });
+      }
+    }
+
     // Log activity for status changes
     try {
       let targetLabel = '';
@@ -475,6 +510,21 @@ export async function PUT(request: NextRequest) {
       await order.save();
 
       try {
+        await createNotification({
+          user: order.user,
+          type: 'order_completed',
+          title: 'Order completed',
+          message: `Your VPN order ${order.orderNumber} has been completed.`,
+          orderId: order._id,
+        });
+      } catch (notificationError: unknown) {
+        log.warn('VPN retry completion notification failed (non-blocking)', {
+          error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+          orderId,
+        });
+      }
+
+      try {
         await logActivity({
           admin: admin.userId,
           action: 'vpn_provisioned',
@@ -510,6 +560,21 @@ export async function PUT(request: NextRequest) {
 
       order.vpnProvisionStatus = 'revoked';
       await order.save();
+
+      try {
+        await createNotification({
+          user: order.user,
+          type: 'order_refunded',
+          title: 'VPN key revoked',
+          message: `Your VPN key for order ${order.orderNumber} was revoked by admin.`,
+          orderId: order._id,
+        });
+      } catch (notificationError: unknown) {
+        log.warn('VPN revoke notification failed (non-blocking)', {
+          error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+          orderId,
+        });
+      }
 
       try {
         await logActivity({

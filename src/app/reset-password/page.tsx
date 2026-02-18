@@ -9,7 +9,7 @@ import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
 
 function ResetPasswordForm() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const containerRef = useScrollFade();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -32,16 +32,11 @@ function ResetPasswordForm() {
     e.preventDefault();
 
     if (form.password !== form.confirmPassword) {
-      toast.error(tr('Passwords do not match', 'လျှို့ဝှက်နံပါတ်များ မတူပါ'));
+      toast.error(t('auth.resetPage.passwordsDoNotMatch'));
       return;
     }
     if (form.password.length < 6) {
-      toast.error(
-        tr(
-          'Password must be at least 6 characters',
-          'လျှို့ဝှက်နံပါတ် အနည်းဆုံး 6 လုံးလိုအပ်သည်'
-        )
-      );
+      toast.error(t('auth.resetPage.passwordMinLength'));
       return;
     }
 
@@ -57,12 +52,11 @@ function ResetPasswordForm() {
         setSuccess(true);
       } else {
         toast.error(
-          data.error ||
-            tr('Failed to reset password', 'လျှို့ဝှက်နံပါတ် ပြန်လည်သတ်မှတ်ခြင်း မအောင်မြင်ပါ')
+          data.error || t('auth.resetPage.failedResetPassword')
         );
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     } finally {
       setLoading(false);
     }
@@ -95,19 +89,13 @@ function ResetPasswordForm() {
           </Link>
           <h1 className="heading-md">
             {success
-              ? tr('Password Reset!', 'လျှို့ဝှက်နံပါတ် ပြောင်းပြီး!')
-              : tr('Create New Password', 'လျှို့ဝှက်နံပါတ်အသစ် သတ်မှတ်ရန်')}
+              ? t('auth.resetPage.passwordReset')
+              : t('auth.resetPage.createNewPassword')}
           </h1>
           <p className="text-gray-400 mt-2">
             {success
-              ? tr(
-                  'Your password has been updated successfully',
-                  'သင့်လျှို့ဝှက်နံပါတ်ကို အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ'
-                )
-              : tr(
-                  'Enter your new password below',
-                  'သင့်လျှို့ဝှက်နံပါတ်အသစ်ကို အောက်တွင် ထည့်ပါ'
-                )}
+              ? t('auth.resetPage.passwordUpdatedSuccess')
+              : t('auth.resetPage.enterNewPassword')}
           </p>
         </div>
 
@@ -118,14 +106,11 @@ function ResetPasswordForm() {
               <CheckCircle className="w-8 h-8 text-green-400" />
             </div>
             <p className="text-gray-300 mb-6">
-              {tr(
-                'You can now sign in with your new password.',
-                'လျှို့ဝှက်နံပါတ်အသစ်ဖြင့် sign in ဝင်နိုင်ပါပြီ။'
-              )}
+              {t('auth.resetPage.signInWithNewPassword')}
             </p>
             <Link href="/login" className="btn-electric inline-flex">
               <Zap className="w-5 h-5" />
-              {tr('Go to Sign In', 'Sign In သို့ သွားမည်')}
+              {t('auth.resetPage.goToSignIn')}
             </Link>
           </div>
         ) : (
@@ -134,7 +119,7 @@ function ResetPasswordForm() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="input-label">
-                  {tr('New Password', 'လျှို့ဝှက်နံပါတ်အသစ်')}
+                  {t('auth.newPassword')}
                 </label>
                 <div className="relative">
                   <input
@@ -158,13 +143,13 @@ function ResetPasswordForm() {
                 {form.password && form.password.length < 6 && (
                   <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
                     <XCircle className="w-3 h-3" />
-                    {tr('At least 6 characters', 'အနည်းဆုံး 6 လုံး လိုအပ်သည်')}
+                    {t('auth.resetPage.atLeast6Chars')}
                   </p>
                 )}
               </div>
               <div>
                 <label className="input-label">
-                  {tr('Confirm Password', 'လျှို့ဝှက်နံပါတ် အတည်ပြုပါ')}
+                  {t('auth.confirmPassword')}
                 </label>
                 <div className="relative">
                   <input
@@ -187,7 +172,7 @@ function ResetPasswordForm() {
                 {form.confirmPassword && form.password !== form.confirmPassword && (
                   <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
                     <XCircle className="w-3 h-3" />
-                    {tr('Passwords do not match', 'လျှို့ဝှက်နံပါတ်များ မတူပါ')}
+                    {t('auth.resetPage.passwordsDoNotMatch')}
                   </p>
                 )}
               </div>
@@ -195,12 +180,12 @@ function ResetPasswordForm() {
                 {loading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    {tr('Resetting...', 'ပြောင်းလဲနေသည်...')}
+                    {t('auth.resetPage.resetting')}
                   </>
                 ) : (
                   <>
                     <Lock className="w-5 h-5" />
-                    {tr('Reset Password', 'လျှို့ဝှက်နံပါတ် ပြောင်းမည်')}
+                    {t('auth.resetPage.resetPasswordButton')}
                   </>
                 )}
               </button>

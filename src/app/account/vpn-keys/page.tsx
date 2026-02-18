@@ -27,7 +27,7 @@ interface VpnOrder {
 }
 
 export default function VpnKeysPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const containerRef = useScrollFade();
   const router = useRouter();
   const [orders, setOrders] = useState<VpnOrder[]>([]);
@@ -59,7 +59,7 @@ export default function VpnKeysPage() {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12 relative z-[1]" ref={containerRef}>
+    <div className="min-h-screen pt-8 pb-12 relative z-[1]" ref={containerRef}>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="scroll-fade flex items-center justify-between mb-10">
@@ -69,11 +69,11 @@ export default function VpnKeysPage() {
               className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-purple-400 mb-4 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              {tr('Back to Account', 'အကောင့်သို့ပြန်မည်')}
+              {t('nav.myAccount')}
             </Link>
             <h1 className="heading-lg flex items-center gap-3">
               <Key className="w-7 h-7 text-purple-400" />
-              {tr('My VPN Keys', 'ကျွန်ုပ်၏ VPN Keys')}
+              {t('account.vpnKeysPage.title')}
             </h1>
           </div>
           <button
@@ -94,13 +94,13 @@ export default function VpnKeysPage() {
               <Shield className="w-10 h-10 text-gray-600" />
             </div>
             <h3 className="text-xl font-bold text-white mb-2">
-              {tr('No VPN keys yet', 'VPN key မရှိသေးပါ')}
+              {t('account.vpnKeysPage.emptyTitle')}
             </h3>
             <p className="text-gray-500 mb-8">
-              {tr('Purchase a VPN plan to get started.', 'VPN plan တစ်ခု ၀ယ်ပါ။')}
+              {t('account.vpnKeysPage.emptyDesc')}
             </p>
             <Link href="/vpn" className="btn-electric">
-              {tr('Browse VPN Plans', 'VPN Plans ကြည့်မည်')}
+              {t('account.vpnKeysPage.browsePlans')}
             </Link>
           </div>
         ) : (
@@ -125,8 +125,8 @@ export default function VpnKeysPage() {
                         <p className="text-xs text-gray-500 mt-1 flex items-center gap-2">
                           <Clock className="w-3 h-3" />
                           {isExpired
-                            ? tr('Expired', 'သက်တမ်းကုန်ပြီ')
-                            : `${tr('Expires', 'သက်တမ်းကုန်')} ${new Date(order.vpnKey!.expiryTime).toLocaleDateString()}`}
+                            ? t('account.vpnKeysPage.expired')
+                            : `${t('account.vpnKeysPage.expires')} ${new Date(order.vpnKey!.expiryTime).toLocaleDateString()}`}
                         </p>
                       </div>
                     </div>

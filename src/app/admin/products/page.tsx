@@ -39,7 +39,7 @@ const defaultProduct = {
 };
 
 export default function AdminProductsPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -58,7 +58,7 @@ export default function AdminProductsPage() {
       const data = await res.json();
       if (data.success) setProducts(data.data.products);
     } catch (error) {
-      toast.error(tr('Failed to fetch products', 'ပစ္စည်းများရယူရန် မအောင်မြင်ပါ'));
+      toast.error(t('admin.productsPage.fetchFailed'));
     } finally {
       setLoading(false);
     }
@@ -66,7 +66,7 @@ export default function AdminProductsPage() {
 
   async function handleSave() {
     if (!form.name || !form.description || form.price <= 0) {
-      toast.error(tr('Please fill in all required fields', 'လိုအပ်သောအကွက်များအားလုံးဖြည့်ပါ'));
+      toast.error(t('admin.productsPage.fillRequired'));
       return;
     }
 
@@ -101,17 +101,17 @@ export default function AdminProductsPage() {
 
       const data = await res.json();
       if (data.success) {
-        toast.success(editing ? tr('Product updated!', 'ပစ္စည်းပြင်ဆင်ပြီးပါပြီ!') : tr('Product created!', 'ပစ္စည်းအသစ်ဖန်တီးပြီးပါပြီ!'));
+        toast.success(editing ? t('admin.productsPage.productUpdated') : t('admin.productsPage.productCreated'));
         setShowForm(false);
         setEditing(null);
         setForm(defaultProduct);
         setBulkKeys('');
         fetchProducts();
       } else {
-        toast.error(data.error || tr('Failed to save', 'သိမ်းဆည်းမှု မအောင်မြင်ပါ'));
+        toast.error(data.error || t('admin.productsPage.saveFailed'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('admin.productsPage.somethingWrong'));
     } finally {
       setSaving(false);
     }
@@ -121,7 +121,7 @@ export default function AdminProductsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      toast.error(tr('Image too large. Max 5MB', 'ပုံကြီးလွန်းပါသည်။ အများဆုံး 5MB'));
+      toast.error(t('admin.productsPage.imageTooLarge'));
       return;
     }
     setUploadingImage(true);
@@ -132,12 +132,12 @@ export default function AdminProductsPage() {
       const data = await res.json();
       if (data.success) {
         setForm((prev) => ({ ...prev, image: data.data.image }));
-        toast.success(tr('Image uploaded!', 'ပုံတင်ပြီးပါပြီ!'));
+        toast.success(t('admin.productsPage.imageUploaded'));
       } else {
-        toast.error(data.error || tr('Upload failed', 'ပုံတင်ခြင်း မအောင်မြင်ပါ'));
+        toast.error(data.error || t('admin.productsPage.uploadFailed'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('admin.productsPage.somethingWrong'));
     } finally {
       setUploadingImage(false);
       e.target.value = '';
@@ -145,7 +145,7 @@ export default function AdminProductsPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm(tr('Are you sure you want to delete this product?', 'ဤပစ္စည်းကိုဖျက်လိုသည်မှာသေချာပါသလား?'))) return;
+    if (!confirm(t('admin.productsPage.confirmDelete'))) return;
 
     try {
       const res = await fetch(`/api/admin/products/${id}`, {
@@ -153,13 +153,13 @@ export default function AdminProductsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(tr('Product deleted', 'ပစ္စည်းဖျက်ပြီးပါပြီ'));
+        toast.success(t('admin.productsPage.productDeleted'));
         fetchProducts();
       } else {
-        toast.error(data.error || tr('Failed to delete', 'ဖျက်မရပါ'));
+        toast.error(data.error || t('admin.productsPage.deleteFailed'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('admin.productsPage.somethingWrong'));
     }
   }
 
@@ -180,7 +180,7 @@ export default function AdminProductsPage() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="heading-lg">{tr('Products', 'ပစ္စည်းများ')}</h1>
+        <h1 className="heading-lg">{t('admin.productsPage.title')}</h1>
         <button
           onClick={() => {
             setShowForm(true);
@@ -191,7 +191,7 @@ export default function AdminProductsPage() {
           className="btn-electric text-sm flex items-center space-x-2"
         >
           <Plus className="w-4 h-4" />
-          <span>{tr('Add Product', 'ပစ္စည်းထည့်မည်')}</span>
+          <span>{t('admin.productsPage.addProduct')}</span>
         </button>
       </div>
 
@@ -201,7 +201,7 @@ export default function AdminProductsPage() {
           <div className="game-card w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 sm:p-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="heading-sm">
-                {editing ? tr('Edit Product', 'ပစ္စည်းပြင်ဆင်မည်') : tr('Add New Product', 'ပစ္စည်းအသစ်ထည့်မည်')}
+                {editing ? t('admin.productsPage.editProduct') : t('admin.productsPage.addNewProduct')}
               </h2>
               <button
                 onClick={() => {
@@ -218,7 +218,7 @@ export default function AdminProductsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-gray-300 block mb-2">
-                    {tr('Product Name *', 'ပစ္စည်းအမည် *')}
+                    {t('admin.productsPage.productName')}
                   </label>
                   <input
                     type="text"
@@ -230,7 +230,7 @@ export default function AdminProductsPage() {
                 </div>
                 <div>
                   <label className="text-sm text-gray-300 block mb-2">
-                    {tr('Category *', 'အမျိုးအစား *')}
+                    {t('admin.productsPage.categoryLabel')}
                   </label>
                   <select
                     value={form.category}
@@ -251,7 +251,7 @@ export default function AdminProductsPage() {
 
               <div>
                 <label className="text-sm text-gray-300 block mb-2">
-                    {tr('Description *', 'ဖော်ပြချက် *')}
+                    {t('admin.productsPage.description')}
                 </label>
                 <textarea
                   rows={3}
@@ -267,7 +267,7 @@ export default function AdminProductsPage() {
               {/* Product Image Upload */}
               <div>
                 <label className="text-sm text-gray-300 block mb-2">
-                  {tr('Product Image', 'ပစ္စည်းပုံ')}
+                  {t('admin.productsPage.productImage')}
                 </label>
                 <div className="flex items-center gap-4">
                   {form.image && form.image !== '/images/default-product.png' ? (
@@ -305,7 +305,7 @@ export default function AdminProductsPage() {
                       ) : (
                         <ImagePlus className="w-3 h-3" />
                       )}
-                      {tr('Upload Image', 'ပုံတင်မည်')}
+                      {t('admin.productsPage.uploadImage')}
                     </span>
                   </label>
                 </div>
@@ -314,7 +314,7 @@ export default function AdminProductsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-gray-300 block mb-2">
-                    {tr('Price (MMK) *', 'စျေးနှုန်း (MMK) *')}
+                    {t('admin.productsPage.price')}
                   </label>
                   <input
                     type="number"
@@ -337,7 +337,7 @@ export default function AdminProductsPage() {
                       className="w-5 h-5 rounded-lg border-purple-500/30 bg-[#12122a] text-purple-500 focus:ring-purple-500"
                     />
                     <span className="text-sm text-gray-300">
-                      {tr('⭐ Featured Product', '⭐ အထူးအကြံပြု ပစ္စည်း')}
+                      {t('admin.productsPage.featuredProduct')}
                     </span>
                   </label>
                 </div>
@@ -345,7 +345,7 @@ export default function AdminProductsPage() {
 
               <div>
                 <label className="text-sm text-gray-300 block mb-2">
-                  {tr('Stock Keys (one per line: serialKey|email|password|info)', 'Stock Keys (တစ်ကြောင်းချင်း: serialKey|email|password|info)')}
+                  {t('admin.productsPage.stockKeysLabel')}
                 </label>
                 <textarea
                   rows={5}
@@ -355,7 +355,7 @@ export default function AdminProductsPage() {
                   className="input-field resize-none font-mono text-xs"
                 />
                 <p className="text-xs text-gray-500 mt-2">
-                  {tr('Separate fields with | (pipe). Leave empty fields blank.', '| (pipe) ဖြင့်ခွဲပါ။ မရှိသောအကွက်များကိုလွတ်ထားပါ။')}
+                  {t('admin.productsPage.stockKeysHint')}
                 </p>
               </div>
 
@@ -367,7 +367,7 @@ export default function AdminProductsPage() {
                   }}
                   className="btn-primary text-sm"
                 >
-                  {tr('Cancel', 'မလုပ်တော့ပါ')}
+                  {t('admin.productsPage.cancel')}
                 </button>
                 <button
                   onClick={handleSave}
@@ -379,7 +379,7 @@ export default function AdminProductsPage() {
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  <span>{editing ? tr('Update', 'ပြင်ဆင်မည်') : tr('Create', 'ဖန်တီးမည်')}</span>
+                  <span>{editing ? t('admin.productsPage.update') : t('admin.productsPage.create')}</span>
                 </button>
               </div>
             </div>
@@ -395,9 +395,9 @@ export default function AdminProductsPage() {
       ) : products.length === 0 ? (
         <div className="game-card p-16 text-center">
           <Package className="w-16 h-16 text-dark-600 mx-auto mb-4" />
-          <h3 className="text-xl text-gray-300 font-medium mb-2">{tr('No products yet', 'ပစ္စည်းမရှိသေးပါ')}</h3>
+          <h3 className="text-xl text-gray-300 font-medium mb-2">{t('admin.productsPage.noProductsYet')}</h3>
           <p className="text-sm text-gray-500">
-            {tr('Click "Add Product" to create your first product.', 'ပထမဆုံးပစ္စည်းဖန်တီးရန် "Add Product" ကိုနှိပ်ပါ။')}
+            {t('admin.productsPage.createFirstHint')}
           </p>
         </div>
       ) : (
@@ -406,12 +406,12 @@ export default function AdminProductsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-400 uppercase border-b border-dark-700 bg-dark-800/50">
-                  <th className="p-4 font-semibold">{tr('Product', 'ပစ္စည်း')}</th>
-                  <th className="p-4 font-semibold">{tr('Category', 'အမျိုးအစား')}</th>
-                  <th className="p-4 font-semibold">{tr('Price', 'စျေးနှုန်း')}</th>
-                  <th className="p-4 font-semibold">{tr('Stock', 'လက်ကျန်')}</th>
-                  <th className="p-4 font-semibold">{tr('Status', 'အခြေအနေ')}</th>
-                  <th className="p-4 font-semibold text-right">{tr('Actions', 'လုပ်ဆောင်ရန်')}</th>
+                  <th className="p-4 font-semibold">{t('admin.productsPage.product')}</th>
+                  <th className="p-4 font-semibold">{t('admin.productsPage.category')}</th>
+                  <th className="p-4 font-semibold">{t('admin.productsPage.priceCol')}</th>
+                  <th className="p-4 font-semibold">{t('admin.productsPage.stock')}</th>
+                  <th className="p-4 font-semibold">{t('admin.productsPage.status')}</th>
+                  <th className="p-4 font-semibold text-right">{t('admin.productsPage.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-700">

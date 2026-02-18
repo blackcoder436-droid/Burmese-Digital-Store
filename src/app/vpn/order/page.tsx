@@ -16,14 +16,14 @@ interface ServerOption {
 }
 
 const allProtocols = [
-  { value: 'trojan', label: 'Trojan', desc: 'Best for most ISPs' },
-  { value: 'vless', label: 'VLESS', desc: 'Fast and stable' },
-  { value: 'vmess', label: 'VMess', desc: 'Good compatibility' },
-  { value: 'shadowsocks', label: 'Shadowsocks', desc: 'Lightweight option' },
+  { value: 'trojan', label: 'Trojan', descKey: 'vpn.orderPage.protocolBestForMostIsps' },
+  { value: 'vless', label: 'VLESS', descKey: 'vpn.orderPage.protocolFastAndStable' },
+  { value: 'vmess', label: 'VMess', descKey: 'vpn.orderPage.protocolGoodCompatibility' },
+  { value: 'shadowsocks', label: 'Shadowsocks', descKey: 'vpn.orderPage.protocolLightweightOption' },
 ];
 
 function VpnOrderPageContent() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -85,10 +85,10 @@ function VpnOrderPageContent() {
         setDiscountInfo({ type: data.data.discountType, value: data.data.discountValue });
         setCouponApplied(true);
       } else {
-        setCouponError(data.error || 'Invalid coupon');
+        setCouponError(data.error || t('vpn.orderPage.invalidCoupon'));
       }
     } catch {
-      setCouponError('Network error');
+      setCouponError(t('vpn.orderPage.networkError'));
     } finally {
       setCouponLoading(false);
     }
@@ -131,15 +131,15 @@ function VpnOrderPageContent() {
 
   if (!plan) {
     return (
-      <div className="min-h-screen pt-20 pb-10 px-4">
+      <div className="min-h-screen pt-8 pb-10 px-4">
         <div className="max-w-xl mx-auto bg-[#12122a] border border-purple-500/20 rounded-2xl p-5 text-center">
-          <h1 className="text-xl font-bold text-white mb-2">{tr('Invalid plan', 'Plan မမှန်ကန်ပါ')}</h1>
-          <p className="text-sm text-gray-400 mb-4">{tr('Please choose a plan from pricing cards.', 'Pricing cards မှ plan ကိုပြန်ရွေးပါ။')}</p>
+          <h1 className="text-xl font-bold text-white mb-2">{t('vpn.orderPage.invalidPlan')}</h1>
+          <p className="text-sm text-gray-400 mb-4">{t('vpn.orderPage.choosePlanFromPricing')}</p>
           <button
             onClick={() => router.push('/vpn#pricing')}
             className="px-5 py-2.5 rounded-lg font-semibold text-white bg-gradient-to-r from-purple-600 to-cyan-500"
           >
-            {tr('Back to Pricing', 'စျေးနှုန်းသို့ ပြန်သွားမည်')}
+            {t('vpn.orderPage.backToPricing')}
           </button>
         </div>
       </div>
@@ -147,20 +147,20 @@ function VpnOrderPageContent() {
   }
 
   return (
-    <div className="min-h-screen pt-16 sm:pt-20 pb-8 sm:pb-10 px-4 sm:px-6">
+    <div className="min-h-screen pt-8 sm:pt-10 pb-8 sm:pb-10 px-4 sm:px-6">
       <div className="max-w-2xl mx-auto">
         <button onClick={() => router.push('/vpn#pricing')} className="text-sm text-purple-400 hover:text-purple-300 mb-3">
-          ← {tr('Back to pricing', 'စျေးနှုန်းသို့ ပြန်သွားမည်')}
+          ← {t('vpn.orderPage.backToPricing')}
         </button>
 
         <div className="bg-[#12122a] border border-purple-500/20 rounded-2xl p-3.5 sm:p-5">
           {!submitSuccess && (
             <div className="mb-4 flex items-center gap-2 text-[11px] sm:text-xs text-gray-400">
-              <span className={`px-2 py-1 rounded-md border ${step === 'server' ? 'text-purple-300 border-purple-500/40 bg-purple-500/10' : 'border-purple-500/20'}`}>1. {tr('Server', 'Server')}</span>
+              <span className={`px-2 py-1 rounded-md border ${step === 'server' ? 'text-purple-300 border-purple-500/40 bg-purple-500/10' : 'border-purple-500/20'}`}>1. {t('vpn.orderPage.server')}</span>
               <span className="opacity-60">→</span>
-              <span className={`px-2 py-1 rounded-md border ${step === 'protocol' ? 'text-purple-300 border-purple-500/40 bg-purple-500/10' : 'border-purple-500/20'}`}>2. {tr('Protocol', 'Protocol')}</span>
+              <span className={`px-2 py-1 rounded-md border ${step === 'protocol' ? 'text-purple-300 border-purple-500/40 bg-purple-500/10' : 'border-purple-500/20'}`}>2. {t('vpn.orderPage.protocol')}</span>
               <span className="opacity-60">→</span>
-              <span className={`px-2 py-1 rounded-md border ${step === 'payment' ? 'text-purple-300 border-purple-500/40 bg-purple-500/10' : 'border-purple-500/20'}`}>3. {tr('Payment', 'ငွေပေးချေမှု')}</span>
+              <span className={`px-2 py-1 rounded-md border ${step === 'payment' ? 'text-purple-300 border-purple-500/40 bg-purple-500/10' : 'border-purple-500/20'}`}>3. {t('order.paymentMethod')}</span>
             </div>
           )}
 
@@ -169,22 +169,22 @@ function VpnOrderPageContent() {
               <div className="w-14 h-14 mx-auto mb-3 bg-emerald-500/20 rounded-full flex items-center justify-center">
                 <span className="text-2xl">✅</span>
               </div>
-              <h3 className="text-lg sm:text-xl font-bold text-white mb-2">{tr('Order Placed Successfully!', 'အော်ဒါ အောင်မြင်စွာ တင်ပြီးပါပြီ!')}</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-2">{t('vpn.orderPage.orderPlacedSuccessfully')}</h3>
               <p className="text-sm text-gray-400 mb-5">
-                {tr('Your VPN order is being verified. You will receive your VPN key after admin approval.', 'သင့် VPN order ကို စစ်ဆေးနေပါသည်။ Admin approve ပြီးရင် VPN key ရရှိပါမည်။')}
+                {t('vpn.orderPage.orderPlacedDesc')}
               </p>
               <div className="flex flex-col sm:flex-row gap-2 justify-center">
                 <button onClick={() => router.push('/account/orders')} className="px-5 py-2.5 rounded-lg font-semibold text-white bg-gradient-to-r from-purple-600 to-cyan-500 transition-all">
-                  {tr('View My Orders', 'ကျွန်ုပ်၏ အော်ဒါများ')}
+                  {t('nav.myOrders')}
                 </button>
                 <button onClick={() => router.push('/vpn')} className="px-5 py-2.5 rounded-lg border border-purple-500/20 text-white hover:bg-purple-500/10 transition-all">
-                  {tr('Close', 'ပိတ်မည်')}
+                  {t('common.close')}
                 </button>
               </div>
             </div>
           ) : step === 'server' ? (
             <>
-              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{tr('Choose Server', 'Server ရွေးချယ်ပါ')}</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{t('vpn.orderPage.chooseServer')}</h3>
               <p className="text-xs sm:text-sm text-gray-400 mb-4">
                 {plan.devices} Device{plan.devices > 1 ? 's' : ''} / {monthLabel(plan.months)} — {plan.price.toLocaleString()} Ks
               </p>
@@ -205,7 +205,7 @@ function VpnOrderPageContent() {
                       </div>
                       <span className="inline-flex items-center gap-1 text-[11px] text-green-400">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                        Online
+                        {t('vpn.online')}
                       </span>
                     </div>
                   </button>
@@ -214,25 +214,25 @@ function VpnOrderPageContent() {
 
               <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
                 <button onClick={() => router.push('/vpn#pricing')} className="px-4 py-2 rounded-lg border border-purple-500/20 text-white hover:bg-purple-500/10 transition-all">
-                  {tr('Cancel', 'မလုပ်တော့ပါ')}
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => { if (selectedServer) setStep('protocol'); }}
                   disabled={!selectedServer}
                   className="px-4 py-2 rounded-lg font-semibold text-white bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
-                  {tr('Next: Protocol', 'နောက်တစ်ဆင့်: Protocol')}
+                  {t('vpn.orderPage.nextProtocol')}
                 </button>
               </div>
             </>
           ) : step === 'protocol' ? (
             <>
               <button onClick={() => setStep('server')} className="text-sm text-purple-400 hover:text-purple-300 mb-3 flex items-center gap-1">
-                ← {tr('Back to server selection', 'Server ရွေးချယ်ရန် ပြန်သွားမည်')}
+                ← {t('vpn.orderPage.backToServerSelection')}
               </button>
 
-              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{tr('Choose Protocol', 'Protocol ရွေးချယ်ပါ')}</h3>
-              <p className="text-xs sm:text-sm text-gray-400 mb-4">{tr('Trojan is recommended for most users', 'အသုံးများသူများအတွက် Trojan ကို အကြံပြုပါသည်')}</p>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{t('vpn.orderPage.chooseProtocol')}</h3>
+              <p className="text-xs sm:text-sm text-gray-400 mb-4">{t('vpn.orderPage.trojanRecommended')}</p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
                 {availableProtocols.map((protocol) => (
@@ -244,28 +244,28 @@ function VpnOrderPageContent() {
                     }`}
                   >
                     <p className="text-white font-semibold text-sm sm:text-base">{protocol.label}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{protocol.desc}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{t(protocol.descKey)}</p>
                   </button>
                 ))}
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
                 <button onClick={() => setStep('server')} className="px-4 py-2 rounded-lg border border-purple-500/20 text-white hover:bg-purple-500/10 transition-all">
-                  {tr('Back', 'နောက်သို့')}
+                  {t('common.back')}
                 </button>
                 <button onClick={() => setStep('payment')} className="px-4 py-2 rounded-lg font-semibold text-white bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 transition-all">
-                  {tr('Continue to Payment', 'ငွေပေးချေမှုသို့ ဆက်သွားမည်')}
+                  {t('vpn.orderPage.continueToPayment')}
                 </button>
               </div>
             </>
           ) : (
             <>
               <button onClick={() => setStep('protocol')} className="text-sm text-purple-400 hover:text-purple-300 mb-3 flex items-center gap-1">
-                ← {tr('Back to protocol selection', 'Protocol ရွေးချယ်ရန် ပြန်သွားမည်')}
+                ← {t('vpn.orderPage.backToProtocolSelection')}
               </button>
 
-              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{tr('Payment', 'ငွေပေးချေမှု')}</h3>
-              <p className="text-sm text-gray-400 mb-4">{tr('Confirm details and upload payment proof', 'အချက်အလက်စစ်ပြီး ငွေလွှဲ screenshot တင်ပါ')}</p>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{t('order.paymentMethod')}</h3>
+              <p className="text-sm text-gray-400 mb-4">{t('vpn.orderPage.confirmDetailsUploadProof')}</p>
 
               <div className="flex items-start justify-between gap-3 bg-[#0a0a1f]/70 rounded-2xl px-3.5 py-3 mb-3 border border-purple-500/20">
                 <div className="flex items-start gap-2.5 min-w-0">
@@ -292,7 +292,7 @@ function VpnOrderPageContent() {
 
               {/* Coupon Code - right below price */}
               <div className="mb-4">
-                <label className="text-xs text-gray-400 mb-2 block font-medium">{tr('Coupon Code (optional)', 'Coupon Code (ရှိလျှင်)')}</label>
+                <label className="text-xs text-gray-400 mb-2 block font-medium">{t('vpn.orderPage.couponCodeOptional')}</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -311,7 +311,7 @@ function VpnOrderPageContent() {
                       onClick={clearCoupon}
                       className="px-3 py-2 rounded-lg text-xs font-medium bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all"
                     >
-                      {tr('Remove', 'ဖယ်ရှား')}
+                      {t('cart.remove')}
                     </button>
                   ) : (
                     <button
@@ -320,13 +320,13 @@ function VpnOrderPageContent() {
                       disabled={!couponCode.trim() || couponLoading}
                       className="px-3 py-2 rounded-lg text-xs font-medium bg-purple-500/10 border border-purple-500/30 text-purple-300 hover:bg-purple-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      {couponLoading ? '...' : tr('Apply', 'သုံးမည်')}
+                      {couponLoading ? '...' : t('cart.applyCoupon')}
                     </button>
                   )}
                 </div>
                 {couponApplied && (
                   <p className="text-xs text-emerald-400 mt-1.5">
-                    ✓ {tr('Coupon applied!', 'Coupon အသုံးပြုပြီး!')} -{discountAmount.toLocaleString()} Ks {tr('discount', 'လျှော့စျေး')}
+                    ✓ {t('vpn.orderPage.couponApplied')} -{discountAmount.toLocaleString()} Ks {t('cart.discount')}
                   </p>
                 )}
                 {couponError && (
@@ -338,7 +338,7 @@ function VpnOrderPageContent() {
               <div className="flex items-center gap-3 bg-[#0a0a1f]/70 rounded-2xl px-3.5 py-3 mb-3 border border-amber-500/20">
                 <span className="text-base mt-0.5">💳</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] text-amber-400/80 mb-1 tracking-wide uppercase">{tr('Transfer to', 'ငွေလွှဲရန်')}</p>
+                  <p className="text-[11px] text-amber-400/80 mb-1 tracking-wide uppercase">{t('vpn.orderPage.transferTo')}</p>
                   <p className="text-white text-base sm:text-lg font-semibold leading-tight">{paymentAccountName}</p>
                   <p className="text-cyan-400 font-mono text-sm sm:text-base mt-0.5">{paymentAccountNumber}</p>
                 </div>
@@ -352,7 +352,7 @@ function VpnOrderPageContent() {
                     copiedAccount ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10' : 'text-purple-300 border-purple-500/30 hover:border-purple-500/50 hover:text-purple-200'
                   }`}
                 >
-                  {copiedAccount ? tr('Copied', 'ကူးပြီး') : tr('Copy', 'ကူး')}
+                  {copiedAccount ? t('common.copied') : t('common.copy')}
                 </button>
               </div>
 
@@ -360,13 +360,13 @@ function VpnOrderPageContent() {
               {couponApplied && (
                 <div className="mb-4 p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
                   <p className="text-xs text-emerald-400 text-center font-medium">
-                    💰 {tr('Please transfer', 'ငွေလွှဲရန်')} <span className="font-bold text-sm">{finalPrice.toLocaleString()} Ks</span> {tr('only (after discount)', 'သာ (discount နှုတ်ပြီး)')}
+                    💰 {t('vpn.orderPage.pleaseTransfer')} <span className="font-bold text-sm">{finalPrice.toLocaleString()} Ks</span> {t('vpn.orderPage.onlyAfterDiscount')}
                   </p>
                 </div>
               )}
 
               <div className="mb-4">
-                <label className="text-xs text-gray-400 mb-2 block font-medium">{tr('Payment Method', 'ငွေပေးချေနည်း')}</label>
+                <label className="text-xs text-gray-400 mb-2 block font-medium">{t('order.paymentMethod')}</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
                     { value: 'kpay', label: 'KBZPay' },
@@ -388,8 +388,8 @@ function VpnOrderPageContent() {
               </div>
 
               <div className="mb-4">
-                <label className="text-xs text-gray-400 mb-2 block font-medium">{tr('Payment Screenshot', 'ငွေပေးချေမှု Screenshot')}</label>
-                <p className="text-xs text-gray-500 mb-2">{tr('Upload clear screenshot with account, amount and time visible', 'Account, amount, time တွေထင်ရှားတဲ့ screenshot တင်ပါ')}</p>
+                <label className="text-xs text-gray-400 mb-2 block font-medium">{t('order.uploadScreenshot')}</label>
+                <p className="text-xs text-gray-500 mb-2">{t('vpn.orderPage.uploadClearScreenshot')}</p>
                 <PaymentUpload onUpload={(file) => setScreenshotFile(file)} expectedAmount={finalPrice} />
               </div>
 
@@ -401,7 +401,7 @@ function VpnOrderPageContent() {
                   disabled={submitting}
                   className="px-4 py-2 rounded-lg border border-purple-500/20 text-white hover:bg-purple-500/10 transition-all disabled:opacity-50"
                 >
-                  {tr('Back', 'နောက်သို့')}
+                  {t('common.back')}
                 </button>
                 <button
                   onClick={async () => {
@@ -422,9 +422,9 @@ function VpnOrderPageContent() {
                       const data = await res.json();
 
                       if (data.success) setSubmitSuccess(true);
-                      else setSubmitError(data.error || 'Failed to place order');
+                      else setSubmitError(data.error || t('vpn.orderPage.failedToPlaceOrder'));
                     } catch {
-                      setSubmitError('Network error. Please try again.');
+                      setSubmitError(t('vpn.orderPage.networkErrorTryAgain'));
                     } finally {
                       setSubmitting(false);
                     }
@@ -435,10 +435,10 @@ function VpnOrderPageContent() {
                   {submitting ? (
                     <>
                       <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      {tr('Placing Order...', 'အော်ဒါ တင်နေသည်...')}
+                      {t('vpn.orderPage.placingOrder')}
                     </>
                   ) : (
-                    tr('Place Order', 'အော်ဒါ တင်မည်')
+                    t('vpn.orderPage.placeOrder')
                   )}
                 </button>
               </div>
@@ -451,12 +451,14 @@ function VpnOrderPageContent() {
 }
 
 export default function VpnOrderPage() {
+  const { t } = useLanguage();
+
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen pt-24 pb-12 px-4">
+        <div className="min-h-screen pt-8 pb-12 px-4">
           <div className="max-w-xl mx-auto bg-[#12122a] border border-purple-500/20 rounded-2xl p-5 text-center text-gray-300">
-            Loading...
+            {t('common.loading')}
           </div>
         </div>
       }

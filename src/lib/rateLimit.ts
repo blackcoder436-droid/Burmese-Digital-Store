@@ -185,5 +185,5 @@ export function rateLimit(options: RateLimitOptions = {}) {
 export const apiLimiter = rateLimit({ windowMs: 60000, maxRequests: 30, prefix: 'api' });
 export const authLimiter = rateLimit({ windowMs: 60000, maxRequests: 5, prefix: 'auth' });
 export const uploadLimiter = rateLimit({ windowMs: 60000, maxRequests: 10, prefix: 'upload' });
-/** Registration: 1 request per 3 minutes per IP to prevent mass account creation */
-export const registerLimiter = rateLimit({ windowMs: 3 * 60 * 1000, maxRequests: 1, prefix: 'register' });
+/** Registration: 3 requests per 3 minutes per IP to prevent mass account creation */
+export const registerLimiter = rateLimit({ windowMs: 3 * 60 * 1000, maxRequests: 3, prefix: 'register' });

@@ -76,7 +76,7 @@ interface AnalyticsData {
 }
 
 export default function AnalyticsPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState('30d');
@@ -136,7 +136,7 @@ export default function AnalyticsPage() {
   if (loading && !data) {
     return (
       <div className="space-y-6">
-        <h1 className="heading-lg">{tr('Analytics', 'စိတ်ပိုင်းခွဲခြားခြင်း')}</h1>
+        <h1 className="heading-lg">{t('admin.analyticsPage.title')}</h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="game-card h-32 animate-pulse" />
@@ -157,7 +157,7 @@ export default function AnalyticsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="heading-lg flex items-center gap-3">
           <BarChart3 className="w-8 h-8 text-purple-400" />
-          {tr('Analytics', 'စိတ်ပိုင်းခွဲခြားခြင်း')}
+          {t('admin.analyticsPage.title')}
         </h1>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -193,7 +193,7 @@ export default function AnalyticsPage() {
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button onClick={clearDateFilter} className="px-3 py-1.5 text-xs font-medium text-purple-400 hover:text-purple-300 bg-purple-500/10 rounded-lg transition-colors">
-                  {tr('Clear', 'ဖျက်မည်')}
+                  {t('admin.analyticsPage.clear')}
                 </button>
               </>
             )}
@@ -230,30 +230,30 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={DollarSign}
-          label={tr('Revenue', 'ဝင်ငွေ')}
+          label={t('admin.analyticsPage.revenue')}
           value={`${formatMMK(ov.totalRevenue)} MMK`}
-          subtext={`${ov.completedOrders} ${tr('completed', 'ပြီးစီး')}`}
+          subtext={`${ov.completedOrders} ${t('admin.analyticsPage.completed')}`}
           color="emerald"
         />
         <StatCard
           icon={ShoppingCart}
-          label={tr('Orders', 'အော်ဒါ')}
+          label={t('admin.analyticsPage.orders')}
           value={String(ov.totalOrders)}
-          subtext={ov.pendingOrders > 0 ? `${ov.pendingOrders} ${tr('pending', 'စောင့်ဆိုင်း')}` : tr('All clear', 'ကုန်ပြီ')}
+          subtext={ov.pendingOrders > 0 ? `${ov.pendingOrders} ${t('admin.analyticsPage.pending')}` : t('admin.analyticsPage.allClear')}
           color="blue"
         />
         <StatCard
           icon={Users}
-          label={tr('New Users', 'သုံးသူအသစ်')}
+          label={t('admin.analyticsPage.newUsers')}
           value={String(ov.newUsers)}
-          subtext={`${data.allTime.totalUsers} ${tr('total', 'စုစုပေါင်း')}`}
+          subtext={`${data.allTime.totalUsers} ${t('admin.analyticsPage.total')}`}
           color="cyan"
         />
         <StatCard
           icon={DollarSign}
-          label={tr('Avg Order', 'ပျမ်းမျှအော်ဒါ')}
+          label={t('admin.analyticsPage.avgOrder')}
           value={`${formatMMK(Math.round(ov.avgOrderValue || 0))} MMK`}
-          subtext={`${ov.activeProducts} ${tr('products', 'ပစ္စည်း')}`}
+          subtext={`${ov.activeProducts} ${t('admin.analyticsPage.products')}`}
           color="purple"
         />
       </div>
@@ -264,9 +264,9 @@ export default function AnalyticsPage() {
           {/* Revenue Chart */}
           <div className="game-card p-6">
             <h3 className="text-sm font-bold text-white mb-1">
-              {tr('Revenue Trend', 'ဝင်ငွေအတက်အကျ')}
+              {t('admin.analyticsPage.revenueTrend')}
             </h3>
-            <p className="text-xs text-gray-500 mb-5">{tr('Completed orders revenue by day', 'တစ်ရက်ချင်း ဝင်ငွေ')}</p>
+            <p className="text-xs text-gray-500 mb-5">{t('admin.analyticsPage.revenueTrendDesc')}</p>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.dailyRevenue}>
@@ -282,7 +282,7 @@ export default function AnalyticsPage() {
                   <Tooltip
                     contentStyle={{ backgroundColor: '#12122a', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 12, fontSize: 12 }}
                     labelStyle={{ color: '#fff', fontWeight: 700 }}
-                    formatter={(value: any) => [`${Number(value || 0).toLocaleString()} MMK`, tr('Revenue', 'ဝင်ငွေ')]}
+                    formatter={(value: any) => [`${Number(value || 0).toLocaleString()} MMK`, t('admin.analyticsPage.revenue')]}
                     labelFormatter={(label: any) => new Date(String(label)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   />
                   <Area type="monotone" dataKey="revenue" stroke="#a855f7" strokeWidth={2} fill="url(#revenueGrad)" />
@@ -294,9 +294,9 @@ export default function AnalyticsPage() {
           {/* Daily Orders Chart */}
           <div className="game-card p-6">
             <h3 className="text-sm font-bold text-white mb-1">
-              {tr('Daily Orders', 'တစ်ရက်ချင်း အော်ဒါ')}
+              {t('admin.analyticsPage.dailyOrders')}
             </h3>
-            <p className="text-xs text-gray-500 mb-5">{tr('Order count by status', 'Status အလိုက် အော်ဒါအရေအတွက်')}</p>
+            <p className="text-xs text-gray-500 mb-5">{t('admin.analyticsPage.dailyOrdersDesc')}</p>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.dailyOrders}>
@@ -309,9 +309,9 @@ export default function AnalyticsPage() {
                     labelFormatter={(label: any) => new Date(String(label)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="completed" stackId="orders" fill="#10b981" name={tr('Completed', 'ပြီးစီး')} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="pending" stackId="orders" fill="#f59e0b" name={tr('Pending', 'စောင့်ဆိုင်း')} />
-                  <Bar dataKey="rejected" stackId="orders" fill="#ef4444" name={tr('Rejected', 'ပယ်ချ')} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="completed" stackId="orders" fill="#10b981" name={t('admin.analyticsPage.completedLabel')} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="pending" stackId="orders" fill="#f59e0b" name={t('admin.analyticsPage.pendingLabel')} />
+                  <Bar dataKey="rejected" stackId="orders" fill="#ef4444" name={t('admin.analyticsPage.rejected')} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -323,9 +323,9 @@ export default function AnalyticsPage() {
       {!selectedDate && (
         <div className="game-card p-6">
           <h3 className="text-sm font-bold text-white mb-1">
-            {tr('New User Signups', 'အသုံးပြုသူအသစ်များ')}
+            {t('admin.analyticsPage.newUserSignups')}
           </h3>
-          <p className="text-xs text-gray-500 mb-5">{tr('Daily new registrations', 'တစ်ရက်ချင်း registration')}</p>
+          <p className="text-xs text-gray-500 mb-5">{t('admin.analyticsPage.dailyRegistrations')}</p>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data.dailyUsers}>
@@ -341,7 +341,7 @@ export default function AnalyticsPage() {
                 <Tooltip
                   contentStyle={{ backgroundColor: '#12122a', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 12, fontSize: 12 }}
                   labelStyle={{ color: '#fff', fontWeight: 700 }}
-                  formatter={(value: any) => [value, tr('New Users', 'သုံးသူအသစ်')]}
+                  formatter={(value: any) => [value, t('admin.analyticsPage.newUsers')]}
                   labelFormatter={(label: any) => new Date(String(label)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 />
                 <Area type="monotone" dataKey="count" stroke="#06b6d4" strokeWidth={2} fill="url(#userGrad)" />
@@ -356,7 +356,7 @@ export default function AnalyticsPage() {
         {/* Status Breakdown Pie */}
         <div className="game-card p-6">
           <h3 className="text-sm font-bold text-white mb-5">
-            {tr('Order Status', 'အော်ဒါ Status')}
+            {t('admin.analyticsPage.orderStatus')}
           </h3>
           {data.statusBreakdown.length > 0 ? (
             <div className="h-52">
@@ -385,14 +385,14 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <EmptyState text={tr('No orders', 'အော်ဒါမရှိ')} />
+            <EmptyState text={t('admin.analyticsPage.noOrders')} />
           )}
         </div>
 
         {/* Payment Methods */}
         <div className="game-card p-6">
           <h3 className="text-sm font-bold text-white mb-5">
-            {tr('Payment Methods', 'ငွေပေးချေမှုနည်းလမ်းများ')}
+            {t('admin.analyticsPage.paymentMethods')}
           </h3>
           {data.paymentMethodBreakdown.length > 0 ? (
             <div className="space-y-3">
@@ -416,14 +416,14 @@ export default function AnalyticsPage() {
               })}
             </div>
           ) : (
-            <EmptyState text={tr('No data', 'ဒေတာမရှိ')} />
+            <EmptyState text={t('admin.analyticsPage.noData')} />
           )}
         </div>
 
         {/* Category Breakdown */}
         <div className="game-card p-6">
           <h3 className="text-sm font-bold text-white mb-5">
-            {tr('Sales by Category', 'Category အလိုက်ရောင်းအား')}
+            {t('admin.analyticsPage.salesByCategory')}
           </h3>
           {data.categoryBreakdown.length > 0 ? (
             <div className="h-52">
@@ -451,7 +451,7 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <EmptyState text={tr('No sales', 'ရောင်းအားမရှိ')} />
+            <EmptyState text={t('admin.analyticsPage.noSales')} />
           )}
         </div>
       </div>
@@ -459,7 +459,7 @@ export default function AnalyticsPage() {
       {/* Top Products Table */}
       <div className="game-card p-6">
         <h3 className="text-sm font-bold text-white mb-5">
-          {tr('Top Selling Products', 'အရောင်းရဆုံးပစ္စည်းများ')}
+          {t('admin.analyticsPage.topProducts')}
         </h3>
         {data.topProducts.length > 0 ? (
           <div className="overflow-x-auto">
@@ -467,11 +467,11 @@ export default function AnalyticsPage() {
               <thead>
                 <tr className="text-left text-xs text-gray-500 uppercase border-b border-dark-700">
                   <th className="pb-3 pr-4 font-semibold">#</th>
-                  <th className="pb-3 pr-4 font-semibold">{tr('Product', 'ပစ္စည်း')}</th>
-                  <th className="pb-3 pr-4 font-semibold">{tr('Category', 'အမျိုးအစား')}</th>
-                  <th className="pb-3 pr-4 font-semibold text-right">{tr('Sold', 'ရောင်း')}</th>
-                  <th className="pb-3 pr-4 font-semibold text-right">{tr('Orders', 'အော်ဒါ')}</th>
-                  <th className="pb-3 font-semibold text-right">{tr('Revenue', 'ဝင်ငွေ')}</th>
+                  <th className="pb-3 pr-4 font-semibold">{t('admin.analyticsPage.product')}</th>
+                  <th className="pb-3 pr-4 font-semibold">{t('admin.analyticsPage.category')}</th>
+                  <th className="pb-3 pr-4 font-semibold text-right">{t('admin.analyticsPage.sold')}</th>
+                  <th className="pb-3 pr-4 font-semibold text-right">{t('admin.analyticsPage.orders')}</th>
+                  <th className="pb-3 font-semibold text-right">{t('admin.analyticsPage.revenue')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-700">
@@ -502,25 +502,25 @@ export default function AnalyticsPage() {
             </table>
           </div>
         ) : (
-          <EmptyState text={tr('No completed orders yet', 'ပြီးစီးသော order မရှိသေးပါ')} />
+          <EmptyState text={t('admin.analyticsPage.noCompletedOrders')} />
         )}
       </div>
 
       {/* Recent Orders */}
       <div className="game-card p-6">
         <h3 className="text-sm font-bold text-white mb-5">
-          {tr('Recent Orders', 'နောက်ဆုံးအော်ဒါများ')}
+          {t('admin.analyticsPage.recentOrders')}
         </h3>
         {data.recentOrders.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-500 uppercase border-b border-dark-700">
-                  <th className="pb-3 pr-4 font-semibold">{tr('User', 'သုံးသူ')}</th>
-                  <th className="pb-3 pr-4 font-semibold">{tr('Product', 'ပစ္စည်း')}</th>
-                  <th className="pb-3 pr-4 font-semibold text-right">{tr('Amount', 'ပမာဏ')}</th>
-                  <th className="pb-3 pr-4 font-semibold">{tr('Status', 'အခြေအနေ')}</th>
-                  <th className="pb-3 font-semibold">{tr('Date', 'ရက်စွဲ')}</th>
+                  <th className="pb-3 pr-4 font-semibold">{t('admin.analyticsPage.user')}</th>
+                  <th className="pb-3 pr-4 font-semibold">{t('admin.analyticsPage.product')}</th>
+                  <th className="pb-3 pr-4 font-semibold text-right">{t('admin.analyticsPage.amount')}</th>
+                  <th className="pb-3 pr-4 font-semibold">{t('admin.analyticsPage.status')}</th>
+                  <th className="pb-3 font-semibold">{t('admin.analyticsPage.date')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-700">
@@ -556,7 +556,7 @@ export default function AnalyticsPage() {
             </table>
           </div>
         ) : (
-          <EmptyState text={tr('No orders yet', 'အော်ဒါမရှိသေးပါ')} />
+          <EmptyState text={t('admin.analyticsPage.noOrdersYet')} />
         )}
       </div>
     </div>

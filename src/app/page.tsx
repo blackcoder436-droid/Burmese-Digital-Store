@@ -59,7 +59,7 @@ const howItWorksSteps = [
   },
 ];
 
-function StepCard({ feature, index, tr }: { feature: typeof howItWorksSteps[0]; index: number; tr: (en: string, my: string) => string }) {
+function StepCard({ feature, index, language }: { feature: typeof howItWorksSteps[0]; index: number; language: 'en' | 'my' }) {
   const Icon = feature.icon;
   return (
     <div className="scroll-fade game-card p-6 group relative overflow-hidden card-shimmer snap-center" data-delay={`${150 * index}`}>
@@ -72,27 +72,27 @@ function StepCard({ feature, index, tr }: { feature: typeof howItWorksSteps[0]; 
         <Icon className="w-7 h-7 text-white" />
       </div>
       <h3 className="text-lg font-bold text-white mb-2 relative group-hover:text-purple-200 transition-colors duration-300">
-        {tr(feature.titleEn, feature.titleMy)}
+        {language === 'en' ? feature.titleEn : feature.titleMy}
       </h3>
-      <p className="text-sm text-gray-400 leading-relaxed relative">{tr(feature.descEn, feature.descMy)}</p>
+      <p className="text-sm text-gray-400 leading-relaxed relative">{language === 'en' ? feature.descEn : feature.descMy}</p>
     </div>
   );
 }
 
-function HowItWorksCarousel({ tr }: { tr: (en: string, my: string) => string }) {
+function HowItWorksCarousel({ language }: { language: 'en' | 'my' }) {
   return (
     <>
       {/* Mobile: carousel */}
       <MobileCarousel className="sm:hidden -mx-4 px-4">
         {howItWorksSteps.map((feature, index) => (
-          <StepCard key={feature.step} feature={feature} index={index} tr={tr} />
+          <StepCard key={feature.step} feature={feature} index={index} language={language} />
         ))}
       </MobileCarousel>
 
       {/* Desktop: grid */}
       <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {howItWorksSteps.map((feature, index) => (
-          <StepCard key={feature.step} feature={feature} index={index} tr={tr} />
+          <StepCard key={feature.step} feature={feature} index={index} language={language} />
         ))}
       </div>
     </>
@@ -100,13 +100,13 @@ function HowItWorksCarousel({ tr }: { tr: (en: string, my: string) => string }) 
 }
 
 export default function HomePage() {
-  const { tr } = useLanguage();
+  const { t, language } = useLanguage();
   const containerRef = useScrollFade();
 
   return (
     <div className="min-h-screen" ref={containerRef}>
       {/* Hero */}
-      <section className="relative pt-32 pb-20 sm:pb-28 lg:pb-36 overflow-hidden">
+      <section className="relative pt-10 sm:pt-14 lg:pt-16 pb-20 sm:pb-28 lg:pb-36 overflow-hidden">
         {/* Background Effects */}
         <div className="absolute inset-0 bg-mesh pointer-events-none" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-radial from-purple-500/10 via-transparent to-transparent pointer-events-none" />
@@ -117,42 +117,39 @@ export default function HomePage() {
             <div className="scroll-fade inline-flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/30 rounded-full animate-glow-pulse">
               <Sparkles className="w-4 h-4 text-purple-400" />
               <span className="text-sm font-semibold text-purple-300">
-                {tr('Your Trusted Digital Store in Myanmar', 'မြန်မာနိုင်ငံ၏ ယုံကြည်စိတ်ချရသော Digital Store')}
+                {t('homePage.trustedStoreInMyanmar')}
               </span>
             </div>
 
             {/* Main Heading */}
             <h1 className="scroll-fade heading-xl !leading-[1.3] sm:!leading-[1.26] lg:!leading-[1.22] tracking-normal" data-delay="100">
-              {tr('Premium Digital Products', 'အဆင့်မြင့် Digital Products')}
+              {t('homePage.premiumDigitalProducts')}
             </h1>
 
             <p className="scroll-fade text-xl text-gray-400 max-w-2xl mx-auto leading-[1.8] sm:leading-[1.7]" data-delay="200">
-              {tr(
-                'Buy VPN accounts, streaming subscriptions, gaming credits, and software licenses with local payment methods and automatic verification.',
-                'VPN အကောင့်များ၊ Subscriptions နှင့် Digital Products များကို မြန်မာပြည်တွင်း ငွေပေးချေမှုဖြင့် အချိန်မရွေးလွယ်ကူစွာ ဝယ်ယူနိုင်ပါသည်။'
-              )}
+              {t('homePage.heroDescription')}
             </p>
 
             {/* CTA Buttons */}
             <div className="scroll-fade flex flex-col sm:flex-row items-center justify-center gap-4 pt-4" data-delay="300">
               <Link href="/shop" className="btn-electric group">
                 <ShoppingBag className="w-5 h-5" />
-                {tr('Browse Shop', 'ဆိုင်ကြည့်မည်')}
+                {t('homePage.browseShop')}
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link href="/vpn" className="btn-secondary">
                 <Shield className="w-5 h-5" />
-                {tr('VPN Plans', 'VPN အစီအစဉ်များ')}
+                {t('homePage.vpnPlans')}
               </Link>
             </div>
 
             {/* Trust Indicators */}
             <div className="scroll-fade flex flex-wrap items-center justify-center gap-x-8 gap-y-3 pt-6" data-delay="400">
               {[
-                tr('Delivery in Seconds', 'စက္ကန့်ပိုင်းအတွင်း ပို့ဆောင်မှု'),
-                tr('Auto-Verified Payments', 'ငွေပေးချေမှု အလိုအလျောက်အတည်ပြုမှု'),
-                tr('Secure & Trusted', 'လုံခြုံပြီး ယုံကြည်စိတ်ချရမှု'),
-                tr('24/7 Support', '24/7 အကူအညီ')
+                t('homePage.deliveryInSeconds'),
+                t('homePage.autoVerifiedPayments'),
+                t('homePage.secureTrusted'),
+                t('homePage.support24x7')
               ].map(
                 (item) => (
                   <div key={item} className="flex items-center gap-2 text-sm text-gray-400">
@@ -170,33 +167,33 @@ export default function HomePage() {
       <section className="py-14 sm:py-20 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="scroll-fade text-center mb-16">
-            <h2 className="heading-lg">{tr('How It Works', 'အလုပ်လုပ်ပုံ')}</h2>
+            <h2 className="heading-lg">{t('homePage.howItWorksTitle')}</h2>
             <p className="text-gray-400 mt-4 max-w-xl mx-auto">
-              {tr('Get your digital products in just a few simple steps.', 'အဆင့်အနည်းငယ်ဖြင့် digital products များကိုရယူလိုက်ပါ။')}
+              {t('homePage.howItWorksSubtitle')}
             </p>
           </div>
 
-          <HowItWorksCarousel tr={tr} />
+          <HowItWorksCarousel language={language} />
         </div>
       </section>
 
       <section className="py-20 sm:py-28 bg-dark-900/50 border-y border-dark-600/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="scroll-fade text-center mb-16">
-            <h2 className="heading-lg">{tr('Product Categories', 'ပစ္စည်းအမျိုးအစားများ')}</h2>
+            <h2 className="heading-lg">{t('homePage.productCategoriesTitle')}</h2>
             <p className="text-gray-400 mt-4 max-w-xl mx-auto">
-              {tr('Everything you need for your digital life.', 'သင့် digital အသုံးပြုမှုအတွက်လိုအပ်သမျှ။')}
+              {t('homePage.productCategoriesSubtitle')}
             </p>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {[
               { name: 'VPN', icon: Shield, label: 'Premium', href: '/shop?category=vpn', color: 'emerald', gradient: 'from-emerald-500 to-green-500' },
-              { name: tr('Streaming', 'Streaming'), icon: Monitor, label: tr('Netflix & More', 'Netflix နှင့် အခြား'), href: '/shop?category=streaming', color: 'violet', gradient: 'from-violet-500 to-purple-500' },
-              { name: tr('Gaming', 'Gaming'), icon: Gamepad2, label: tr('Credits & Keys', 'Credits & Keys'), href: '/shop?category=gaming', color: 'rose', gradient: 'from-rose-500 to-pink-500' },
-              { name: tr('Software', 'Software'), icon: Layers, label: tr('Licensed', 'လိုင်စင်ပါ'), href: '/shop?category=software', color: 'sky', gradient: 'from-sky-500 to-blue-500' },
-              { name: tr('Gift Cards', 'Gift Cards'), icon: Gift, label: tr('All Brands', 'Brand အားလုံး'), href: '/shop?category=gift-card', color: 'amber', gradient: 'from-amber-500 to-orange-500' },
-              { name: tr('More', 'အခြား'), icon: Box, label: tr('Explore', 'ကြည့်ရှုရန်'), href: '/shop', color: 'gray', gradient: 'from-gray-500 to-slate-500' },
+              { name: t('homePage.category.streamingName'), icon: Monitor, label: t('homePage.category.streamingLabel'), href: '/shop?category=streaming', color: 'violet', gradient: 'from-violet-500 to-purple-500' },
+              { name: t('homePage.category.gamingName'), icon: Gamepad2, label: t('homePage.category.gamingLabel'), href: '/shop?category=gaming', color: 'rose', gradient: 'from-rose-500 to-pink-500' },
+              { name: t('homePage.category.softwareName'), icon: Layers, label: t('homePage.category.softwareLabel'), href: '/shop?category=software', color: 'sky', gradient: 'from-sky-500 to-blue-500' },
+              { name: t('homePage.category.giftCardsName'), icon: Gift, label: t('homePage.category.giftCardsLabel'), href: '/shop?category=gift-card', color: 'amber', gradient: 'from-amber-500 to-orange-500' },
+              { name: t('homePage.category.moreName'), icon: Box, label: t('homePage.category.moreLabel'), href: '/shop', color: 'gray', gradient: 'from-gray-500 to-slate-500' },
             ].map((cat, catIdx) => {
               const Icon = cat.icon;
               const colorClasses: Record<string, string> = {
@@ -251,16 +248,13 @@ export default function HomePage() {
             <div className="absolute bottom-10 left-1/4 w-1 h-1 bg-purple-400/20 rounded-full animate-float" style={{ animationDelay: '2s' }} />
             
             <h2 className="heading-lg mb-4 relative">
-              {tr('Ready to Get Started?', 'စတင်ရန်အသင့်ဖြစ်ပြီလား?')}
+              {t('homePage.readyToStartTitle')}
             </h2>
             <p className="text-gray-400 mb-8 max-w-lg mx-auto relative">
-              {tr(
-                'Create your free account and get instant access to premium digital products at the best prices in Myanmar.',
-                'အခမဲ့အကောင့်ဖွင့်ပြီး မြန်မာနိုင်ငံအတွက်သင့်တော်သောစျေးနှုန်းများဖြင့် premium digital products များကိုချက်ချင်းရယူပါ။'
-              )}
+              {t('homePage.readyToStartSubtitle')}
             </p>
             <Link href="/register" className="btn-electric group relative">
-              {tr('Create Free Account', 'အခမဲ့အကောင့်ဖွင့်မည်')}
+              {t('homePage.createFreeAccount')}
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>

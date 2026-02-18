@@ -50,9 +50,11 @@ export async function GET(
       );
     }
 
+    const { ocrExtractedData, ocrVerified, transactionId, ...safeOrder } = order as any;
+
     return NextResponse.json({
       success: true,
-      data: { order },
+      data: { order: safeOrder },
     });
   } catch (error: unknown) {
     log.error('Order GET error', {

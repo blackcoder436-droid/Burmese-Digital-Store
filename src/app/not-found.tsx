@@ -5,7 +5,7 @@ import { Home, Search, Ghost } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 
 export default function NotFound() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-4 py-16 relative overflow-hidden">
@@ -33,23 +33,20 @@ export default function NotFound() {
         </div>
 
         <h1 className="heading-md text-white mb-3">
-          {tr('Page Not Found', 'စာမျက်နှာ မတွေ့ပါ')}
+          {t('pages.notFound.pageNotFound')}
         </h1>
         <p className="text-gray-400 mb-8 leading-relaxed max-w-sm mx-auto">
-          {tr(
-            "The page you're looking for doesn't exist or has been moved.",
-            'သင်ရှာဖွေနေသော စာမျက်နှာ မရှိပါ သို့မဟုတ် ရွှေ့ပြောင်းထားပါသည်။'
-          )}
+          {t('pages.notFound.pageMovedMsg')}
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <Link href="/" className="btn-primary flex items-center gap-2">
             <Home className="w-4 h-4" />
-            {tr('Go Home', 'ပင်မစာမျက်နှာ')}
+            {t('pages.notFound.goHome')}
           </Link>
           <Link href="/shop" className="btn-secondary flex items-center gap-2">
             <Search className="w-4 h-4" />
-            {tr('Browse Shop', 'ဆိုင်ကြည့်မည်')}
+            {t('pages.notFound.browseShop')}
           </Link>
         </div>
       </div>

@@ -14,12 +14,12 @@ const steps = [
 ];
 
 export default function OrderStatus({ status }: OrderStatusProps) {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
 
   const steps = [
-    { key: 'pending', label: tr('Pending', 'စောင့်ဆိုင်းနေသည်'), icon: Clock },
-    { key: 'verifying', label: tr('Verifying', 'စစ်ဆေးနေသည်'), icon: Search },
-    { key: 'completed', label: tr('Completed', 'ပြီးဆုံးသည်'), icon: CheckCircle },
+    { key: 'pending', label: t('order.pending'), icon: Clock },
+    { key: 'verifying', label: t('order.verifying'), icon: Search },
+    { key: 'completed', label: t('order.completed'), icon: CheckCircle },
   ];
 
   if (status === 'rejected' || status === 'refunded') {
@@ -35,7 +35,7 @@ export default function OrderStatus({ status }: OrderStatusProps) {
             status === 'rejected' ? 'text-red-400' : 'text-amber-400'
           }`}
         >
-          {status === 'rejected' ? tr('Payment Rejected', 'ငွေပေးချေမှု ပယ်ချခံရသည်') : tr('Refunded', 'ငွေပြန်အမ်းပြီး')}
+          {status === 'rejected' ? t('order.paymentRejected') : t('order.refunded')}
         </span>
       </div>
     );

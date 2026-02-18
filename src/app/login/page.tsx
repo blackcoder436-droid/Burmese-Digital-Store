@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { LogIn, Loader2, Zap, Package } from 'lucide-react';
+import { Loader2, Zap, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
@@ -11,9 +11,8 @@ import { useScrollFade } from '@/hooks/useScrollFade';
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
 function LoginForm() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const containerRef = useScrollFade();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect');
   const [form, setForm] = useState({ email: '', password: '' });
@@ -46,7 +45,7 @@ function LoginForm() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(tr('Welcome back!', 'ပြန်လည်ကြိုဆိုပါသည်!'));
+        toast.success(t('auth.loginPage.welcomeBackToast'));
         // Use window.location for reliable redirect after login
         // router.refresh() + router.push() race condition causes redirect to fail
         const safeRedirect = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : null;
@@ -54,10 +53,10 @@ function LoginForm() {
         window.location.href = target;
         return;
       } else {
-        toast.error(data.error || tr('Login failed', 'ဝင်ရောက်မှု မအောင်မြင်ပါ'));
+        toast.error(data.error || t('auth.loginPage.loginFailed'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('auth.loginPage.somethingWrong'));
     } finally {
       setLoading(false);
     }
@@ -73,15 +72,15 @@ function LoginForm() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(tr('Welcome!', 'ကြိုဆိုပါသည်!'));
+        toast.success(t('auth.loginPage.welcomeToast'));
         const safeRedirect = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : null;
         const target = data.data.user.role === 'admin' ? '/admin' : (safeRedirect || '/account');
         window.location.href = target;
       } else {
-        toast.error(data.error || tr('Google login failed', 'Google login မအောင်မြင်ပါ'));
+        toast.error(data.error || t('auth.loginPage.googleLoginFailed'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('auth.loginPage.somethingWrong'));
     } finally {
       setGoogleLoading(false);
     }
@@ -137,27 +136,27 @@ function LoginForm() {
               <Package className="w-6 h-6 text-white" />
             </div>
           </Link>
-          <h1 className="heading-md">{tr('Welcome Back', 'ပြန်လည်ကြိုဆိုပါသည်')}</h1>
+          <h1 className="heading-md">{t('auth.loginPage.heading')}</h1>
           <p className="text-gray-400 mt-2">
-            {tr('Sign in to continue to Burmese Digital Store', 'Burmese Digital Store သို့ဆက်လက်ဝင်ရောက်ရန် sign in လုပ်ပါ')}
+            {t('auth.loginPage.subtitle')}
           </p>
         </div>
 
         <div className="scroll-fade glass-panel p-8" data-delay="150">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="input-label">{tr('Email Address', 'အီးမေးလ်လိပ်စာ')}</label>
+              <label className="input-label">{t('auth.loginPage.emailAddress')}</label>
               <input
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder={tr('you@example.com', 'you@example.com')}
+                placeholder={t('auth.loginPage.emailPlaceholder')}
                 className="input-field"
                 required
               />
             </div>
             <div>
-              <label className="input-label">{tr('Password', 'လျှို့ဝှက်နံပါတ်')}</label>
+              <label className="input-label">{t('auth.password')}</label>
               <input
                 type="password"
                 value={form.password}
@@ -171,41 +170,44 @@ function LoginForm() {
                   href="/forgot-password"
                   className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
                 >
-                  {tr('Forgot password?', 'လျှို့ဝှက်နံပါတ် မေ့နေပါသလား?')}
+                  {t('auth.loginPage.forgotPasswordQuestion')}
                 </Link>
               </div>
             </div>
             <button type="submit" disabled={loading} className="btn-electric w-full">
               {loading ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /> {tr('Signing in...', 'ဝင်ရောက်နေသည်...')}</>
+                <><Loader2 className="w-5 h-5 animate-spin" /> {t('auth.loginPage.signingIn')}</>
               ) : (
-                <><Zap className="w-5 h-5" /> {tr('Sign In', 'ဝင်မည်')}</>
+                <><Zap className="w-5 h-5" /> {t('auth.loginPage.signInButton')}</>
               )}
             </button>
           </form>
 
           {/* Google Sign-In */}
-          {GOOGLE_CLIENT_ID && (
-            <>
-              <div className="flex items-center gap-3 my-5">
-                <div className="flex-1 h-px bg-dark-600" />
-                <span className="text-xs text-gray-500">{tr('or', 'သို့မဟုတ်')}</span>
-                <div className="flex-1 h-px bg-dark-600" />
+          <>
+            <div className="flex items-center gap-3 my-5">
+              <div className="flex-1 h-px bg-dark-600" />
+              <span className="text-xs text-gray-500">{t('auth.loginPage.or')}</span>
+              <div className="flex-1 h-px bg-dark-600" />
+            </div>
+            <div id="google-signin-btn" className="flex justify-center min-h-[40px]" />
+            {!GOOGLE_CLIENT_ID && (
+              <p className="text-xs text-amber-400 text-center mt-2">
+                {t('auth.loginPage.googleNotConfigured')}
+              </p>
+            )}
+            {googleLoading && (
+              <div className="flex items-center justify-center mt-3">
+                <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
               </div>
-              <div id="google-signin-btn" className="flex justify-center" />
-              {googleLoading && (
-                <div className="flex items-center justify-center mt-3">
-                  <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
-                </div>
-              )}
-            </>
-          )}
+            )}
+          </>
         </div>
 
         <p className="scroll-fade text-center text-gray-500 mt-8" data-delay="250">
-          {tr("Don't have an account?", 'အကောင့်မရှိသေးဘူးလား?')}{' '}
+          {t('auth.loginPage.noAccountQuestion')}{' '}
           <Link href="/register" className="text-purple-400 hover:text-purple-300 font-semibold">
-            {tr('Create one', 'အခုဖွင့်မည်')}
+            {t('auth.loginPage.createOne')}
           </Link>
         </p>
       </div>

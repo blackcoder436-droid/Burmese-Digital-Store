@@ -148,12 +148,12 @@ export async function middleware(request: NextRequest) {
   // 'strict-dynamic' allows nonce-approved scripts to load their children
   const isDev = process.env.NODE_ENV === 'development';
   const scriptSrc = isDev
-    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval'`
-    : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`;
+    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com`
+    : `script-src 'self' 'nonce-${nonce}' https://accounts.google.com`;
   const styleSrc = `style-src 'self' 'unsafe-inline'`; // Tailwind needs unsafe-inline for styles
   response.headers.set(
     'Content-Security-Policy',
-    `default-src 'self'; ${scriptSrc}; ${styleSrc}; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
+    `default-src 'self'; ${scriptSrc}; ${styleSrc}; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com; frame-src https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
   );
 
   return response;

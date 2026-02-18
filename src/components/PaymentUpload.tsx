@@ -16,7 +16,7 @@ export default function PaymentUpload({
   onVerify,
   expectedAmount,
 }: PaymentUploadProps) {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [preview, setPreview] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState<any>(null);
@@ -96,7 +96,7 @@ export default function PaymentUpload({
               className="max-h-48 w-auto mx-auto rounded-lg border border-purple-500/20 shadow-lg"
             />
             <p className="text-sm text-gray-400">
-              {tr('Click or drag to replace', 'အစားထိုးရန် နှိပ်ပါ သို့မဟုတ် ဆွဲထည့်ပါ')}
+              {t('components.payment.clickOrDragReplace')}
             </p>
           </div>
         ) : (
@@ -111,23 +111,23 @@ export default function PaymentUpload({
             <div>
               <p className="text-lg font-semibold text-white">
                 {isDragActive
-                  ? tr('Drop your screenshot here', 'Screenshot ကိုဒီနေရာတွင်ချပါ')
-                  : tr('Upload payment screenshot', 'ငွေပေးချေမှု screenshot တင်ပါ')}
+                  ? t('components.payment.dropHere')
+                  : t('components.payment.uploadScreenshot')}
               </p>
               <p className="text-sm text-gray-400 mt-2 leading-relaxed">
-                {tr('Kpay, WaveMoney, CBPay, AYA Pay • PNG, JPG, WebP • Max 5MB', 'Kpay, WaveMoney, CBPay, AYA Pay • PNG, JPG, WebP • အများဆုံး 5MB')}
+                {t('components.payment.supportedFormats')}
               </p>
             </div>
           </div>
         )}
       </div>
 
-      {/* OCR Verification Result */}
+      {/* Payment Verification Result */}
       {verifying && (
         <div className="flex items-center space-x-3 px-5 py-4 bg-dark-800 border border-dark-600 rounded-xl">
           <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
           <span className="text-sm text-gray-300 font-medium">
-            {tr('Verifying payment screenshot...', 'ငွေပေးချေမှု screenshot စစ်ဆေးနေသည်...')}
+            {t('components.payment.checking')}
           </span>
         </div>
       )}
@@ -155,27 +155,13 @@ export default function PaymentUpload({
                 }`}
               >
                 {verificationResult.verified
-                  ? tr('Payment Verified!', 'ငွေပေးချေမှု အတည်ပြုပြီးပါပြီ!')
-                  : tr('Manual review may be needed', 'လူကြီးမင်းအတွက် လူကိုယ်တိုင်စစ်ဆေးရန်လိုနိုင်သည်')}
+                  ? t('components.payment.verified')
+                  : t('components.payment.manualReview')}
               </p>
-              {verificationResult.transactionId && (
-                <p className="text-sm text-gray-400">
-                  {tr('Transaction ID:', 'ငွေလွှဲ ID:')}{' '}
-                  <span className="text-white font-mono">
-                    {verificationResult.transactionId}
-                  </span>
-                </p>
-              )}
-              {verificationResult.amount && (
-                <p className="text-sm text-gray-400">
-                  {tr('Amount:', 'ပမာဏ:')}{' '}
-                  <span className="text-white font-mono">
-                    {parseInt(verificationResult.amount).toLocaleString()} MMK
-                  </span>
-                </p>
-              )}
               <p className="text-sm text-gray-500">
-                {tr('Confidence:', 'ယုံကြည်နိုင်မှု:')} {Math.round(verificationResult.confidence)}%
+                {verificationResult.verified
+                  ? t('components.payment.canPlaceOrder')
+                  : t('components.payment.teamWillReview')}
               </p>
             </div>
           </div>

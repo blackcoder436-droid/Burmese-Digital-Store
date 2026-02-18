@@ -46,7 +46,7 @@ const defaultCoupon = {
 };
 
 export default function AdminCouponsPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -63,7 +63,7 @@ export default function AdminCouponsPage() {
       const data = await res.json();
       if (data.success) setCoupons(data.data.coupons);
     } catch {
-      toast.error(tr('Failed to fetch coupons', 'ကူပွန်များရယူရန် မအောင်မြင်ပါ'));
+      toast.error(t('admin.couponsPage.failedFetchCoupons'));
     } finally {
       setLoading(false);
     }
@@ -71,11 +71,11 @@ export default function AdminCouponsPage() {
 
   async function handleCreate() {
     if (!form.code.trim()) {
-      toast.error(tr('Coupon code is required', 'ကူပွန်ကုဒ် ထည့်ပါ'));
+      toast.error(t('admin.couponsPage.couponCodeRequired'));
       return;
     }
     if (form.discountValue <= 0) {
-      toast.error(tr('Discount value must be greater than 0', 'လျှော့စျေးတန်ဖိုး 0 ထက်ကြီးရမည်'));
+      toast.error(t('admin.couponsPage.discountMustBeGreaterThanZero'));
       return;
     }
 
@@ -91,15 +91,15 @@ export default function AdminCouponsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(tr('Coupon created!', 'ကူပွန် ဖန်တီးပြီးပါပြီ!'));
+        toast.success(t('admin.couponsPage.couponCreated'));
         setShowForm(false);
         setForm(defaultCoupon);
         fetchCoupons();
       } else {
-        toast.error(data.error || tr('Failed to create', 'ဖန်တီးရန် မအောင်မြင်ပါ'));
+        toast.error(data.error || t('admin.couponsPage.failedCreate'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     } finally {
       setSaving(false);
     }
@@ -117,15 +117,15 @@ export default function AdminCouponsPage() {
         setCoupons((prev) =>
           prev.map((c) => (c._id === id ? { ...c, active: !active } : c))
         );
-        toast.success(!active ? tr('Coupon activated', 'ကူပွန်ဖွင့်ပြီး') : tr('Coupon deactivated', 'ကူပွန်ပိတ်ပြီး'));
+        toast.success(!active ? t('admin.couponsPage.couponActivated') : t('admin.couponsPage.couponDeactivated'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     }
   }
 
   async function handleDelete(id: string, code: string) {
-    if (!confirm(tr(`Delete coupon "${code}"?`, `ကူပွန် "${code}" ကိုဖျက်မလား?`))) return;
+    if (!confirm(t('admin.couponsPage.deleteCouponConfirm').replace('{code}', code))) return;
     try {
       const res = await fetch('/api/admin/coupons', {
         method: 'DELETE',
@@ -135,10 +135,10 @@ export default function AdminCouponsPage() {
       const data = await res.json();
       if (data.success) {
         setCoupons((prev) => prev.filter((c) => c._id !== id));
-        toast.success(tr('Coupon deleted', 'ကူပွန်ဖျက်ပြီးပါပြီ'));
+        toast.success(t('admin.couponsPage.couponDeleted'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     }
   }
 
@@ -149,13 +149,13 @@ export default function AdminCouponsPage() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="heading-lg">{tr('Coupons', 'ကူပွန်များ')}</h1>
+        <h1 className="heading-lg">{t('admin.coupons')}</h1>
         <button
           onClick={() => { setShowForm(true); setForm(defaultCoupon); }}
           className="btn-electric text-sm flex items-center space-x-2"
         >
           <Plus className="w-4 h-4" />
-          <span>{tr('Create Coupon', 'ကူပွန်ဖန်တီးမည်')}</span>
+          <span>{t('admin.couponsPage.createCoupon')}</span>
         </button>
       </div>
 
@@ -164,7 +164,7 @@ export default function AdminCouponsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="game-card w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 sm:p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="heading-sm">{tr('New Coupon', 'ကူပွန်အသစ်')}</h2>
+              <h2 className="heading-sm">{t('admin.couponsPage.newCoupon')}</h2>
               <button
                 onClick={() => setShowForm(false)}
                 className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-dark-700 transition-colors"
@@ -176,7 +176,7 @@ export default function AdminCouponsPage() {
             <div className="space-y-4">
               {/* Code */}
               <div>
-                <label className="text-sm text-gray-300 block mb-1.5">{tr('Coupon Code *', 'ကူပွန်ကုဒ် *')}</label>
+                <label className="text-sm text-gray-300 block mb-1.5">{t('admin.couponsPage.couponCodeLabel')}</label>
                 <input
                   type="text"
                   value={form.code}
@@ -189,19 +189,19 @@ export default function AdminCouponsPage() {
               {/* Discount Type + Value */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm text-gray-300 block mb-1.5">{tr('Type', 'အမျိုးအစား')}</label>
+                  <label className="text-sm text-gray-300 block mb-1.5">{t('admin.couponsPage.typeLabel')}</label>
                   <select
                     value={form.discountType}
                     onChange={(e) => setForm({ ...form, discountType: e.target.value as 'percentage' | 'fixed' })}
                     className="input-field"
                   >
-                    <option value="percentage">{tr('Percentage (%)', 'ရာခိုင်နှုန်း (%)')}</option>
-                    <option value="fixed">{tr('Fixed (MMK)', 'ပုံသေ (MMK)')}</option>
+                    <option value="percentage">{t('admin.couponsPage.percentageType')}</option>
+                    <option value="fixed">{t('admin.couponsPage.fixedType')}</option>
                   </select>
                 </div>
                 <div>
                   <label className="text-sm text-gray-300 block mb-1.5">
-                    {form.discountType === 'percentage' ? tr('Discount %', 'လျှော့ %') : tr('Discount MMK', 'လျှော့ MMK')}
+                    {form.discountType === 'percentage' ? t('admin.couponsPage.discountPercent') : t('admin.couponsPage.discountMmk')}
                   </label>
                   <input
                     type="number"
@@ -217,7 +217,7 @@ export default function AdminCouponsPage() {
               {/* Min Order + Max Discount */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm text-gray-300 block mb-1.5">{tr('Min Order (MMK)', 'အနည်းဆုံးအော်ဒါ (MMK)')}</label>
+                  <label className="text-sm text-gray-300 block mb-1.5">{t('admin.couponsPage.minOrderLabel')}</label>
                   <input
                     type="number"
                     value={form.minOrderAmount}
@@ -228,12 +228,12 @@ export default function AdminCouponsPage() {
                 </div>
                 {form.discountType === 'percentage' && (
                   <div>
-                    <label className="text-sm text-gray-300 block mb-1.5">{tr('Max Discount (MMK)', 'အများဆုံးလျှော့ (MMK)')}</label>
+                    <label className="text-sm text-gray-300 block mb-1.5">{t('admin.couponsPage.maxDiscountLabel')}</label>
                     <input
                       type="number"
                       value={form.maxDiscountAmount}
                       onChange={(e) => setForm({ ...form, maxDiscountAmount: e.target.value })}
-                      placeholder={tr('No limit', 'ကန့်သတ်မရှိ')}
+                      placeholder={t('admin.couponsPage.noLimit')}
                       min={0}
                       className="input-field"
                     />
@@ -244,7 +244,7 @@ export default function AdminCouponsPage() {
               {/* Usage Limits */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm text-gray-300 block mb-1.5">{tr('Total Uses (0=unlimited)', 'အသုံးပြုနိုင်ကြိမ်')}</label>
+                  <label className="text-sm text-gray-300 block mb-1.5">{t('admin.couponsPage.totalUsesLabel')}</label>
                   <input
                     type="number"
                     value={form.usageLimit}
@@ -254,7 +254,7 @@ export default function AdminCouponsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-gray-300 block mb-1.5">{tr('Per User Limit', 'တစ်ဦးချင်းကန့်သတ်')}</label>
+                  <label className="text-sm text-gray-300 block mb-1.5">{t('admin.couponsPage.perUserLimitLabel')}</label>
                   <input
                     type="number"
                     value={form.perUserLimit}
@@ -268,7 +268,7 @@ export default function AdminCouponsPage() {
               {/* Validity Dates */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm text-gray-300 block mb-1.5">{tr('Valid From', 'စတင်ရက်')}</label>
+                  <label className="text-sm text-gray-300 block mb-1.5">{t('admin.couponsPage.validFromLabel')}</label>
                   <input
                     type="date"
                     value={form.validFrom}
@@ -277,7 +277,7 @@ export default function AdminCouponsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-gray-300 block mb-1.5">{tr('Valid Until', 'ကုန်ဆုံးရက်')}</label>
+                  <label className="text-sm text-gray-300 block mb-1.5">{t('admin.couponsPage.validUntilLabel')}</label>
                   <input
                     type="date"
                     value={form.validUntil}
@@ -289,11 +289,11 @@ export default function AdminCouponsPage() {
 
               <div className="flex justify-end gap-3 pt-4 border-t border-dark-700">
                 <button onClick={() => setShowForm(false)} className="btn-primary text-sm">
-                  {tr('Cancel', 'မလုပ်တော့ပါ')}
+                  {t('common.cancel')}
                 </button>
                 <button onClick={handleCreate} disabled={saving} className="btn-electric text-sm flex items-center gap-2">
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {tr('Create', 'ဖန်တီးမည်')}
+                  {t('admin.couponsPage.create')}
                 </button>
               </div>
             </div>
@@ -309,9 +309,9 @@ export default function AdminCouponsPage() {
       ) : coupons.length === 0 ? (
         <div className="game-card p-16 text-center">
           <Tag className="w-16 h-16 text-dark-600 mx-auto mb-4" />
-          <h3 className="text-xl text-gray-300 font-medium mb-2">{tr('No coupons yet', 'ကူပွန်မရှိသေးပါ')}</h3>
+          <h3 className="text-xl text-gray-300 font-medium mb-2">{t('admin.couponsPage.noCouponsYet')}</h3>
           <p className="text-sm text-gray-500">
-            {tr('Create your first coupon to offer discounts.', 'ပထမဆုံးကူပွန်ဖန်တီးပြီး လျှော့စျေးပေးပါ။')}
+            {t('admin.couponsPage.createFirstCouponHint')}
           </p>
         </div>
       ) : (
@@ -337,21 +337,21 @@ export default function AdminCouponsPage() {
                         <span className="font-mono font-bold text-white text-lg">{coupon.code}</span>
                         {expired && (
                           <span className="text-xs bg-red-500/10 text-red-400 px-2 py-0.5 rounded-lg border border-red-500/20">
-                            {tr('Expired', 'ကုန်ဆုံးပြီး')}
+                            {t('admin.couponsPage.expired')}
                           </span>
                         )}
                         {!coupon.active && !expired && (
                           <span className="text-xs bg-gray-500/10 text-gray-400 px-2 py-0.5 rounded-lg border border-gray-500/20">
-                            {tr('Inactive', 'ပိတ်ထား')}
+                            {t('admin.couponsPage.inactive')}
                           </span>
                         )}
                       </div>
                       <p className="text-sm text-gray-400 mt-0.5">
                         {coupon.discountType === 'percentage'
-                          ? `${coupon.discountValue}% ${tr('off', 'လျှော့')}`
-                          : `${coupon.discountValue.toLocaleString()} MMK ${tr('off', 'လျှော့')}`}
-                        {coupon.minOrderAmount > 0 && ` · ${tr('Min', 'အနည်းဆုံး')} ${coupon.minOrderAmount.toLocaleString()} MMK`}
-                        {' '}· {tr('Used', 'သုံးပြီး')} {coupon.usedCount}/{coupon.usageLimit || '∞'}
+                          ? `${coupon.discountValue}% ${t('admin.couponsPage.off')}`
+                          : `${coupon.discountValue.toLocaleString()} MMK ${t('admin.couponsPage.off')}`}
+                        {coupon.minOrderAmount > 0 && ` · ${t('admin.couponsPage.min')} ${coupon.minOrderAmount.toLocaleString()} MMK`}
+                        {' '}· {t('admin.couponsPage.used')} {coupon.usedCount}/{coupon.usageLimit || '∞'}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         {new Date(coupon.validFrom).toLocaleDateString()} — {new Date(coupon.validUntil).toLocaleDateString()}
@@ -363,14 +363,14 @@ export default function AdminCouponsPage() {
                     <button
                       onClick={() => handleToggle(coupon._id, coupon.active)}
                       className="p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all"
-                      title={coupon.active ? tr('Deactivate', 'ပိတ်မည်') : tr('Activate', 'ဖွင့်မည်')}
+                      title={coupon.active ? t('admin.couponsPage.deactivate') : t('admin.couponsPage.activate')}
                     >
                       {coupon.active ? <ToggleRight className="w-5 h-5 text-green-400" /> : <ToggleLeft className="w-5 h-5" />}
                     </button>
                     <button
                       onClick={() => handleDelete(coupon._id, coupon.code)}
                       className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                      title={tr('Delete', 'ဖျက်မည်')}
+                      title={t('common.delete')}
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>

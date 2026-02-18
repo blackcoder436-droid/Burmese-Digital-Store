@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectDB from '@/lib/mongodb';
 import Product from '@/models/Product';
 import { apiLimiter } from '@/lib/rateLimit';
@@ -6,7 +7,7 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ route: '/api/products/[id]' });
 
-// GET /api/products/[id] - Get single product
+// GET /api/products/[id] - Get single product (id can be ObjectId or slug)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -18,10 +19,13 @@ export async function GET(
     const { id } = await params;
     await connectDB();
 
-    const product = await Product.findOne({
-      _id: id,
-      active: true,
-    })
+    // Support both ObjectId and slug lookup
+    const isObjectId = mongoose.Types.ObjectId.isValid(id) && id.length === 24;
+    const query = isObjectId
+      ? { _id: id, active: true }
+      : { slug: id, active: true };
+
+    const product = await Product.findOne(query)
       .select('-details.loginPassword -details.serialKey') // Hide sensitive info
       .lean();
 

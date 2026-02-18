@@ -16,6 +16,7 @@ export interface IProductDetailDocument {
 
 export interface IProductDocument extends Document {
   name: string;
+  slug: string;
   category: 'vpn' | 'streaming' | 'gaming' | 'software' | 'gift-card' | 'other';
   description: string;
   price: number;
@@ -67,6 +68,11 @@ const ProductSchema: Schema = new Schema(
       required: [true, 'Product name is required'],
       trim: true,
       maxlength: [100, 'Product name cannot exceed 100 characters'],
+    },
+    slug: {
+      type: String,
+      trim: true,
+      lowercase: true,
     },
     category: {
       type: String,
@@ -120,12 +126,43 @@ const ProductSchema: Schema = new Schema(
   }
 );
 
+// Helper: generate slug from name
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80);
+}
+
+// Auto-generate slug before save
+ProductSchema.pre('save', async function (next) {
+  if (!this.slug || this.isModified('name')) {
+    let base = generateSlug(this.name as string);
+    if (!base) base = 'product';
+    let slug = base;
+    let counter = 0;
+    // Ensure uniqueness
+    while (true) {
+      const existing = await mongoose.models.Product?.findOne({ slug, _id: { $ne: this._id } });
+      if (!existing) break;
+      counter++;
+      slug = `${base}-${counter}`;
+    }
+    this.slug = slug;
+  }
+  next();
+});
+
 // Virtual: available stock count
 ProductSchema.virtual('availableStock').get(function (this: IProductDocument) {
   return this.details.filter((d) => !d.sold).length;
 });
 
 // Index for faster queries
+ProductSchema.index({ slug: 1 }, { unique: true, sparse: true });
 ProductSchema.index({ category: 1, active: 1 });
 ProductSchema.index({ featured: 1, active: 1 });
 ProductSchema.index({ name: 'text', description: 'text' });

@@ -32,7 +32,7 @@ interface UserData {
 }
 
 export default function AdminUsersPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -65,7 +65,7 @@ export default function AdminUsersPage() {
         setPagination(data.data.pagination);
       }
     } catch {
-      toast.error(tr('Failed to fetch users', 'အသုံးပြုသူများကိုရယူရန် မအောင်မြင်ပါ'));
+      toast.error(t('admin.usersPage.failedFetchUsers'));
     } finally {
       setLoading(false);
     }
@@ -83,18 +83,18 @@ export default function AdminUsersPage() {
       if (data.success) {
         toast.success(
           newRole === 'admin'
-            ? tr('Promoted to admin!', 'Admin သို့တိုးမြှင့်ပြီး!')
-            : tr('Demoted to user!', 'User သို့ပြောင်းပြီး!')
+            ? t('admin.usersPage.promotedToAdmin')
+            : t('admin.usersPage.demotedToUser')
         );
         fetchUsers(pagination.page);
         if (selectedUser?._id === userId) {
           setSelectedUser({ ...selectedUser, role: newRole });
         }
       } else {
-        toast.error(data.error || tr('Failed to update', 'ပြင်ဆင်မှုမအောင်မြင်ပါ'));
+        toast.error(data.error || t('admin.usersPage.failedUpdate'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     } finally {
       setProcessing(null);
     }
@@ -103,10 +103,7 @@ export default function AdminUsersPage() {
   async function deleteUser(userId: string, userName: string) {
     if (
       !confirm(
-        tr(
-          `Are you sure you want to delete "${userName}"? This action cannot be undone.`,
-          `"${userName}" ကိုဖျက်လိုသည်မှာ သေချာပါသလား? ဤလုပ်ဆောင်ချက်ကို ပြန်ပြင်၍မရပါ။`
-        )
+        t('admin.usersPage.confirmDelete').replace('{name}', userName)
       )
     )
       return;
@@ -118,14 +115,14 @@ export default function AdminUsersPage() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(tr('User deleted', 'အသုံးပြုသူကိုဖျက်ပြီးပါပြီ'));
+        toast.success(t('admin.usersPage.userDeleted'));
         setSelectedUser(null);
         fetchUsers(pagination.page);
       } else {
-        toast.error(data.error || tr('Failed to delete', 'ဖျက်မှုမအောင်မြင်ပါ'));
+        toast.error(data.error || t('admin.usersPage.failedDelete'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     } finally {
       setProcessing(null);
     }
@@ -134,9 +131,9 @@ export default function AdminUsersPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="heading-lg">{tr('User Management', 'အသုံးပြုသူစီမံခန့်ခွဲမှု')}</h1>
+        <h1 className="heading-lg">{t('admin.usersPage.title')}</h1>
         <p className="text-sm text-gray-500">
-          {tr('Total:', 'စုစုပေါင်း:')} <span className="text-purple-400 font-bold">{pagination.total}</span> {tr('users', 'ဦး')}
+          {t('admin.usersPage.totalPrefix')} <span className="text-purple-400 font-bold">{pagination.total}</span> {t('admin.usersPage.totalSuffix')}
         </p>
       </div>
 
@@ -148,15 +145,15 @@ export default function AdminUsersPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={tr('Search by name or email...', 'အမည် သို့မဟုတ် အီးမေးလ်ဖြင့်ရှာဖွေပါ...')}
+            placeholder={t('admin.usersPage.searchPlaceholder')}
             className="input-field pl-10 !bg-[#12122a]"
           />
         </div>
         <div className="flex gap-2">
           {[
-            { value: '', label: tr('All', 'အားလုံး') },
-            { value: 'user', label: tr('Users', 'Users') },
-            { value: 'admin', label: tr('Admins', 'Admins') },
+            { value: '', label: t('shop.page.all') },
+            { value: 'user', label: t('admin.users') },
+            { value: 'admin', label: t('admin.usersPage.admins') },
           ].map((f) => (
             <button
               key={f.value}
@@ -178,7 +175,7 @@ export default function AdminUsersPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="game-card w-full max-w-lg p-6 sm:p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="heading-sm">{tr('User Details', 'အသုံးပြုသူအသေးစိတ်')}</h2>
+              <h2 className="heading-sm">{t('admin.usersPage.userDetails')}</h2>
               <button
                 onClick={() => setSelectedUser(null)}
                 className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-dark-700 transition-colors"
@@ -218,23 +215,23 @@ export default function AdminUsersPage() {
                 <div className="bg-dark-800 rounded-xl p-3 text-center">
                   <ShoppingBag className="w-4 h-4 text-purple-400 mx-auto mb-1" />
                   <p className="text-lg font-bold text-white">{selectedUser.totalOrders}</p>
-                  <p className="text-[10px] text-gray-500 uppercase">{tr('Orders', 'အော်ဒါ')}</p>
+                  <p className="text-[10px] text-gray-500 uppercase">{t('admin.orders')}</p>
                 </div>
                 <div className="bg-dark-800 rounded-xl p-3 text-center">
                   <DollarSign className="w-4 h-4 text-emerald-400 mx-auto mb-1" />
                   <p className="text-lg font-bold text-white">{selectedUser.totalSpent.toLocaleString()}</p>
-                  <p className="text-[10px] text-gray-500 uppercase">{tr('Spent', 'သုံးငွေ')}</p>
+                  <p className="text-[10px] text-gray-500 uppercase">{t('admin.usersPage.spent')}</p>
                 </div>
                 <div className="bg-dark-800 rounded-xl p-3 text-center">
                   <DollarSign className="w-4 h-4 text-sky-400 mx-auto mb-1" />
                   <p className="text-lg font-bold text-white">{selectedUser.balance.toLocaleString()}</p>
-                  <p className="text-[10px] text-gray-500 uppercase">{tr('Balance', 'လက်ကျန်')}</p>
+                  <p className="text-[10px] text-gray-500 uppercase">{t('admin.usersPage.balance')}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <Calendar className="w-4 h-4" />
-                {tr('Joined', 'စတင်သည့်နေ့')} {new Date(selectedUser.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                {t('admin.usersPage.joined')} {new Date(selectedUser.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
               </div>
 
               {/* Actions */}
@@ -250,7 +247,7 @@ export default function AdminUsersPage() {
                     ) : (
                       <Shield className="w-4 h-4" />
                     )}
-                    <span>{tr('Promote to Admin', 'Admin သို့တိုးမြှင့်')}</span>
+                    <span>{t('admin.usersPage.promoteToAdmin')}</span>
                   </button>
                 ) : (
                   <button
@@ -263,7 +260,7 @@ export default function AdminUsersPage() {
                     ) : (
                       <ShieldOff className="w-4 h-4" />
                     )}
-                    <span>{tr('Demote to User', 'User သို့ပြောင်း')}</span>
+                    <span>{t('admin.usersPage.demoteToUser')}</span>
                   </button>
                 )}
                 <button
@@ -272,7 +269,7 @@ export default function AdminUsersPage() {
                   className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
                 >
                   <Trash2 className="w-4 h-4" />
-                  <span>{tr('Delete', 'ဖျက်')}</span>
+                  <span>{t('common.delete')}</span>
                 </button>
               </div>
             </div>
@@ -289,7 +286,7 @@ export default function AdminUsersPage() {
         <div className="game-card p-16 text-center">
           <Users className="w-16 h-16 text-dark-600 mx-auto mb-4" />
           <h3 className="text-xl text-gray-300 font-medium">
-            {tr('No users found', 'အသုံးပြုသူမတွေ့ပါ')}
+            {t('admin.usersPage.noUsersFound')}
           </h3>
         </div>
       ) : (
@@ -299,13 +296,13 @@ export default function AdminUsersPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-gray-400 uppercase border-b border-dark-700 bg-dark-800/50">
-                    <th className="p-4 font-semibold">{tr('User', 'အသုံးပြုသူ')}</th>
-                    <th className="p-4 font-semibold">{tr('Role', 'ရာထူး')}</th>
-                    <th className="p-4 font-semibold">{tr('Orders', 'အော်ဒါ')}</th>
-                    <th className="p-4 font-semibold">{tr('Spent', 'သုံးငွေ')}</th>
-                    <th className="p-4 font-semibold">{tr('Balance', 'လက်ကျန်')}</th>
-                    <th className="p-4 font-semibold">{tr('Joined', 'စတင်သည့်နေ့')}</th>
-                    <th className="p-4 font-semibold text-right">{tr('Actions', 'လုပ်ဆောင်ရန်')}</th>
+                    <th className="p-4 font-semibold">{t('admin.user')}</th>
+                    <th className="p-4 font-semibold">{t('admin.usersPage.role')}</th>
+                    <th className="p-4 font-semibold">{t('admin.orders')}</th>
+                    <th className="p-4 font-semibold">{t('admin.usersPage.spent')}</th>
+                    <th className="p-4 font-semibold">{t('admin.usersPage.balance')}</th>
+                    <th className="p-4 font-semibold">{t('admin.usersPage.joined')}</th>
+                    <th className="p-4 font-semibold text-right">{t('admin.usersPage.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-700">
@@ -355,7 +352,7 @@ export default function AdminUsersPage() {
                           <button
                             onClick={() => setSelectedUser(user)}
                             className="p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all"
-                            title={tr('View Details', 'အသေးစိတ်ကြည့်ရန်')}
+                            title={t('admin.usersPage.viewDetails')}
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -364,7 +361,7 @@ export default function AdminUsersPage() {
                               onClick={() => updateRole(user._id, 'admin')}
                               disabled={processing === user._id}
                               className="p-2 text-gray-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-all"
-                              title={tr('Promote to Admin', 'Admin သို့တိုးမြှင့်')}
+                              title={t('admin.usersPage.promoteToAdmin')}
                             >
                               {processing === user._id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -377,7 +374,7 @@ export default function AdminUsersPage() {
                               onClick={() => updateRole(user._id, 'user')}
                               disabled={processing === user._id}
                               className="p-2 text-amber-400 hover:text-gray-400 hover:bg-amber-500/10 rounded-lg transition-all"
-                              title={tr('Demote to User', 'User သို့ပြောင်း')}
+                              title={t('admin.usersPage.demoteToUser')}
                             >
                               {processing === user._id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -390,7 +387,7 @@ export default function AdminUsersPage() {
                             onClick={() => deleteUser(user._id, user.name)}
                             disabled={processing === user._id}
                             className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                            title={tr('Delete User', 'အသုံးပြုသူကိုဖျက်ရန်')}
+                            title={t('admin.usersPage.deleteUser')}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

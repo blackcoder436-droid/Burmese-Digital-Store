@@ -27,6 +27,7 @@ import { useScrollFade } from '@/hooks/useScrollFade';
 interface Product {
   _id: string;
   name: string;
+  slug?: string;
   description: string;
   price: number;
   category: string;
@@ -41,7 +42,7 @@ const categoryLabel: Record<string, string> = {
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const { addItem, isInCart, getItem } = useCart();
   const containerRef = useScrollFade();
   const router = useRouter();
@@ -91,6 +92,7 @@ export default function ProductDetailPage() {
     if (!product || product.stock <= 0) return;
     addItem({
       productId: product._id,
+      slug: product.slug,
       name: product.name,
       price: product.price,
       stock: product.stock,
@@ -98,7 +100,7 @@ export default function ProductDetailPage() {
       image: product.image,
     }, quantity);
     setJustAdded(true);
-    toast.success(tr(`${product.name} added to cart`, `${product.name} ကို cart ထဲထည့်ပြီးပါပြီ`));
+    toast.success(`${product.name} ${t('shop.productDetail.addedToCartSuffix')}`);
     setTimeout(() => setJustAdded(false), 2000);
   }
 
@@ -115,14 +117,14 @@ export default function ProductDetailPage() {
       if (data.success) {
         setCouponDiscount(data.data.discountAmount);
         setAppliedCoupon(couponCode.trim().toUpperCase());
-        toast.success(tr('Coupon applied!', 'ကူပွန်အသုံးပြုပြီးပါပြီ!'));
+        toast.success(t('shop.productDetail.couponApplied'));
       } else {
-        toast.error(data.error || tr('Invalid coupon', 'ကူပွန်မမှန်ကန်ပါ'));
+        toast.error(data.error || t('shop.productDetail.invalidCoupon'));
         setCouponDiscount(0);
         setAppliedCoupon('');
       }
     } catch {
-      toast.error(tr('Failed to validate coupon', 'ကူပွန်စစ်ဆေးခြင်း မအောင်မြင်ပါ'));
+      toast.error(t('shop.productDetail.failedValidateCoupon'));
     } finally {
       setCouponValidating(false);
     }
@@ -147,7 +149,7 @@ export default function ProductDetailPage() {
 
       const res = await fetch('/api/orders', { method: 'POST', body: formData });
       if (res.status === 401) {
-        toast.error(tr('Please login to place an order', 'အော်ဒါတင်ရန် အကောင့်ဝင်ပါ'));
+        toast.error(t('shop.productDetail.loginRequiredToOrder'));
         router.push(`/login?redirect=/shop/${params.id}`);
         return;
       }
@@ -155,15 +157,15 @@ export default function ProductDetailPage() {
       if (data.success) {
         toast.success(
           data.data.order.status === 'completed'
-            ? tr('Payment verified! Check your orders for keys.', 'ငွေပေးချေမှု အတည်ပြုပြီးပါပြီ! သင်၏ key များကို orders မှာစစ်ကြည့်ပါ။')
-            : tr("Order placed! We'll verify shortly.", 'အော်ဒါတင်ပြီးပါပြီ! မကြာမီစစ်ဆေးပေးပါမည်။')
+            ? t('shop.productDetail.paymentVerifiedCheckOrders')
+            : t('shop.productDetail.orderPlacedVerifySoon')
         );
         router.push('/account/orders');
       } else {
-        toast.error(data.error || tr('Failed to place order', 'အော်ဒါတင်ခြင်း မအောင်မြင်ပါ'));
+        toast.error(data.error || t('shop.productDetail.failedPlaceOrder'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     } finally {
       setSubmitting(false);
     }
@@ -182,12 +184,18 @@ export default function ProductDetailPage() {
   const total = Math.max(0, subtotal - couponDiscount);
   const alreadyInCart = isInCart(product._id);
   const cartItem = getItem(product._id);
+  const normalizedDescription = product.description
+    .replace(/(\d)\s*year(s)?/gi, '$1 Year$2')
+    .replace(/(\d)\s*month(s)?/gi, '$1 Month$2')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const durationOnlyMatch = normalizedDescription.match(/^(\d+)\s+(Year|Years|Month|Months)$/i);
 
   return (
-    <div className="min-h-screen pt-24 pb-12" ref={containerRef}>
+    <div className="min-h-screen pt-8 pb-12" ref={containerRef}>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <Link href="/shop" className="scroll-fade inline-flex items-center gap-2 text-sm text-gray-400 hover:text-purple-400 mb-8 transition-colors">
-          <ArrowLeft className="w-4 h-4" /> {tr('Back to Shop', 'ဆိုင်သို့ပြန်မည်')}
+        <Link href="/shop" className="scroll-fade inline-flex items-center gap-2 text-base text-gray-400 hover:text-purple-400 mb-5 sm:mb-8 transition-colors whitespace-nowrap">
+          <ArrowLeft className="w-4 h-4" /> {t('shop.productDetail.backToShop')}
         </Link>
 
         {/* Product Info */}
@@ -206,47 +214,59 @@ export default function ProductDetailPage() {
               <div className="absolute inset-0 bg-gradient-to-t from-dark-900/90 via-dark-900/20 to-transparent" />
             </div>
           )}
-          <div className="p-8">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <span className={`badge-${product.category}`}>
+          <div className="p-4 sm:p-8">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 mb-5 sm:mb-6">
+            <div className="min-w-0">
+              <span className={`badge-${product.category} text-xs sm:text-sm`}>
                 {categoryLabel[product.category] || product.category}
               </span>
-              <h1 className="text-2xl sm:text-3xl font-bold text-white mt-3">{product.name}</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white mt-3 break-words leading-tight">{product.name}</h1>
             </div>
-            <span className={`px-4 py-2 rounded-xl text-sm font-bold ${product.stock > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-              {product.stock > 0 ? tr(`${product.stock} in stock`, `လက်ကျန် ${product.stock}`) : tr('Out of stock', 'ကုန်သွားပါပြီ')}
-            </span>
+
+            <div className="flex flex-col items-end gap-2 shrink-0">
+              <span className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap ${product.stock > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                {product.stock > 0
+                  ? `${product.stock} ${t('shop.productDetail.inStockSuffix')}`
+                  : t('shop.outOfStock')}
+              </span>
+              {durationOnlyMatch && (
+                <span className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 whitespace-nowrap">
+                  {t('shop.productDetail.duration')}: {durationOnlyMatch[1]} {durationOnlyMatch[2]}
+                </span>
+              )}
+            </div>
           </div>
 
-          <p className="text-gray-400 leading-relaxed mb-8">{product.description}</p>
+          {!durationOnlyMatch && (
+            <p className="text-gray-400 leading-relaxed mb-6 sm:mb-8 text-sm sm:text-base break-words">{normalizedDescription}</p>
+          )}
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 p-6 bg-dark-900 rounded-2xl border border-dark-600/50">
+          <div className="flex flex-col gap-5 sm:gap-6 p-4 sm:p-6 bg-dark-900 rounded-2xl border border-dark-600/50">
             <div>
-              <p className="text-sm text-gray-500 mb-1">{tr('Price per unit', 'တစ်ခုစျေးနှုန်း')}</p>
-              <span className="text-3xl font-black text-purple-400">{product.price.toLocaleString()}</span>
+              <p className="text-sm text-gray-500 mb-1">{t('shop.productDetail.pricePerUnit')}</p>
+              <span className="text-2xl sm:text-3xl font-black text-purple-400">{product.price.toLocaleString()}</span>
               <span className="text-sm text-gray-500 ml-2">MMK</span>
             </div>
             {product.stock > 0 && (
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-3">
+              <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center justify-center sm:justify-start gap-3">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-dark-800 border border-dark-600 hover:border-purple-500/50 text-gray-400 hover:text-white transition-all"
+                    className="w-11 h-11 flex items-center justify-center rounded-xl bg-dark-800 border border-dark-600 hover:border-purple-500/50 text-gray-400 hover:text-white transition-all"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
                   <span className="w-12 text-center text-xl font-bold text-white">{quantity}</span>
                   <button
                     onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-dark-800 border border-dark-600 hover:border-purple-500/50 text-gray-400 hover:text-white transition-all"
+                    className="w-11 h-11 flex items-center justify-center rounded-xl bg-dark-800 border border-dark-600 hover:border-purple-500/50 text-gray-400 hover:text-white transition-all"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">{tr('Total', 'စုစုပေါင်း')}</p>
-                  <p className="text-2xl font-black text-accent-gradient">{total.toLocaleString()} MMK</p>
+                <div className="text-center sm:text-right">
+                  <p className="text-sm text-gray-500">{t('cart.total')}</p>
+                  <p className="text-xl sm:text-2xl font-black text-accent-gradient leading-tight break-words">{total.toLocaleString()} MMK</p>
                 </div>
               </div>
             )}
@@ -265,11 +285,11 @@ export default function ProductDetailPage() {
                 }`}
               >
                 {justAdded ? (
-                  <><Check className="w-5 h-5" /> {tr('Added to Cart!', 'Cart ထဲထည့်ပြီး!')}</>
+                  <><Check className="w-5 h-5" /> {t('shop.productDetail.addedToCart')}</>
                 ) : alreadyInCart ? (
-                  <><Check className="w-5 h-5" /> {tr(`In Cart (${cartItem?.quantity})`, `Cart ထဲ (${cartItem?.quantity})`)}</>
+                  <><Check className="w-5 h-5" /> {t('shop.productDetail.inCart')} ({cartItem?.quantity})</>
                 ) : (
-                  <><ShoppingCart className="w-5 h-5" /> {tr('Add to Cart', 'Cart ထဲထည့်မည်')}</>
+                  <><ShoppingCart className="w-5 h-5" /> {t('shop.addToCart')}</>
                 )}
               </button>
 
@@ -277,18 +297,18 @@ export default function ProductDetailPage() {
               {alreadyInCart && (
                 <Link href="/cart" className="btn-secondary flex-1 text-center">
                   <ShoppingCart className="w-5 h-5" />
-                  {tr('View Cart', 'Cart ကြည့်မည်')}
+                  {t('shop.productDetail.viewCart')}
                 </Link>
               )}
 
               {/* Buy Now (Direct) */}
               {isLoggedIn === false ? (
                 <Link href={`/login?redirect=/shop/${params.id}`} className="btn-electric flex-1 text-center">
-                  <LogIn className="w-5 h-5" /> {tr('Login to Purchase', 'ဝယ်ယူရန် အကောင့်ဝင်ပါ')}
+                  <LogIn className="w-5 h-5" /> {t('shop.productDetail.loginToPurchase')}
                 </Link>
               ) : (
                 <button onClick={() => setShowPayment(true)} className="btn-electric flex-1">
-                  <Zap className="w-5 h-5" /> {tr('Buy Now', 'ယခုဝယ်မည်')}
+                  <Zap className="w-5 h-5" /> {t('shop.buyNow')}
                 </button>
               )}
             </div>
@@ -298,17 +318,17 @@ export default function ProductDetailPage() {
 
         {/* Payment Section */}
         {showPayment && (
-          <div className="scroll-fade scroll-visible game-card p-8 space-y-6">
+          <div className="scroll-fade scroll-visible game-card p-5 sm:p-8 space-y-6">
             <h2 className="text-xl font-bold text-white flex items-center gap-3">
               <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
                 <ShoppingBag className="w-5 h-5 text-purple-400" />
               </div>
-              {tr('Complete Payment', 'ငွေပေးချေမှု ပြီးစီးရန်')}
+              {t('shop.productDetail.completePayment')}
             </h2>
 
             <div>
-              <label className="input-label">{tr('Payment Method', 'ငွေပေးချေမှုနည်းလမ်း')}</label>
-              <div className="grid grid-cols-2 gap-3">
+              <label className="input-label">{t('order.paymentMethod')}</label>
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                 {[
                   { value: 'kpay', label: 'KBZ Pay' },
                   { value: 'wave', label: 'WaveMoney' },
@@ -318,7 +338,7 @@ export default function ProductDetailPage() {
                   <button
                     key={m.value}
                     onClick={() => setPaymentMethod(m.value)}
-                    className={`px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all duration-200 ${
+                    className={`px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold border-2 transition-all duration-200 ${
                       paymentMethod === m.value
                         ? 'bg-purple-500/10 border-purple-500 text-purple-400 shadow-glow-sm'
                         : 'bg-dark-900 border-dark-600 text-gray-400 hover:border-purple-500/50'
@@ -338,7 +358,7 @@ export default function ProductDetailPage() {
               return (
                 <div className="p-4 bg-purple-500/5 rounded-xl border border-purple-500/20">
                   <p className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wider">
-                    {tr('Send payment to', 'ငွေလွှဲရန်')}
+                    {t('shop.productDetail.sendPaymentTo')}
                   </p>
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
@@ -354,19 +374,16 @@ export default function ProductDetailPage() {
                         type="button"
                         onClick={() => {
                           navigator.clipboard.writeText(selectedAccount.accountNumber);
-                          toast.success(tr('Copied!', 'ကူးယူပြီး!'));
+                          toast.success(t('common.copied'));
                         }}
                         className="px-3 py-1.5 text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg transition-colors"
                       >
-                        {tr('Copy', 'ကူးယူမည်')}
+                        {t('common.copy')}
                       </button>
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    {tr(
-                      'Please transfer the exact amount and take a screenshot',
-                      'ကျေးဇူးပြု၍ ပမာဏအတိအကျလွှဲပြီး screenshot ရိုက်ပါ'
-                    )}
+                    {t('shop.productDetail.transferExactAmountScreenshot')}
                   </p>
                 </div>
               );
@@ -374,65 +391,65 @@ export default function ProductDetailPage() {
 
             {/* Coupon Code */}
             <div>
-              <label className="input-label">{tr('Coupon Code (Optional)', 'ကူပွန်ကုဒ် (ရွေးချယ်ခွင့်)')}</label>
+              <label className="input-label">{t('shop.productDetail.couponCodeOptional')}</label>
               {appliedCoupon ? (
                 <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
                   <Tag className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400 font-bold text-sm flex-1">{appliedCoupon} — {couponDiscount.toLocaleString()} MMK {tr('off', 'လျှော့')}</span>
-                  <button onClick={removeCoupon} className="text-xs text-red-400 hover:text-red-300 font-semibold">{tr('Remove', 'ဖယ်ရှားမည်')}</button>
+                  <span className="text-emerald-400 font-bold text-sm flex-1">{appliedCoupon} — {couponDiscount.toLocaleString()} MMK {t('shop.productDetail.off')}</span>
+                  <button onClick={removeCoupon} className="text-xs text-red-400 hover:text-red-300 font-semibold">{t('cart.remove')}</button>
                 </div>
               ) : (
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    placeholder={tr('Enter coupon code', 'ကူပွန်ကုဒ်ထည့်ပါ')}
+                    placeholder={t('shop.productDetail.enterCouponCode')}
                     className="input-field flex-1 uppercase"
                   />
                   <button
                     onClick={handleApplyCoupon}
                     disabled={!couponCode.trim() || couponValidating}
-                    className="px-5 py-2.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/30 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
+                    className="w-full sm:w-auto px-5 py-2.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/30 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
                   >
-                    {couponValidating ? <Loader2 className="w-4 h-4 animate-spin" /> : tr('Apply', 'အသုံးပြုမည်')}
+                    {couponValidating ? <Loader2 className="w-4 h-4 animate-spin" /> : t('cart.applyCoupon')}
                   </button>
                 </div>
               )}
             </div>
 
             <div>
-              <label className="input-label">{tr('Payment Screenshot', 'ငွေပေးချေမှု Screenshot')}</label>
+              <label className="input-label">{t('order.uploadScreenshot')}</label>
               <PaymentUpload onUpload={(file) => setPaymentFile(file)} expectedAmount={total} />
             </div>
 
             {/* Order Summary */}
             <div className="p-6 bg-dark-900 rounded-2xl border border-dark-600/50 space-y-3">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4">{tr('Order Summary', 'အော်ဒါအနှစ်ချုပ်')}</h3>
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4">{t('shop.productDetail.orderSummary')}</h3>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{tr('Product', 'ပစ္စည်း')}</span>
+                <span className="text-gray-500">{t('shop.productDetail.product')}</span>
                 <span className="text-white font-medium">{product.name}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{tr('Quantity', 'အရေအတွက်')}</span>
+                <span className="text-gray-500">{t('product.quantity')}</span>
                 <span className="text-white font-medium">{quantity}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{tr('Payment Method', 'ငွေပေးချေမှုနည်းလမ်း')}</span>
+                <span className="text-gray-500">{t('order.paymentMethod')}</span>
                 <span className="text-white font-medium capitalize">{paymentMethod}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{tr('Subtotal', 'စုစုပေါင်း')}</span>
+                <span className="text-gray-500">{t('cart.subtotal')}</span>
                 <span className="text-white font-medium">{subtotal.toLocaleString()} MMK</span>
               </div>
               {couponDiscount > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-emerald-400 flex items-center gap-1"><Tag className="w-3 h-3" /> {tr('Discount', 'လျှော့စျေး')}</span>
+                  <span className="text-emerald-400 flex items-center gap-1"><Tag className="w-3 h-3" /> {t('cart.discount')}</span>
                   <span className="text-emerald-400 font-medium">-{couponDiscount.toLocaleString()} MMK</span>
                 </div>
               )}
               <div className="flex justify-between text-base pt-3 border-t border-dark-600/50">
-                <span className="text-gray-300 font-semibold">{tr('Total', 'စုစုပေါင်း')}</span>
+                <span className="text-gray-300 font-semibold">{t('cart.total')}</span>
                 <span className="text-purple-400 font-black text-lg">{total.toLocaleString()} MMK</span>
               </div>
             </div>
@@ -443,9 +460,9 @@ export default function ProductDetailPage() {
               className="btn-electric w-full"
             >
               {submitting ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /> {tr('Processing...', 'လုပ်ဆောင်နေသည်...')}</>
+                <><Loader2 className="w-5 h-5 animate-spin" /> {t('shop.productDetail.processing')}</>
               ) : (
-                <><CheckCircle className="w-5 h-5" /> {tr('Place Order', 'အော်ဒါတင်မည်')} — {total.toLocaleString()} MMK</>
+                <><CheckCircle className="w-5 h-5" /> {t('shop.productDetail.placeOrder')} — {total.toLocaleString()} MMK</>
               )}
             </button>
           </div>

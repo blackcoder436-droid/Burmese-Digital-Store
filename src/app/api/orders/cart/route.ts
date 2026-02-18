@@ -16,6 +16,7 @@ import { saveToQuarantine } from '@/lib/quarantine';
 import { sendPaymentScreenshot, buildScreenshotCaption } from '@/lib/telegram';
 import path from 'path';
 import User from '@/models/User';
+import { createNotification, notifyAdmins } from '@/models/Notification';
 
 import {
   validateImageUpload,
@@ -47,13 +48,15 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
-    // Block unverified users from placing orders
-    const dbUser = await User.findById(authUser.userId).select('emailVerified').lean() as { emailVerified?: boolean } | null;
-    if (dbUser && !dbUser.emailVerified) {
-      return NextResponse.json(
-        { success: false, error: 'Please verify your email before placing orders. Check your inbox for the verification link.' },
-        { status: 403 }
-      );
+    const requireEmailVerification = process.env.REQUIRE_EMAIL_VERIFICATION_FOR_ORDERS === 'true';
+    if (requireEmailVerification) {
+      const dbUser = await User.findById(authUser.userId).select('emailVerified').lean() as { emailVerified?: boolean } | null;
+      if (dbUser && !dbUser.emailVerified) {
+        return NextResponse.json(
+          { success: false, error: 'Please verify your email before placing orders. Check your inbox for the verification link.' },
+          { status: 403 }
+        );
+      }
     }
 
     const formData = await request.formData();
@@ -290,6 +293,30 @@ export async function POST(request: NextRequest) {
         await recordCouponUsage(couponId, authUser.userId);
       } catch (e) {
         log.warn('Failed to record coupon usage', { error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+
+    const firstOrder = createdOrders[0];
+    if (firstOrder) {
+      try {
+        await createNotification({
+          user: authUser.userId,
+          type: firstOrder.status === 'verifying' ? 'order_verifying' : 'order_placed',
+          title: `${createdOrders.length} orders placed`,
+          message: `Your cart checkout created ${createdOrders.length} order(s).`,
+          orderId: firstOrder._id,
+        });
+
+        await notifyAdmins({
+          type: 'admin_new_order',
+          title: 'New cart checkout',
+          message: `${authUser.email} placed ${createdOrders.length} order(s), total ${totalAfterDiscount.toLocaleString()} MMK.`,
+          orderId: firstOrder._id,
+        });
+      } catch (notificationError: unknown) {
+        log.warn('Cart order notification creation failed (non-blocking)', {
+          error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+        });
       }
     }
 

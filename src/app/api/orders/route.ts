@@ -17,6 +17,7 @@ import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import { saveToQuarantine } from '@/lib/quarantine';
 import { sendPaymentScreenshot, buildScreenshotCaption } from '@/lib/telegram';
 import User from '@/models/User';
+import { createNotification, notifyAdmins } from '@/models/Notification';
 
 import {
   validateImageUpload,
@@ -74,10 +75,15 @@ export async function GET(request: NextRequest) {
       Order.countDocuments(query),
     ]);
 
+    const sanitizedOrders = orders.map((order: any) => {
+      const { ocrExtractedData, ocrVerified, transactionId, ...safeOrder } = order;
+      return safeOrder;
+    });
+
     return NextResponse.json({
       success: true,
       data: {
-        orders,
+        orders: sanitizedOrders,
         pagination: {
           page,
           limit,
@@ -111,13 +117,15 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
-    // Block unverified users from placing orders
-    const dbUser = await User.findById(authUser.userId).select('emailVerified').lean() as { emailVerified?: boolean } | null;
-    if (dbUser && !dbUser.emailVerified) {
-      return NextResponse.json(
-        { success: false, error: 'Please verify your email before placing orders. Check your inbox for the verification link.' },
-        { status: 403 }
-      );
+    const requireEmailVerification = process.env.REQUIRE_EMAIL_VERIFICATION_FOR_ORDERS === 'true';
+    if (requireEmailVerification) {
+      const dbUser = await User.findById(authUser.userId).select('emailVerified').lean() as { emailVerified?: boolean } | null;
+      if (dbUser && !dbUser.emailVerified) {
+        return NextResponse.json(
+          { success: false, error: 'Please verify your email before placing orders. Check your inbox for the verification link.' },
+          { status: 403 }
+        );
+      }
     }
 
     const formData = await request.formData();
@@ -367,6 +375,37 @@ export async function POST(request: NextRequest) {
     }
 
 
+
+    try {
+      const userNotificationType =
+        order.status === 'completed'
+          ? 'order_completed'
+          : order.status === 'verifying'
+            ? 'order_verifying'
+            : 'order_placed';
+
+      await createNotification({
+        user: authUser.userId,
+        type: userNotificationType,
+        title: order.status === 'completed' ? 'Order completed' : 'Order placed',
+        message:
+          order.status === 'completed'
+            ? `Your order ${order.orderNumber} was auto-completed and keys were delivered.`
+            : `Your order ${order.orderNumber} is now ${order.status}.`,
+        orderId: order._id,
+      });
+
+      await notifyAdmins({
+        type: 'admin_new_order',
+        title: 'New order received',
+        message: `Order ${order.orderNumber} from ${authUser.email} (${totalAmount.toLocaleString()} MMK).`,
+        orderId: order._id,
+      });
+    } catch (notificationError: unknown) {
+      log.warn('Order notification creation failed (non-blocking)', {
+        error: notificationError instanceof Error ? notificationError.message : String(notificationError),
+      });
+    }
 
     return NextResponse.json(
       {

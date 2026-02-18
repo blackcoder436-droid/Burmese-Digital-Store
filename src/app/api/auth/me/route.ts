@@ -30,6 +30,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expSec = typeof authUser.exp === 'number' ? authUser.exp : null;
+    const iatSec = typeof authUser.iat === 'number' ? authUser.iat : null;
+    const remainingSeconds = expSec !== null ? Math.max(0, expSec - nowSec) : null;
+
     return NextResponse.json({
       success: true,
       data: {
@@ -42,6 +47,11 @@ export async function GET(request: NextRequest) {
           balance: user.balance,
           avatar: user.avatar || null,
           createdAt: user.createdAt,
+        },
+        session: {
+          issuedAt: iatSec !== null ? new Date(iatSec * 1000).toISOString() : null,
+          expiresAt: expSec !== null ? new Date(expSec * 1000).toISOString() : null,
+          remainingSeconds,
         },
       },
     });

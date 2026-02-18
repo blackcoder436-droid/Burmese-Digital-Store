@@ -159,7 +159,7 @@ interface LiveServerHealth {
 }
 
 export default function VPNPage() {
-  const { tr } = useLanguage();
+  const { t, language } = useLanguage();
   const router = useRouter();
   const [activeDevice, setActiveDevice] = useState(1);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -255,7 +255,7 @@ export default function VPNPage() {
           onClick={() => router.push(`/vpn/order?devices=${activeDevice}&months=${p.months}`)}
           className={`w-full flex items-center justify-center gap-2 py-2.5 sm:py-3.5 rounded-lg text-sm sm:text-base font-semibold transition-all ${p.popular ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-[0_4px_20px_rgba(108,92,231,0.3)] hover:shadow-[0_8px_30px_rgba(108,92,231,0.4)] hover:-translate-y-0.5' : 'border border-purple-500/20 text-white hover:bg-purple-500/10 hover:border-purple-500 hover:-translate-y-0.5'}`}
         >
-          {tr('Buy Now', '\u101D\u101A\u103A\u101A\u1030\u1019\u100A\u103A')}
+          {t('vpn.landing.buyNow')}
         </button>
         </div>
       </div>
@@ -275,11 +275,11 @@ export default function VPNPage() {
       <div className="fixed -bottom-52 -left-52 w-[600px] h-[600px] rounded-full blur-[150px] opacity-[0.07] pointer-events-none z-0 bg-cyan-500" />
 
       {/* ======== HERO ======== */}
-      <section className="min-h-0 sm:min-h-[90vh] flex items-start sm:items-center pt-16 sm:pt-24 pb-8 sm:pb-12 relative z-[1]">
+      <section className="pt-10 sm:pt-12 pb-10 sm:pb-16 relative z-[1] overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 lg:gap-16 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 lg:gap-16 items-start">
             {/* Text */}
-            <div className="text-center lg:text-left">
+            <div className="text-center lg:text-left relative z-10">
               <div className="vpn-fade inline-flex items-center gap-2 px-3 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-xs sm:text-sm text-purple-300 mb-4 sm:mb-6">
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                 All servers online
@@ -292,20 +292,17 @@ export default function VPNPage() {
               </h1>
 
               <p className="vpn-fade text-sm sm:text-lg text-gray-400 max-w-xl mb-6 sm:mb-8 leading-relaxed mx-auto lg:mx-0">
-                {tr(
-                  'The best VPN service for Myanmar. Singapore & US Servers, Unlimited Data, Auto Key Generation via Telegram Bot \u2014 get your VPN Key instantly.',
-                  '\u1019\u103C\u1014\u103A\u1019\u102C\u1014\u102D\u102F\u1004\u103A\u1004\u1036\u1021\u1010\u103D\u1000\u103A \u1021\u1000\u1031\u102C\u1004\u103A\u1038\u1006\u102F\u1036\u1038 VPN Service\u104B Singapore & US Servers, Unlimited Data, Telegram Bot \u1016\u103C\u1004\u103A\u1037 Auto Key Generation \u1005\u1014\u1005\u103A\u1016\u103C\u1004\u103A\u1037 \u1001\u103B\u1000\u103A\u1001\u103B\u1004\u103A\u1038 VPN Key \u101B\u101A\u1030\u1014\u102D\u102F\u1004\u103A\u1015\u102B\u101E\u100A\u103A\u104B',
-                )}
+                {t('vpn.landing.heroDescription')}
               </p>
 
               <div className="vpn-fade flex flex-col sm:flex-row gap-2.5 justify-center lg:justify-start mb-6 sm:mb-10">
                 <a href="https://t.me/BurmeseDigitalStore_bot" target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold text-white bg-gradient-to-r from-purple-600 to-cyan-500 shadow-[0_4px_20px_rgba(108,92,231,0.3)] hover:shadow-[0_8px_30px_rgba(108,92,231,0.4)] hover:-translate-y-0.5 transition-all">
-                  {tr('\uD83E\uDD16 Buy via Telegram Bot', '\uD83E\uDD16 Telegram Bot \u1016\u103C\u1004\u103A\u1037 \u101D\u101A\u103A\u101A\u1030\u101B\u1014\u103A')}
+                  {t('vpn.landing.buyViaTelegramBot')}
                 </a>
                 <a href="#pricing"
                   className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold text-white border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500 hover:-translate-y-0.5 transition-all">
-                  {tr('\uD83D\uDCB0 View Pricing', '\uD83D\uDCB0 \u1005\u103B\u1031\u1038\u1014\u103E\u102F\u1014\u103A\u1038\u1019\u103B\u102C\u1038 \u1000\u103C\u100A\u103A\u1037\u101B\u1014\u103A')}
+                  {t('vpn.landing.viewPricing')}
                 </a>
               </div>
 
@@ -326,23 +323,23 @@ export default function VPNPage() {
               </div>
             </div>
 
-            {/* Globe visual */}
-            <div className="vpn-fade hidden md:flex justify-center items-center lg:order-last">
-              <div className="relative w-64 h-64 lg:w-96 lg:h-96">
-                <div className="absolute inset-0 rounded-full border border-purple-500/15 animate-[vpn-float_6s_ease-in-out_infinite]"
-                  style={{ background: 'radial-gradient(circle at 30% 30%, rgba(108,92,231,0.2), transparent 60%), radial-gradient(circle at 70% 70%, rgba(0,206,201,0.15), transparent 60%)', boxShadow: '0 0 40px rgba(108,92,231,0.15)' }}
-                />
-                {/* Rings */}
-                <div className="absolute -inset-[10%] rounded-full border border-purple-500/10 animate-[vpn-spin_20s_linear_infinite]" />
-                <div className="absolute -inset-[20%] rounded-full border border-purple-500/10 animate-[vpn-spin_30s_linear_infinite_reverse]" />
-                {/* Nodes */}
-                <div className="absolute w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_20px_rgba(108,92,231,0.5)] animate-[vpn-pulse-node_3s_ease-in-out_infinite] top-[15%] left-[20%]" />
-                <div className="absolute w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_20px_rgba(108,92,231,0.5)] animate-[vpn-pulse-node_3s_ease-in-out_infinite] top-[30%] right-[10%]" style={{ animationDelay: '0.5s' }} />
-                <div className="absolute w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_20px_rgba(108,92,231,0.5)] animate-[vpn-pulse-node_3s_ease-in-out_infinite] bottom-[25%] left-[15%]" style={{ animationDelay: '1s' }} />
-                <div className="absolute w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(0,206,201,0.5)] animate-[vpn-pulse-node_3s_ease-in-out_infinite] bottom-[10%] right-[25%]" style={{ animationDelay: '1.5s' }} />
-                <div className="absolute w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(0,206,201,0.5)] animate-[vpn-pulse-node_3s_ease-in-out_infinite] top-[50%] left-[50%]" style={{ animationDelay: '0.8s' }} />
-              </div>
-            </div>
+          </div>
+        </div>
+
+        {/* Globe visual (decorative only, removed from layout flow) */}
+        <div className="vpn-fade pointer-events-none hidden lg:flex absolute right-[8%] top-1/2 -translate-y-1/2 z-0">
+          <div className="relative w-80 h-80 xl:w-96 xl:h-96 opacity-90">
+            <div
+              className="absolute inset-0 rounded-full border border-purple-500/15 animate-[vpn-float_6s_ease-in-out_infinite]"
+              style={{ background: 'radial-gradient(circle at 30% 30%, rgba(108,92,231,0.2), transparent 60%), radial-gradient(circle at 70% 70%, rgba(0,206,201,0.15), transparent 60%)', boxShadow: '0 0 40px rgba(108,92,231,0.15)' }}
+            />
+            <div className="absolute -inset-[10%] rounded-full border border-purple-500/10 animate-[vpn-spin_20s_linear_infinite]" />
+            <div className="absolute -inset-[20%] rounded-full border border-purple-500/10 animate-[vpn-spin_30s_linear_infinite_reverse]" />
+            <div className="absolute w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_20px_rgba(108,92,231,0.5)] animate-[vpn-pulse-node_3s_ease-in-out_infinite] top-[15%] left-[20%]" />
+            <div className="absolute w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_20px_rgba(108,92,231,0.5)] animate-[vpn-pulse-node_3s_ease-in-out_infinite] top-[30%] right-[10%]" style={{ animationDelay: '0.5s' }} />
+            <div className="absolute w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_20px_rgba(108,92,231,0.5)] animate-[vpn-pulse-node_3s_ease-in-out_infinite] bottom-[25%] left-[15%]" style={{ animationDelay: '1s' }} />
+            <div className="absolute w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(0,206,201,0.5)] animate-[vpn-pulse-node_3s_ease-in-out_infinite] bottom-[10%] right-[25%]" style={{ animationDelay: '1.5s' }} />
+            <div className="absolute w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_20px_rgba(0,206,201,0.5)] animate-[vpn-pulse-node_3s_ease-in-out_infinite] top-[50%] left-[50%]" style={{ animationDelay: '0.8s' }} />
           </div>
         </div>
       </section>
@@ -353,9 +350,9 @@ export default function VPNPage() {
           <div className="vpn-fade text-center mb-8 sm:mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\u2728'} Features</div>
             <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight mb-3 sm:mb-4">
-              {tr('Why Choose Burmese Digital Store?', '\u1018\u102C\u1000\u103C\u1031\u102C\u1004\u103A\u1037 Burmese Digital Store \u1000\u102D\u102F \u101B\u103D\u1031\u1038\u1001\u103B\u101A\u103A\u101E\u1004\u103A\u1037\u101E\u101C\u1032?')}
+              {t('vpn.landing.whyChooseTitle')}
             </h2>
-            <p className="text-gray-400 max-w-xl mx-auto text-sm sm:text-base">{tr('We provide the best VPN experience', '\u1021\u1000\u1031\u102C\u1004\u103A\u1038\u1006\u102F\u1036\u1038 VPN \u1021\u1010\u103D\u1031\u1037\u1021\u1000\u103C\u102F\u1036\u1000\u102D\u102F \u1015\u1031\u1038\u1005\u103D\u1019\u103A\u1038\u1015\u102B\u101E\u100A\u103A')}</p>
+            <p className="text-gray-400 max-w-xl mx-auto text-sm sm:text-base">{t('vpn.landing.whyChooseSubtitle')}</p>
           </div>
           {/* Mobile: carousel */}
           <MobileCarousel className="sm:hidden -mx-4 px-4">
@@ -363,8 +360,8 @@ export default function VPNPage() {
               <div key={i} className="group bg-[#12122a] border border-purple-500/15 rounded-2xl p-5 relative overflow-hidden h-full">
                 <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-purple-600 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center text-2xl mb-4">{f.icon}</div>
-                <h3 className="text-base font-bold text-white mb-2">{tr(f.titleEn, f.titleMy)}</h3>
-                <p className="text-sm text-gray-400 leading-relaxed">{tr(f.descEn, f.descMy)}</p>
+                <h3 className="text-base font-bold text-white mb-2">{language === 'en' ? f.titleEn : f.titleMy}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{language === 'en' ? f.descEn : f.descMy}</p>
               </div>
             ))}
           </MobileCarousel>
@@ -375,8 +372,8 @@ export default function VPNPage() {
                 style={{ transitionDelay: `${(i % 3) * 0.1}s` }}>
                 <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-purple-600 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="w-14 h-14 bg-purple-500/10 rounded-[14px] flex items-center justify-center text-2xl mb-5">{f.icon}</div>
-                <h3 className="text-lg font-bold text-white mb-3">{tr(f.titleEn, f.titleMy)}</h3>
-                <p className="text-sm text-gray-400 leading-relaxed">{tr(f.descEn, f.descMy)}</p>
+                <h3 className="text-lg font-bold text-white mb-3">{language === 'en' ? f.titleEn : f.titleMy}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{language === 'en' ? f.descEn : f.descMy}</p>
               </div>
             ))}
           </div>
@@ -389,7 +386,7 @@ export default function VPNPage() {
           <div className="vpn-fade text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\uD83C\uDF0D'} Servers</div>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">Global Server Locations</h2>
-            <p className="text-gray-400 max-w-xl mx-auto">{tr('Select from fast and stable servers', '\u1019\u103C\u1014\u103A\u1006\u1014\u103A\u1015\u103C\u102E\u1038 \u1010\u100A\u103A\u1004\u103C\u102D\u1019\u103A\u101E\u1031\u102C Server \u1019\u103B\u102C\u1038\u1000\u102D\u102F \u101B\u103D\u1031\u1038\u1001\u103B\u101A\u103A\u1014\u102D\u102F\u1004\u103A\u1015\u102B\u101E\u100A\u103A')}</p>
+            <p className="text-gray-400 max-w-xl mx-auto">{t('vpn.landing.selectFastStableServers')}</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
             {liveServers.map((s, i) => (
@@ -416,9 +413,9 @@ export default function VPNPage() {
           <div className="vpn-fade text-center mb-12">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\uD83D\uDC8E'} Pricing</div>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">
-              {tr('Affordable Pricing', '\u1010\u1010\u103A\u1014\u102D\u102F\u1004\u103A\u101E\u1031\u102C \u1005\u103B\u1031\u1038\u1014\u103E\u102F\u1014\u103A\u1038\u1019\u103B\u102C\u1038')}
+              {t('vpn.landing.affordablePricing')}
             </h2>
-            <p className="text-gray-400 max-w-xl mx-auto">{tr('The longer you buy, the cheaper it gets', '\u1000\u102C\u101C \u1000\u103C\u102C\u1000\u103C\u102C \u101D\u101A\u103A\u101C\u1031 \u1005\u103B\u1031\u1038\u101E\u1000\u103A\u101E\u102C\u101C\u1031')}</p>
+            <p className="text-gray-400 max-w-xl mx-auto">{t('vpn.landing.longerCheaper')}</p>
           </div>
 
           {/* Device tabs */}
@@ -451,8 +448,8 @@ export default function VPNPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="vpn-fade text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\uD83D\uDCCB'} How It Works</div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">{tr('How to Buy a VPN Key', 'VPN Key \u101D\u101A\u103A\u101A\u1030\u1014\u100A\u103A\u1038')}</h2>
-            <p className="text-gray-400 max-w-xl mx-auto">{tr('Get your VPN Key in 4 easy steps', '\u101C\u103D\u101A\u103A\u1000\u1030\u101E\u1031\u102C \u1021\u1006\u1004\u103A\u1037 \u1044 \u1006\u1004\u103A\u1037\u1016\u103C\u1004\u103A\u1037 VPN Key \u101B\u101A\u1030\u1015\u102B')}</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">{t('vpn.landing.howToBuyTitle')}</h2>
+            <p className="text-gray-400 max-w-xl mx-auto">{t('vpn.landing.howToBuySubtitle')}</p>
           </div>
           <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Connector line */}
@@ -462,8 +459,8 @@ export default function VPNPage() {
                 <div className="w-20 h-20 mx-auto mb-5 rounded-full border-2 border-purple-500/15 flex items-center justify-center bg-[#12122a] hover:border-purple-500 hover:shadow-[0_0_40px_rgba(108,92,231,0.15)] transition-all">
                   <span className="text-3xl font-extrabold bg-gradient-to-r from-purple-500 to-cyan-400 bg-clip-text text-transparent">{i + 1}</span>
                 </div>
-                <h3 className="text-base font-bold text-white mb-2">{tr(s.titleEn, s.titleMy)}</h3>
-                <p className="text-sm text-gray-400">{tr(s.descEn, s.descMy)}</p>
+                <h3 className="text-base font-bold text-white mb-2">{language === 'en' ? s.titleEn : s.titleMy}</h3>
+                <p className="text-sm text-gray-400">{language === 'en' ? s.descEn : s.descMy}</p>
               </div>
             ))}
           </div>
@@ -475,8 +472,8 @@ export default function VPNPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="vpn-fade text-center mb-12">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\uD83D\uDCF2'} Compatible Apps</div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">{tr('Compatible Apps', '\u1021\u101E\u102F\u1036\u1038\u1015\u103C\u102F\u1014\u102D\u102F\u1004\u103A\u101E\u1031\u102C Apps \u1019\u103B\u102C\u1038')}</h2>
-            <p className="text-gray-400 max-w-xl mx-auto">{tr('Just copy the VPN Key and import it in the app', 'VPN Key \u1000\u102D\u102F Copy \u101C\u102F\u1015\u103A\u1015\u103C\u102E\u1038 App \u1019\u103E\u102C Import \u101C\u102F\u1015\u103A\u101B\u102F\u1036\u101E\u102C \u1016\u103C\u1005\u103A\u1015\u102B\u101E\u100A\u103A')}</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">{t('vpn.landing.compatibleAppsTitle')}</h2>
+            <p className="text-gray-400 max-w-xl mx-auto">{t('vpn.landing.compatibleAppsSubtitle')}</p>
           </div>
 
           {/* Store tabs */}
@@ -516,18 +513,18 @@ export default function VPNPage() {
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="vpn-fade text-center mb-12">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\u2753'} FAQ</div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">{tr('Frequently Asked Questions', '\u1019\u1031\u1038\u101C\u1031\u1037\u101B\u103E\u102D\u101E\u1031\u102C \u1019\u1031\u1038\u1001\u103D\u1014\u103A\u1038\u1019\u103B\u102C\u1038')}</h2>
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">{t('vpn.landing.faqTitle')}</h2>
           </div>
           <div className="space-y-3">
             {faqData.map((faq, i) => (
               <div key={i} className={`bg-[#12122a] border rounded-2xl overflow-hidden transition-all ${openFaq === i ? 'border-purple-500' : 'border-purple-500/15 hover:border-purple-500'}`}>
                 <button onClick={() => setOpenFaq(openFaq === i ? null : i)}
                   className="w-full flex items-center justify-between px-6 py-5 text-left font-semibold text-white hover:text-purple-300 transition-colors">
-                  <span>{tr(faq.qEn, faq.qMy)}</span>
+                  <span>{language === 'en' ? faq.qEn : faq.qMy}</span>
                   <span className={`text-purple-300 text-lg transition-transform duration-300 ${openFaq === i ? 'rotate-45' : ''}`}>+</span>
                 </button>
                 <div className={`overflow-hidden transition-all duration-300 ${openFaq === i ? 'max-h-60' : 'max-h-0'}`}>
-                  <p className="px-6 pb-5 text-sm text-gray-400 leading-relaxed">{tr(faq.aEn, faq.aMy)}</p>
+                  <p className="px-6 pb-5 text-sm text-gray-400 leading-relaxed">{language === 'en' ? faq.aEn : faq.aMy}</p>
                 </div>
               </div>
             ))}
@@ -540,18 +537,18 @@ export default function VPNPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="vpn-fade bg-[#12122a] border border-purple-500/15 rounded-2xl p-12 sm:p-20 text-center relative overflow-hidden">
             <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-purple-600 to-cyan-400" />
-            <h2 className="text-3xl sm:text-4xl font-extrabold mb-4">{tr('Get Your VPN Key Now', '\u1021\u1001\u102F VPN Key \u101B\u101A\u1030\u101C\u102D\u102F\u1000\u103A\u1015\u102B')}</h2>
+            <h2 className="text-3xl sm:text-4xl font-extrabold mb-4">{t('vpn.landing.getVpnKeyNow')}</h2>
             <p className="text-gray-400 max-w-lg mx-auto mb-8">
-              {tr('Get your VPN key instantly via Telegram Bot. Free test key available on Telegram!', 'Telegram Bot \u1016\u103C\u1004\u103A\u1037 \u1001\u103B\u1000\u103A\u1001\u103B\u1004\u103A\u1038 VPN Key \u101B\u101A\u1030\u1014\u102D\u102F\u1004\u103A\u1015\u102B\u101E\u100A\u103A\u104B Telegram \u1019\u103E Free Test Key \u101B\u101A\u1030\u1014\u102D\u102F\u1004\u103A\u1015\u102B\u101E\u100A\u103A!')}
+              {t('vpn.landing.getVpnKeyNowSubtitle')}
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <a href="https://t.me/BurmeseDigitalStore_bot" target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-lg font-semibold text-white bg-gradient-to-r from-purple-600 to-cyan-500 shadow-[0_4px_20px_rgba(108,92,231,0.3)] hover:shadow-[0_8px_30px_rgba(108,92,231,0.4)] hover:-translate-y-0.5 transition-all">
-                {tr('\uD83E\uDD16 Open Telegram Bot', '\uD83E\uDD16 Telegram Bot \u1016\u103D\u1004\u103A\u1037\u101B\u1014\u103A')}
+                {t('vpn.landing.openTelegramBot')}
               </a>
               <a href="https://t.me/BurmeseDigitalStore" target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-lg font-semibold text-white border border-purple-500/20 hover:bg-purple-500/10 hover:border-purple-500 hover:-translate-y-0.5 transition-all">
-                {tr('\uD83D\uDCE2 Join Channel', '\uD83D\uDCE2 Channel Join \u101B\u1014\u103A')}
+                {t('vpn.landing.joinChannel')}
               </a>
             </div>
           </div>

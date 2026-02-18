@@ -13,7 +13,7 @@ import {
 import { useLanguage } from '@/lib/language';
 
 export default function ExportPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [exporting, setExporting] = useState<string | null>(null);
   const [lastExport, setLastExport] = useState<string | null>(null);
 
@@ -48,11 +48,8 @@ export default function ExportPage() {
       color: 'from-emerald-500 to-green-500',
       bg: 'bg-emerald-500/20',
       text: 'text-emerald-400',
-      title: tr('Orders', 'အော်ဒါများ'),
-      desc: tr(
-        'Export all orders with user info, product, amount, status, and dates.',
-        'အော်ဒါအားလုံး — အသုံးပြုသူ၊ ပစ္စည်း၊ ပမာဏ၊ အခြေအနေ၊ ရက်စွဲ'
-      ),
+      title: t('admin.exportData.ordersTitle'),
+      desc: t('admin.exportData.ordersDesc'),
       fields: 'ID, User, Email, Product, Category, Qty, Amount, Payment, Status, OCR, Date',
     },
     {
@@ -61,11 +58,8 @@ export default function ExportPage() {
       color: 'from-cyan-500 to-blue-500',
       bg: 'bg-cyan-500/20',
       text: 'text-cyan-400',
-      title: tr('Users', 'အသုံးပြုသူများ'),
-      desc: tr(
-        'Export all users with name, email, role, balance, and join date.',
-        'အသုံးပြုသူအားလုံး — အမည်၊ အီးမေးလ်၊ ရာထူး၊ လက်ကျန်၊ ရက်စွဲ'
-      ),
+      title: t('admin.exportData.usersTitle'),
+      desc: t('admin.exportData.usersDesc'),
       fields: 'ID, Name, Email, Role, Balance, Joined',
     },
     {
@@ -74,11 +68,8 @@ export default function ExportPage() {
       color: 'from-purple-500 to-violet-500',
       bg: 'bg-purple-500/20',
       text: 'text-purple-400',
-      title: tr('Products', 'ပစ္စည်းများ'),
-      desc: tr(
-        'Export all products with name, category, price, stock, and status.',
-        'ပစ္စည်းအားလုံး — အမည်၊ အမျိုးအစား၊ စျေးနှုန်း၊ stock၊ အခြေအနေ'
-      ),
+      title: t('admin.exportData.productsTitle'),
+      desc: t('admin.exportData.productsDesc'),
       fields: 'ID, Name, Category, Price, Stock, Total Keys, Status, Created',
     },
   ];
@@ -90,8 +81,8 @@ export default function ExportPage() {
           <Download className="w-5 h-5 text-purple-400" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-white">{tr('Export Data', 'Data Export')}</h1>
-          <p className="text-xs text-gray-500">{tr('Download data as CSV files', 'CSV ဖိုင်အဖြစ် ဒေတာဒေါင်းလုဒ်လုပ်ပါ')}</p>
+          <h1 className="text-xl font-bold text-white">{t('admin.exportData.title')}</h1>
+          <p className="text-xs text-gray-500">{t('admin.exportData.subtitle')}</p>
         </div>
       </div>
 
@@ -133,17 +124,17 @@ export default function ExportPage() {
                   {isExporting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      {tr('Exporting...', 'ထုတ်နေသည်...')}
+                      {t('admin.exportData.exporting')}
                     </>
                   ) : justExported ? (
                     <>
                       <CheckCircle className="w-4 h-4" />
-                      {tr('Downloaded!', 'ဒေါင်းပြီး!')}
+                      {t('admin.exportData.downloaded')}
                     </>
                   ) : (
                     <>
                       <Download className="w-4 h-4" />
-                      {tr('Download CSV', 'CSV ဒေါင်းလုဒ်')}
+                      {t('admin.exportData.downloadCsv')}
                     </>
                   )}
                 </button>

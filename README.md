@@ -58,6 +58,20 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
+### 3.1 Pre-commit Lint Hook (Husky + lint-staged)
+
+This project runs lint checks before each commit on staged JS/TS files.
+
+- Installed tools: `husky`, `lint-staged`
+- Hook file: `.husky/pre-commit`
+- Command run on staged files: `eslint --max-warnings=0 --fix`
+
+If hooks are missing after a fresh clone, run:
+
+```bash
+npm run prepare
+```
+
 ### 4. Create Admin Account
 
 1. Register a normal account at `/register`

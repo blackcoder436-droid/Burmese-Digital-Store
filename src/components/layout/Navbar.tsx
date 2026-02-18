@@ -10,12 +10,14 @@ import {
   ShoppingBag,
   ShoppingCart,
   User,
+  Bell,
   ChevronDown,
   LogOut,
   LayoutDashboard,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 import { useCart } from '@/lib/cart';
+import NotificationBell from '@/components/NotificationBell';
 
 interface AuthUser {
   id: string;
@@ -25,11 +27,19 @@ interface AuthUser {
   avatar: string | null;
 }
 
+interface SessionInfo {
+  issuedAt: string | null;
+  expiresAt: string | null;
+  remainingSeconds: number | null;
+}
+
 export default function Navbar() {
-  const { lang, setLang, tr } = useLanguage();
+  const { lang, setLang, t } = useLanguage();
   const { getItemCount } = useCart();
   const [isOpen, setIsOpen] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -67,14 +77,50 @@ export default function Navbar() {
     };
   }, []);
 
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [user?.avatar]);
+
+  useEffect(() => {
+    if (!sessionInfo || sessionInfo.remainingSeconds === null) return;
+    const timer = setInterval(() => {
+      setSessionInfo((prev) => {
+        if (!prev || prev.remainingSeconds === null) return prev;
+        return { ...prev, remainingSeconds: Math.max(0, prev.remainingSeconds - 60) };
+      });
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, [sessionInfo?.remainingSeconds]);
+
+  function formatRemainingTime(seconds: number | null): string {
+    if (seconds === null) return t('account.sessionUnknown');
+    if (seconds <= 0) return t('account.sessionExpired');
+
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  }
+
   async function fetchUser() {
     try {
       const res = await fetch('/api/auth/me');
       const data = await res.json();
-      if (data.success) setUser(data.data.user);
-      else setUser(null);
+      if (data.success) {
+        setUser(data.data.user);
+        setSessionInfo(data.data.session || null);
+      }
+      else {
+        setUser(null);
+        setSessionInfo(null);
+      }
     } catch {
       setUser(null);
+      setSessionInfo(null);
     }
   }
 
@@ -86,10 +132,10 @@ export default function Navbar() {
   }
 
   const navLinks = [
-    { href: '/', label: tr('Home', 'မူလ') },
-    { href: '/shop', label: tr('Shop', 'ဆိုင်') },
-    { href: '/vpn', label: 'VPN' },
-    { href: '/contact', label: tr('Contact', 'ဆက်သွယ်ရန်') },
+    { href: '/', label: t('nav.home') },
+    { href: '/shop', label: t('nav.shop') },
+    { href: '/vpn', label: t('nav.vpn') },
+    { href: '/contact', label: t('nav.contact') },
   ];
 
   return (
@@ -99,7 +145,7 @@ export default function Navbar() {
       href="#main-content"
       className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:px-4 focus:py-2 focus:bg-purple-600 focus:text-white focus:rounded-lg focus:text-sm focus:font-semibold"
     >
-      Skip to main content
+      {t('nav.skipToContent')}
     </a>
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
@@ -108,7 +154,7 @@ export default function Navbar() {
           : 'bg-transparent'
       }`}
       role="navigation"
-      aria-label={tr('Main navigation', 'အဓိက navigation')}
+      aria-label={t('nav.mainNavigation')}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-18">
@@ -154,7 +200,7 @@ export default function Navbar() {
               <Link
                 href="/cart"
                 className="relative p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all animate-slide-up"
-                aria-label={tr(`Shopping cart, ${getItemCount()} items`, `စျေးခြင်းတောင်း၊ ${getItemCount()} ခု`)}
+                aria-label={lang === 'my' ? `စျေးခြင်းတောင်း၊ ${getItemCount()} ခု` : `Shopping cart, ${getItemCount()} items`}
               >
                 <ShoppingCart className="w-5 h-5" />
                 <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-purple-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-glow-sm">
@@ -163,10 +209,12 @@ export default function Navbar() {
               </Link>
             )}
 
+            {user && <NotificationBell />}
+
             <button
               onClick={() => setLang(lang === 'my' ? 'en' : 'my')}
               className="hidden md:flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-dark-800/80 border border-dark-600/50 text-xs font-medium text-gray-300 hover:border-purple-500/50 hover:text-white transition-all"
-              aria-label={lang === 'my' ? 'Switch to English' : 'မြန်မာဘာသာသို့ ပြောင်းရန်'}
+              aria-label={lang === 'my' ? t('nav.switchToEnglish') : t('nav.switchLanguage')}
             >
               {lang === 'my' ? (
                 <svg className="w-5 h-4 rounded-sm overflow-hidden" viewBox="0 0 60 40" aria-hidden="true">
@@ -193,15 +241,16 @@ export default function Navbar() {
                   onClick={() => setShowDropdown(!showDropdown)}
                   aria-expanded={showDropdown}
                   aria-haspopup="true"
-                  aria-label={tr('User menu', 'အသုံးပြုသူ menu')}
-                  className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg bg-dark-800/80 border border-dark-600/50 hover:border-purple-500/50 hover:shadow-glow-sm transition-all duration-200"
+                  aria-label={t('nav.userMenu')}
+                  className="h-10 min-w-10 flex items-center justify-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg bg-dark-800/80 border border-dark-600/50 hover:border-purple-500/50 hover:shadow-glow-sm transition-all duration-200"
                 >
-                  <div className="w-7 h-7 rounded-lg overflow-hidden bg-gradient-to-br from-purple-400 to-cyan-500 flex items-center justify-center">
-                    {user.avatar ? (
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg overflow-hidden bg-gradient-to-br from-purple-400 to-cyan-500 flex items-center justify-center">
+                    {user.avatar && !avatarLoadFailed ? (
                       <img
                         src={user.avatar}
                         alt={user.name}
                         className="w-full h-full object-cover"
+                        onError={() => setAvatarLoadFailed(true)}
                       />
                     ) : (
                       <span className="text-xs font-bold text-white">
@@ -217,6 +266,10 @@ export default function Navbar() {
                     <div className="px-4 py-4 border-b border-white/5 bg-gradient-to-r from-purple-500/10 to-transparent">
                       <p className="text-sm font-semibold text-white truncate">{user.name}</p>
                       <p className="text-xs text-gray-500 truncate mt-1">{user.email}</p>
+                      <p className="text-[11px] text-gray-400 mt-1.5 flex items-center gap-1">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-400" />
+                        {t('account.session')}: {formatRemainingTime(sessionInfo?.remainingSeconds ?? null)}
+                      </p>
                     </div>
                     <div className="p-2">
                       <Link
@@ -225,7 +278,15 @@ export default function Navbar() {
                         onClick={() => setShowDropdown(false)}
                       >
                         <User className="w-4 h-4" />
-                        {tr('My Account', 'ကျွန်ုပ်အကောင့်')}
+                        {t('nav.myAccount')}
+                      </Link>
+                      <Link
+                        href="/account/notifications"
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                        onClick={() => setShowDropdown(false)}
+                      >
+                        <Bell className="w-4 h-4" />
+                        {t('account.notifications')}
                       </Link>
                       <Link
                         href="/account/orders"
@@ -233,7 +294,7 @@ export default function Navbar() {
                         onClick={() => setShowDropdown(false)}
                       >
                         <ShoppingBag className="w-4 h-4" />
-                        {tr('My Orders', 'ကျွန်ုပ်အော်ဒါများ')}
+                        {t('nav.myOrders')}
                       </Link>
                       {user.role === 'admin' && (
                         <Link
@@ -242,7 +303,7 @@ export default function Navbar() {
                           onClick={() => setShowDropdown(false)}
                         >
                           <LayoutDashboard className="w-4 h-4" />
-                          {tr('Admin Panel', 'အက်ဒမင်')}
+                          {t('nav.adminPanel')}
                         </Link>
                       )}
                     </div>
@@ -252,7 +313,7 @@ export default function Navbar() {
                         className="flex items-center gap-3 px-3 py-2.5 w-full text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all"
                       >
                         <LogOut className="w-4 h-4" />
-                        {tr('Log Out', 'ထွက်မည်')}
+                        {t('nav.logOut')}
                       </button>
                     </div>
                   </div>
@@ -265,7 +326,7 @@ export default function Navbar() {
                   href="/login"
                   className="hidden sm:block text-sm font-medium text-gray-400 hover:text-white px-4 py-2.5 transition-colors"
                 >
-                  {tr('Sign In', 'ဝင်မည်')}
+                    {t('nav.signIn')}
                 </Link>
               </div>
             )}
@@ -275,7 +336,7 @@ export default function Navbar() {
               onClick={() => setIsOpen(!isOpen)}
               aria-expanded={isOpen}
               aria-controls="mobile-menu"
-              aria-label={isOpen ? tr('Close menu', 'Menu ပိတ်ရန်') : tr('Open menu', 'Menu ဖွင့်ရန်')}
+              aria-label={isOpen ? t('nav.closeMenu') : t('nav.openMenu')}
               className="md:hidden p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all"
             >
               {isOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
@@ -339,7 +400,19 @@ export default function Navbar() {
                   }`}
                 >
                   <User className="w-4 h-4" />
-                  {tr('Profile', 'ပရိုဖိုင်')}
+                  {t('nav.profile')}
+                </Link>
+                <Link
+                  href="/account/notifications"
+                  onClick={() => setIsOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
+                    pathname === '/account/notifications'
+                      ? 'text-purple-400 bg-purple-500/10'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <Bell className="w-4 h-4" />
+                  {t('account.notifications')}
                 </Link>
                 <Link
                   href="/account/orders"
@@ -351,7 +424,7 @@ export default function Navbar() {
                   }`}
                 >
                   <ShoppingBag className="w-4 h-4" />
-                  {tr('My Orders', 'ကျွန်ုပ်အော်ဒါများ')}
+                  {t('nav.myOrders')}
                 </Link>
                 {user.role === 'admin' && (
                   <Link
@@ -360,7 +433,7 @@ export default function Navbar() {
                     className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition-all"
                   >
                     <LayoutDashboard className="w-4 h-4" />
-                    {tr('Admin Panel', 'အက်ဒမင်')}
+                    {t('nav.adminPanel')}
                   </Link>
                 )}
                 <button
@@ -368,7 +441,7 @@ export default function Navbar() {
                   className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-sm font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
                 >
                   <LogOut className="w-4 h-4" />
-                  {tr('Log Out', 'ထွက်မည်')}
+                  {t('nav.logOut')}
                 </button>
               </div>
             ) : (
@@ -378,7 +451,7 @@ export default function Navbar() {
                   onClick={() => setIsOpen(false)}
                   className="block text-center px-4 py-3 text-gray-400 hover:text-white rounded-xl transition-colors"
                 >
-                  {tr('Sign In', 'ဝင်မည်')}
+                  {t('nav.signIn')}
                 </Link>
               </div>
             )}

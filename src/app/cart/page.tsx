@@ -25,7 +25,7 @@ import { useScrollFade } from '@/hooks/useScrollFade';
 import toast from 'react-hot-toast';
 
 export default function CartPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const {
     items,
     removeItem,
@@ -77,14 +77,14 @@ export default function CartPage() {
       if (data.success) {
         setCouponDiscount(data.data.discountAmount);
         setAppliedCoupon(couponCode.trim().toUpperCase());
-        toast.success(tr('Coupon applied!', 'ကူပွန်အသုံးပြုပြီးပါပြီ!'));
+        toast.success(t('shop.productDetail.couponApplied'));
       } else {
-        toast.error(data.error || tr('Invalid coupon', 'ကူပွန်မမှန်ကန်ပါ'));
+        toast.error(data.error || t('shop.productDetail.invalidCoupon'));
         setCouponDiscount(0);
         setAppliedCoupon('');
       }
     } catch {
-      toast.error(tr('Failed to validate coupon', 'ကူပွန်စစ်ဆေးခြင်း မအောင်မြင်ပါ'));
+      toast.error(t('shop.productDetail.failedValidateCoupon'));
     } finally {
       setCouponValidating(false);
     }
@@ -115,7 +115,7 @@ export default function CartPage() {
       const res = await fetch('/api/orders/cart', { method: 'POST', body: formData });
 
       if (res.status === 401) {
-        toast.error(tr('Please login to place an order', 'အော်ဒါတင်ရန် အကောင့်ဝင်ပါ'));
+        toast.error(t('shop.productDetail.loginRequiredToOrder'));
         router.push('/login?redirect=/cart');
         return;
       }
@@ -123,15 +123,13 @@ export default function CartPage() {
       const data = await res.json();
       if (data.success) {
         clearCart();
-        toast.success(
-          tr('Orders placed! We\'ll verify your payment shortly.', 'အော်ဒါများတင်ပြီးပါပြီ! မကြာမီစစ်ဆေးပေးပါမည်။')
-        );
+        toast.success(t('cart.page.ordersPlacedVerifySoon'));
         router.push('/account/orders');
       } else {
-        toast.error(data.error || tr('Failed to place orders', 'အော်ဒါများတင်ခြင်း မအောင်မြင်ပါ'));
+        toast.error(data.error || t('cart.page.failedPlaceOrders'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     } finally {
       setSubmitting(false);
     }
@@ -140,21 +138,21 @@ export default function CartPage() {
   // Empty cart
   if (items.length === 0 && !showCheckout) {
     return (
-      <div className="min-h-screen pt-24 pb-12" ref={containerRef}>
+      <div className="min-h-screen pt-8 pb-12" ref={containerRef}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="scroll-fade text-center py-20">
             <div className="w-24 h-24 mx-auto mb-6 bg-dark-800 rounded-3xl flex items-center justify-center">
               <ShoppingCart className="w-12 h-12 text-gray-600" />
             </div>
             <h1 className="text-2xl font-bold text-white mb-3">
-              {tr('Your cart is empty', 'သင်၏ Cart ထဲ ဘာမှမရှိပါ')}
+              {t('cart.empty')}
             </h1>
             <p className="text-gray-500 mb-8">
-              {tr('Browse our products and add items to your cart', 'ပစ္စည်းများကိုကြည့်ပြီး Cart ထဲထည့်ပါ')}
+              {t('cart.page.browseAndAdd')}
             </p>
             <Link href="/shop" className="btn-electric inline-flex">
               <ShoppingBag className="w-5 h-5" />
-              {tr('Go to Shop', 'ဆိုင်သို့သွားမည်')}
+              {t('cart.page.goToShop')}
             </Link>
           </div>
         </div>
@@ -163,19 +161,19 @@ export default function CartPage() {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12" ref={containerRef}>
+    <div className="min-h-screen pt-8 pb-12" ref={containerRef}>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="scroll-fade flex items-center justify-between mb-8">
           <div>
             <Link href="/shop" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-purple-400 transition-colors mb-2">
-              <ArrowLeft className="w-4 h-4" /> {tr('Continue Shopping', 'ဆက်ဝယ်မည်')}
+              <ArrowLeft className="w-4 h-4" /> {t('cart.continueShopping')}
             </Link>
             <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
               <ShoppingCart className="w-7 h-7 text-purple-400" />
-              {tr('Shopping Cart', 'Shopping Cart')}
+              {t('cart.title')}
               <span className="text-sm font-normal text-gray-500">
-                ({getItemCount()} {tr('items', 'ခု')})
+                ({getItemCount()} {t('cart.items')})
               </span>
             </h1>
           </div>
@@ -183,12 +181,12 @@ export default function CartPage() {
             <button
               onClick={() => {
                 clearCart();
-                toast.success(tr('Cart cleared', 'Cart ရှင်းပြီးပါပြီ'));
+                toast.success(t('cart.page.cartCleared'));
                 router.push('/shop');
               }}
               className="text-sm text-red-400 hover:text-red-300 transition-colors"
             >
-              {tr('Clear All', 'အကုန်ဖျက်မည်')}
+              {t('cart.page.clearAll')}
             </button>
           )}
         </div>
@@ -199,7 +197,7 @@ export default function CartPage() {
             <div key={item.productId} className="game-card p-4 sm:p-6">
               <div className="flex gap-4">
                 {/* Product Image */}
-                <Link href={`/shop/${item.productId}`} className="shrink-0">
+                <Link href={`/shop/${item.slug || item.productId}`} className="shrink-0">
                   <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-dark-800">
                     {item.image && item.image !== '/images/default-product.png' ? (
                       <Image
@@ -222,7 +220,7 @@ export default function CartPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <Link
-                        href={`/shop/${item.productId}`}
+                        href={`/shop/${item.slug || item.productId}`}
                         className="text-base font-bold text-white hover:text-purple-300 transition-colors line-clamp-1"
                       >
                         {item.name}
@@ -234,11 +232,15 @@ export default function CartPage() {
                     {/* Remove button */}
                     <button
                       onClick={() => {
+                        const isLastItem = items.length === 1;
                         removeItem(item.productId);
-                        toast.success(tr('Removed from cart', 'Cart မှ ဖယ်ရှားပြီးပါပြီ'));
+                        toast.success(t('cart.page.removedFromCart'));
+                        if (isLastItem) {
+                          router.push('/shop');
+                        }
                       }}
                       className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all shrink-0"
-                      title={tr('Remove', 'ဖယ်ရှားမည်')}
+                      title={t('cart.remove')}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -265,7 +267,7 @@ export default function CartPage() {
                       </button>
                       {item.quantity >= item.stock && (
                         <span className="text-xs text-amber-400 ml-2">
-                          {tr('Max stock', 'အများဆုံး')}
+                          {t('cart.page.maxStock')}
                         </span>
                       )}
                     </div>
@@ -283,7 +285,7 @@ export default function CartPage() {
         {!showCheckout ? (
           <div className="scroll-fade game-card p-6 sm:p-8" data-delay="200">
             <h2 className="text-lg font-bold text-white mb-4">
-              {tr('Order Summary', 'အော်ဒါအနှစ်ချုပ်')}
+              {t('shop.productDetail.orderSummary')}
             </h2>
 
             <div className="space-y-3 mb-6">
@@ -300,7 +302,7 @@ export default function CartPage() {
               <div className="border-t border-dark-600/50 pt-3">
                 <div className="flex justify-between">
                   <span className="text-gray-300 font-semibold">
-                    {tr('Total', 'စုစုပေါင်း')}
+                    {t('cart.total')}
                   </span>
                   <span className="text-xl font-black text-accent-gradient">
                     {subtotal.toLocaleString()} MMK
@@ -312,7 +314,7 @@ export default function CartPage() {
             {/* Checkout Button */}
             {isLoggedIn === false ? (
               <Link href="/login?redirect=/cart" className="btn-electric w-full text-center">
-                <LogIn className="w-5 h-5" /> {tr('Login to Checkout', 'Checkout လုပ်ရန် အကောင့်ဝင်ပါ')}
+                <LogIn className="w-5 h-5" /> {t('cart.page.loginToCheckout')}
               </Link>
             ) : (
               <button
@@ -320,7 +322,7 @@ export default function CartPage() {
                 className="btn-electric w-full"
               >
                 <Zap className="w-5 h-5" />
-                {tr('Proceed to Checkout', 'Checkout လုပ်မည်')} — {subtotal.toLocaleString()} MMK
+                {t('cart.checkout')} — {subtotal.toLocaleString()} MMK
               </button>
             )}
           </div>
@@ -332,19 +334,19 @@ export default function CartPage() {
                 <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
                   <ShoppingBag className="w-5 h-5 text-purple-400" />
                 </div>
-                {tr('Complete Payment', 'ငွေပေးချေမှု ပြီးစီးရန်')}
+                {t('shop.productDetail.completePayment')}
               </h2>
               <button
                 onClick={() => setShowCheckout(false)}
                 className="text-sm text-gray-400 hover:text-white transition-colors"
               >
-                {tr('Back', 'နောက်သို့')}
+                {t('common.back')}
               </button>
             </div>
 
             {/* Payment Method */}
             <div>
-              <label className="input-label">{tr('Payment Method', 'ငွေပေးချေမှုနည်းလမ်း')}</label>
+              <label className="input-label">{t('order.paymentMethod')}</label>
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { value: 'kpay', label: 'KBZ Pay' },
@@ -375,7 +377,7 @@ export default function CartPage() {
               return (
                 <div className="p-4 bg-purple-500/5 rounded-xl border border-purple-500/20">
                   <p className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wider">
-                    {tr('Send payment to', 'ငွေလွှဲရန်')}
+                    {t('shop.productDetail.sendPaymentTo')}
                   </p>
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
@@ -391,19 +393,16 @@ export default function CartPage() {
                         type="button"
                         onClick={() => {
                           navigator.clipboard.writeText(selectedAccount.accountNumber);
-                          toast.success(tr('Copied!', 'ကူးယူပြီး!'));
+                          toast.success(t('common.copied'));
                         }}
                         className="px-3 py-1.5 text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg transition-colors"
                       >
-                        {tr('Copy', 'ကူးယူမည်')}
+                        {t('common.copy')}
                       </button>
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    {tr(
-                      'Please transfer the exact total amount and take a screenshot',
-                      'ကျေးဇူးပြု၍ စုစုပေါင်းပမာဏအတိအကျလွှဲပြီး screenshot ရိုက်ပါ'
-                    )}
+                    {t('cart.page.transferExactTotalScreenshot')}
                   </p>
                 </div>
               );
@@ -411,12 +410,12 @@ export default function CartPage() {
 
             {/* Coupon Code */}
             <div>
-              <label className="input-label">{tr('Coupon Code (Optional)', 'ကူပွန်ကုဒ် (ရွေးချယ်ခွင့်)')}</label>
+              <label className="input-label">{t('shop.productDetail.couponCodeOptional')}</label>
               {appliedCoupon ? (
                 <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
                   <Tag className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400 font-bold text-sm flex-1">{appliedCoupon} — {couponDiscount.toLocaleString()} MMK {tr('off', 'လျှော့')}</span>
-                  <button onClick={removeCoupon} className="text-xs text-red-400 hover:text-red-300 font-semibold">{tr('Remove', 'ဖယ်ရှားမည်')}</button>
+                  <span className="text-emerald-400 font-bold text-sm flex-1">{appliedCoupon} — {couponDiscount.toLocaleString()} MMK {t('shop.productDetail.off')}</span>
+                  <button onClick={removeCoupon} className="text-xs text-red-400 hover:text-red-300 font-semibold">{t('cart.remove')}</button>
                 </div>
               ) : (
                 <div className="flex gap-2">
@@ -424,7 +423,7 @@ export default function CartPage() {
                     type="text"
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    placeholder={tr('Enter coupon code', 'ကူပွန်ကုဒ်ထည့်ပါ')}
+                    placeholder={t('shop.productDetail.enterCouponCode')}
                     className="input-field flex-1 uppercase"
                   />
                   <button
@@ -432,7 +431,7 @@ export default function CartPage() {
                     disabled={!couponCode.trim() || couponValidating}
                     className="px-5 py-2.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/30 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
                   >
-                    {couponValidating ? <Loader2 className="w-4 h-4 animate-spin" /> : tr('Apply', 'အသုံးပြုမည်')}
+                    {couponValidating ? <Loader2 className="w-4 h-4 animate-spin" /> : t('cart.applyCoupon')}
                   </button>
                 </div>
               )}
@@ -440,13 +439,13 @@ export default function CartPage() {
 
             {/* Screenshot Upload */}
             <div>
-              <label className="input-label">{tr('Payment Screenshot', 'ငွေပေးချေမှု Screenshot')}</label>
+              <label className="input-label">{t('order.uploadScreenshot')}</label>
               <PaymentUpload onUpload={(file) => setPaymentFile(file)} expectedAmount={total} />
             </div>
 
             {/* Order Summary */}
             <div className="p-6 bg-dark-900 rounded-2xl border border-dark-600/50 space-y-3">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4">{tr('Order Summary', 'အော်ဒါအနှစ်ချုပ်')}</h3>
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4">{t('shop.productDetail.orderSummary')}</h3>
               {items.map((item) => (
                 <div key={item.productId} className="flex justify-between text-sm">
                   <span className="text-gray-500 truncate mr-2">{item.name} × {item.quantity}</span>
@@ -454,17 +453,17 @@ export default function CartPage() {
                 </div>
               ))}
               <div className="flex justify-between text-sm pt-2 border-t border-dark-600/50">
-                <span className="text-gray-500">{tr('Subtotal', 'စုစုပေါင်း')}</span>
+                <span className="text-gray-500">{t('cart.subtotal')}</span>
                 <span className="text-white font-medium">{subtotal.toLocaleString()} MMK</span>
               </div>
               {couponDiscount > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-emerald-400 flex items-center gap-1"><Tag className="w-3 h-3" /> {tr('Discount', 'လျှော့စျေး')}</span>
+                  <span className="text-emerald-400 flex items-center gap-1"><Tag className="w-3 h-3" /> {t('cart.discount')}</span>
                   <span className="text-emerald-400 font-medium">-{couponDiscount.toLocaleString()} MMK</span>
                 </div>
               )}
               <div className="flex justify-between text-base pt-3 border-t border-dark-600/50">
-                <span className="text-gray-300 font-semibold">{tr('Total', 'စုစုပေါင်း')}</span>
+                <span className="text-gray-300 font-semibold">{t('cart.total')}</span>
                 <span className="text-purple-400 font-black text-lg">{total.toLocaleString()} MMK</span>
               </div>
             </div>
@@ -476,9 +475,9 @@ export default function CartPage() {
               className="btn-electric w-full"
             >
               {submitting ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /> {tr('Processing...', 'လုပ်ဆောင်နေသည်...')}</>
+                <><Loader2 className="w-5 h-5 animate-spin" /> {t('shop.productDetail.processing')}</>
               ) : (
-                <><CheckCircle className="w-5 h-5" /> {tr('Place Order', 'အော်ဒါတင်မည်')} — {total.toLocaleString()} MMK</>
+                <><CheckCircle className="w-5 h-5" /> {t('shop.productDetail.placeOrder')} — {total.toLocaleString()} MMK</>
               )}
             </button>
           </div>

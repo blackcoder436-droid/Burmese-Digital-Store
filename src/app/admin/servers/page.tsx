@@ -66,7 +66,7 @@ const emptyForm = {
 };
 
 export default function AdminServersPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [servers, setServers] = useState<VpnServerData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -114,7 +114,7 @@ export default function AdminServersPage() {
         toast.error(data.error || 'Failed to load servers');
       }
     } catch {
-      toast.error(tr('Failed to load servers', 'Server များ ရယူ၍မရပါ'));
+      toast.error(t('admin.serversPage.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -171,7 +171,7 @@ export default function AdminServersPage() {
         });
         const data = await res.json();
         if (data.success) {
-          toast.success(tr('Server updated', 'Server ပြင်ဆင်ပြီး'));
+          toast.success(t('admin.serversPage.serverUpdated'));
           cancelForm();
           fetchServers();
         } else {
@@ -186,7 +186,7 @@ export default function AdminServersPage() {
         });
         const data = await res.json();
         if (data.success) {
-          toast.success(tr('Server created', 'Server အသစ်ထည့်ပြီး'));
+          toast.success(t('admin.serversPage.serverCreated'));
           cancelForm();
           fetchServers();
         } else {
@@ -194,7 +194,7 @@ export default function AdminServersPage() {
         }
       }
     } catch {
-      toast.error(tr('Operation failed', 'လုပ်ဆောင်မှု မအောင်မြင်ပါ'));
+      toast.error(t('admin.serversPage.operationFailed'));
     } finally {
       setSaving(false);
     }
@@ -211,8 +211,8 @@ export default function AdminServersPage() {
       if (data.success) {
         toast.success(
           server.enabled
-            ? tr('Server disabled', 'Server ပိတ်ပြီး')
-            : tr('Server enabled', 'Server ဖွင့်ပြီး')
+            ? t('admin.serversPage.serverDisabled')
+            : t('admin.serversPage.serverEnabled')
         );
         fetchServers();
       } else {
@@ -231,7 +231,7 @@ export default function AdminServersPage() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(tr('Server deleted', 'Server ဖျက်ပြီး'));
+        toast.success(t('admin.serversPage.serverDeleted'));
         setConfirmDelete(null);
         fetchServers();
       } else {
@@ -282,10 +282,10 @@ export default function AdminServersPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white">
-              {tr('VPN Servers', 'VPN Server များ')}
+              {t('admin.serversPage.title')}
             </h1>
             <p className="text-sm text-gray-400">
-              {tr('Manage 3xUI panel servers and protocols', '3xUI panel server နှင့် protocol များ စီမံခန့်ခွဲရန်')}
+              {t('admin.serversPage.subtitle')}
             </p>
           </div>
         </div>
@@ -297,7 +297,7 @@ export default function AdminServersPage() {
               className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-xl transition-all"
             >
               {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-              {tr('Seed Defaults', 'Default ထည့်ရန်')}
+              {t('admin.serversPage.seedDefaults')}
             </button>
           )}
           <button
@@ -311,7 +311,7 @@ export default function AdminServersPage() {
             className="btn-electric flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            {tr('Add Server', 'Server ထည့်ရန်')}
+            {t('admin.serversPage.addServer')}
           </button>
         </div>
       </div>
@@ -319,15 +319,15 @@ export default function AdminServersPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-4">
         <div className="card-dark p-4">
-          <p className="text-xs text-gray-500 mb-1">{tr('Total', 'စုစုပေါင်း')}</p>
+          <p className="text-xs text-gray-500 mb-1">{t('admin.serversPage.total')}</p>
           <p className="text-2xl font-bold text-white">{servers.length}</p>
         </div>
         <div className="card-dark p-4">
-          <p className="text-xs text-gray-500 mb-1">{tr('Enabled', 'ဖွင့်ထား')}</p>
+          <p className="text-xs text-gray-500 mb-1">{t('admin.serversPage.enabled')}</p>
           <p className="text-2xl font-bold text-green-400">{totalEnabled}</p>
         </div>
         <div className="card-dark p-4">
-          <p className="text-xs text-gray-500 mb-1">{tr('Disabled', 'ပိတ်ထား')}</p>
+          <p className="text-xs text-gray-500 mb-1">{t('admin.serversPage.disabled')}</p>
           <p className="text-2xl font-bold text-red-400">{totalDisabled}</p>
         </div>
       </div>
@@ -337,8 +337,8 @@ export default function AdminServersPage() {
         <div className="card-dark p-6 border-2 border-purple-500/20">
           <h2 className="text-lg font-bold text-white mb-4">
             {editingId
-              ? tr('Edit Server', 'Server ပြင်ဆင်ရန်')
-              : tr('Add New Server', 'Server အသစ်ထည့်ရန်')}
+              ? t('admin.serversPage.editServer')
+              : t('admin.serversPage.addNewServer')}
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -361,7 +361,7 @@ export default function AdminServersPage() {
               {/* Name */}
               <div>
                 <label className="text-xs font-semibold text-gray-400 block mb-1">
-                  {tr('Server Name', 'Server အမည်')} <span className="text-red-400">*</span>
+                  {t('admin.serversPage.serverName')} <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -376,7 +376,7 @@ export default function AdminServersPage() {
               {/* Flag */}
               <div>
                 <label className="text-xs font-semibold text-gray-400 block mb-1">
-                  {tr('Flag', 'အလံ')} <span className="text-red-400">*</span>
+                  {t('admin.serversPage.flag')} <span className="text-red-400">*</span>
                 </label>
                 <div className="flex gap-2 items-center">
                   <select
@@ -424,7 +424,7 @@ export default function AdminServersPage() {
               {/* Domain */}
               <div>
                 <label className="text-xs font-semibold text-gray-400 block mb-1">
-                  {tr('Connection Domain', 'ချိတ်ဆက်မည့် Domain')} <span className="text-red-400">*</span>
+                  {t('admin.serversPage.connectionDomain')} <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -466,7 +466,7 @@ export default function AdminServersPage() {
               {/* Protocol */}
               <div>
                 <label className="text-xs font-semibold text-gray-400 block mb-1">
-                  {tr('Default Protocol', 'Protocol')} <span className="text-red-400">*</span>
+                  {t('admin.serversPage.defaultProtocol')} <span className="text-red-400">*</span>
                 </label>
                 <select
                   value={form.protocol}
@@ -483,7 +483,7 @@ export default function AdminServersPage() {
             {/* Enabled Protocols */}
             <div>
               <label className="text-xs font-semibold text-gray-400 block mb-2">
-                {tr('Available Protocols', 'ရွေးချယ်နိုင်သော Protocols')}
+                {t('admin.serversPage.availableProtocols')}
               </label>
               <div className="flex flex-wrap gap-3">
                 {PROTOCOLS.map((p) => (
@@ -508,19 +508,19 @@ export default function AdminServersPage() {
                 ))}
               </div>
               <p className="text-xs text-gray-600 mt-1">
-                {tr('Unchecked protocols will not be shown to users when ordering', 'ပယ်ဖျက်ထားသော protocol များကို order လုပ်တဲ့အခါ မပြပါ')}
+                {t('admin.serversPage.protocolHint')}
               </p>
             </div>
 
             {/* Notes */}
             <div>
               <label className="text-xs font-semibold text-gray-400 block mb-1">
-                {tr('Notes (admin only)', 'မှတ်ချက် (admin သီးသန့်)')}
+                {t('admin.serversPage.notesLabel')}
               </label>
               <textarea
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder={tr('Internal notes about this server...', 'ဤ server အကြောင်း မှတ်ချက်...')}
+                placeholder={t('admin.serversPage.notesPlaceholder')}
                 className="input-dark w-full"
                 rows={2}
               />
@@ -534,7 +534,7 @@ export default function AdminServersPage() {
                 onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
                 className="w-4 h-4 rounded border-gray-600 bg-dark-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
               />
-              <span className="text-sm text-gray-300">{tr('Enabled (visible to users)', 'ဖွင့်ထားရန် (user များမြင်ရမည်)')}</span>
+              <span className="text-sm text-gray-300">{t('admin.serversPage.enabledCheckbox')}</span>
             </label>
 
             {/* Buttons */}
@@ -545,14 +545,14 @@ export default function AdminServersPage() {
                 className="btn-electric flex items-center gap-2"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                {editingId ? tr('Save Changes', 'ပြောင်းလဲမှု သိမ်းရန်') : tr('Create Server', 'Server ဖန်တီးရန်')}
+                {editingId ? t('admin.serversPage.saveChanges') : t('admin.serversPage.createServer')}
               </button>
               <button
                 type="button"
                 onClick={cancelForm}
                 className="px-4 py-2 text-sm font-semibold text-gray-400 hover:text-white transition-colors"
               >
-                {tr('Cancel', 'ပယ်ဖျက်ရန်')}
+                {t('admin.serversPage.cancel')}
               </button>
             </div>
           </form>
@@ -563,12 +563,9 @@ export default function AdminServersPage() {
       {servers.length === 0 ? (
         <div className="card-dark p-12 text-center">
           <Server className="w-12 h-12 text-dark-600 mx-auto mb-4" />
-          <p className="text-gray-400 mb-2">{tr('No servers configured', 'Server မရှိသေးပါ')}</p>
+          <p className="text-gray-400 mb-2">{t('admin.serversPage.noServers')}</p>
           <p className="text-sm text-gray-600 mb-4">
-            {tr(
-              'Click "Seed Defaults" to load initial servers, or add a new one manually.',
-              '"Default ထည့်ရန်" ကို နှိပ်ပါ (သို့) "Server ထည့်ရန်" နှိပ်ပါ'
-            )}
+            {t('admin.serversPage.noServersHint')}
           </p>
         </div>
       ) : (
@@ -685,10 +682,7 @@ export default function AdminServersPage() {
                   <div className="p-3 bg-red-500/5 border border-red-500/20 rounded-xl flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
                     <p className="text-sm text-red-400 flex-1">
-                      {tr(
-                        `Delete "${server.name}"? This cannot be undone. Servers with active orders cannot be deleted.`,
-                        `"${server.name}" ကို ဖျက်မလား? ပြန်ယူ၍မရပါ။ Active order ရှိတဲ့ server ဖျက်၍မရပါ။`
-                      )}
+                      {t('admin.serversPage.confirmDeleteMsg').replace('{name}', server.name)}
                     </p>
                     <button
                       onClick={() => handleDelete(server.serverId)}
@@ -698,7 +692,7 @@ export default function AdminServersPage() {
                       {deleting === server.serverId ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
-                        tr('Confirm Delete', 'ဖျက်မည်')
+                        t('admin.serversPage.confirmDeleteBtn')
                       )}
                     </button>
                     <button
@@ -716,43 +710,43 @@ export default function AdminServersPage() {
                 <div className="px-4 pb-4 border-t border-dark-700 pt-3">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                     <div>
-                      <span className="text-gray-600 block">{tr('Panel URL', 'Panel URL')}</span>
+                      <span className="text-gray-600 block">{t('admin.serversPage.panelUrl')}</span>
                       <span className="text-gray-300 font-mono break-all">{server.url}</span>
                     </div>
                     <div>
-                      <span className="text-gray-600 block">{tr('Panel Path', 'Panel Path')}</span>
+                      <span className="text-gray-600 block">{t('admin.serversPage.panelPath')}</span>
                       <span className="text-gray-300 font-mono">{server.panelPath}</span>
                     </div>
                     <div>
-                      <span className="text-gray-600 block">{tr('Domain', 'Domain')}</span>
+                      <span className="text-gray-600 block">{t('admin.serversPage.domain')}</span>
                       <span className="text-gray-300 font-mono">{server.domain}</span>
                     </div>
                     <div>
-                      <span className="text-gray-600 block">{tr('Sub Port', 'Sub Port')}</span>
+                      <span className="text-gray-600 block">{t('admin.serversPage.subPort')}</span>
                       <span className="text-gray-300 font-mono">{server.subPort}</span>
                     </div>
                     {server.trojanPort && (
                       <div>
-                        <span className="text-gray-600 block">{tr('Trojan Port', 'Trojan Port')}</span>
+                        <span className="text-gray-600 block">{t('admin.serversPage.trojanPort')}</span>
                         <span className="text-gray-300 font-mono">{server.trojanPort}</span>
                       </div>
                     )}
                     <div>
-                      <span className="text-gray-600 block">{tr('Protocol', 'Protocol')}</span>
+                      <span className="text-gray-600 block">{t('admin.serversPage.protocol')}</span>
                       <span className="text-gray-300 uppercase">{server.protocol}</span>
                     </div>
                     <div>
-                      <span className="text-gray-600 block">{tr('Created', 'ဖန်တီးချိန်')}</span>
+                      <span className="text-gray-600 block">{t('admin.serversPage.created')}</span>
                       <span className="text-gray-300">{new Date(server.createdAt).toLocaleDateString()}</span>
                     </div>
                     <div>
-                      <span className="text-gray-600 block">{tr('Updated', 'ပြင်ဆင်ချိန်')}</span>
+                      <span className="text-gray-600 block">{t('admin.serversPage.updated')}</span>
                       <span className="text-gray-300">{new Date(server.updatedAt).toLocaleDateString()}</span>
                     </div>
                   </div>
                   {server.notes && (
                     <div className="mt-3 p-2 bg-dark-800 rounded-lg">
-                      <span className="text-gray-600 text-xs block mb-1">{tr('Notes', 'မှတ်ချက်')}</span>
+                      <span className="text-gray-600 text-xs block mb-1">{t('admin.serversPage.notes')}</span>
                       <p className="text-sm text-gray-400">{server.notes}</p>
                     </div>
                   )}

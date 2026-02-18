@@ -8,7 +8,7 @@ import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
 
 export default function ForgotPasswordPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const containerRef = useScrollFade();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,10 +27,10 @@ export default function ForgotPasswordPage() {
       if (data.success) {
         setSent(true);
       } else {
-        toast.error(data.error || tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+        toast.error(data.error || t('common.error'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     } finally {
       setLoading(false);
     }
@@ -51,18 +51,12 @@ export default function ForgotPasswordPage() {
             </div>
           </Link>
           <h1 className="heading-md">
-            {tr('Reset Password', 'လျှို့ဝှက်နံပါတ် ပြန်လည်သတ်မှတ်ရန်')}
+            {t('auth.forgotPage.title')}
           </h1>
           <p className="text-gray-400 mt-2">
             {sent
-              ? tr(
-                  'Check your email for the reset link',
-                  'Reset link အတွက် သင့်အီးမေးလ်ကို စစ်ဆေးပါ'
-                )
-              : tr(
-                  'Enter your email and we\'ll send you a reset link',
-                  'သင့်အီးမေးလ်ကို ထည့်ပါ၊ reset link ပို့ပေးပါမည်'
-                )}
+              ? t('auth.forgotPage.checkEmailForLink')
+              : t('auth.forgotPage.enterEmailPrompt')}
           </p>
         </div>
 
@@ -73,22 +67,16 @@ export default function ForgotPasswordPage() {
               <CheckCircle className="w-8 h-8 text-green-400" />
             </div>
             <p className="text-gray-300 mb-2">
-              {tr(
-                'If an account exists with that email, you\'ll receive a password reset link shortly.',
-                'ထိုအီးမေးလ်ဖြင့် အကောင့်ရှိပါက password reset link ကို မကြာမီ ရရှိပါမည်။'
-              )}
+              {t('auth.forgotPage.sentMessage')}
             </p>
             <p className="text-gray-500 text-sm mb-6">
-              {tr(
-                'The link will expire in 1 hour.',
-                'Link သည် 1 နာရီအတွင်း သက်တမ်းကုန်ပါမည်။'
-              )}
+              {t('auth.forgotPage.linkExpiresInOneHour')}
             </p>
             <button
               onClick={() => { setSent(false); setEmail(''); }}
               className="text-purple-400 hover:text-purple-300 text-sm font-medium transition-colors"
             >
-              {tr('Send again with different email', 'အခြားအီးမေးလ်ဖြင့် ထပ်ပို့မည်')}
+              {t('auth.forgotPage.sendAgainDifferentEmail')}
             </button>
           </div>
         ) : (
@@ -97,13 +85,13 @@ export default function ForgotPasswordPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="input-label">
-                  {tr('Email Address', 'အီးမေးလ်လိပ်စာ')}
+                  {t('auth.loginPage.emailAddress')}
                 </label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={tr('you@example.com', 'you@example.com')}
+                  placeholder={t('auth.loginPage.emailPlaceholder')}
                   className="input-field"
                   required
                   autoFocus
@@ -113,12 +101,12 @@ export default function ForgotPasswordPage() {
                 {loading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    {tr('Sending...', 'ပို့နေသည်...')}
+                    {t('auth.forgotPage.sending')}
                   </>
                 ) : (
                   <>
                     <Mail className="w-5 h-5" />
-                    {tr('Send Reset Link', 'Reset Link ပို့မည်')}
+                    {t('auth.forgotPage.sendResetLink')}
                   </>
                 )}
               </button>
@@ -132,7 +120,7 @@ export default function ForgotPasswordPage() {
             className="text-purple-400 hover:text-purple-300 font-semibold inline-flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            {tr('Back to Sign In', 'Sign In သို့ ပြန်သွားမည်')}
+            {t('auth.forgotPage.backToSignIn')}
           </Link>
         </p>
       </div>

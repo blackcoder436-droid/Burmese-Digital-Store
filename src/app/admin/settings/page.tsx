@@ -21,7 +21,7 @@ const PAYMENT_METHODS = [
 ];
 
 export default function AdminSettingsPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [ocrEnabled, setOcrEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,7 +57,7 @@ export default function AdminSettingsPage() {
         }
       }
     } catch {
-      toast.error(tr('Failed to load settings', 'ဆက်တင်များကိုတင်ရန် မအောင်မြင်ပါ'));
+      toast.error(t('admin.settingsPage.failedLoadSettings'));
     } finally {
       setLoading(false);
     }
@@ -77,14 +77,14 @@ export default function AdminSettingsPage() {
         setOcrEnabled(newValue);
         toast.success(
           newValue
-            ? tr('OCR Verification enabled', 'OCR Verification ဖွင့်ပြီး')
-            : tr('OCR Verification disabled', 'OCR Verification ပိတ်ပြီး')
+            ? t('admin.settingsPage.ocrEnabled')
+            : t('admin.settingsPage.ocrDisabled')
         );
       } else {
-        toast.error(data.error || tr('Failed to update', 'ပြင်ဆင်ရန် မအောင်မြင်ပါ'));
+        toast.error(data.error || t('admin.settingsPage.failedUpdate'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     } finally {
       setSaving(false);
     }
@@ -108,12 +108,12 @@ export default function AdminSettingsPage() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(tr('Payment accounts saved!', 'ငွေပေးချေမှုအကောင့်များ သိမ်းဆည်းပြီးပါပြီ!'));
+        toast.success(t('admin.settingsPage.paymentAccountsSaved'));
       } else {
-        toast.error(data.error || tr('Failed to save', 'သိမ်းဆည်းမှု မအောင်မြင်ပါ'));
+        toast.error(data.error || t('admin.settingsPage.failedSave'));
       }
     } catch {
-      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+      toast.error(t('common.error'));
     } finally {
       setSavingPayment(false);
     }
@@ -129,7 +129,7 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="heading-lg">{tr('Settings', 'ဆက်တင်များ')}</h1>
+      <h1 className="heading-lg">{t('admin.settings')}</h1>
 
       {/* OCR Toggle Card */}
       <div className="game-card p-6 sm:p-8">
@@ -146,18 +146,12 @@ export default function AdminSettingsPage() {
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <h2 className="text-lg font-bold text-white mb-1">
-                  {tr('OCR Payment Verification', 'OCR ငွေပေးချေမှုစစ်ဆေးခြင်း')}
+                  {t('admin.settingsPage.ocrPaymentVerification')}
                 </h2>
                 <p className="text-sm text-gray-400 max-w-lg">
                   {ocrEnabled
-                    ? tr(
-                        'OCR is active. Payment screenshots are automatically scanned. Orders with high-confidence matches are auto-completed. Others go to "Verifying" for review.',
-                        'OCR ဖွင့်ထားသည်။ ငွေပေးချေမှု screenshot များကို အလိုအလျောက်စစ်ဆေးသည်။ ယုံကြည်မှုမြင့်သော order များကို အလိုအလျောက်ပြီးစီးစေသည်။ ကျန်သည်များကို "စစ်ဆေးနေသည်" သို့ပို့သည်။'
-                      )
-                    : tr(
-                        'OCR is disabled. All orders go to "Pending" status for manual admin review. You must manually check payment screenshots and approve each order.',
-                        'OCR ပိတ်ထားသည်။ Order အားလုံးကို "စောင့်ဆိုင်းနေသည်" status ဖြင့်အက်ဒမင်မှ ကိုယ်တိုင်စစ်ဆေးရမည်။ ငွေပေးချေမှု screenshot များကို ကိုယ်တိုင်စစ်ဆေးပြီး order တစ်ခုခြင်းကို approve ပေးရမည်။'
-                      )}
+                    ? t('admin.settingsPage.ocrEnabledDescription')
+                    : t('admin.settingsPage.ocrDisabledDescription')}
                 </p>
               </div>
 
@@ -190,12 +184,12 @@ export default function AdminSettingsPage() {
               {ocrEnabled ? (
                 <>
                   <CheckCircle className="w-3.5 h-3.5" />
-                  {tr('Auto-verification active', 'အလိုအလျောက်စစ်ဆေးခြင်းဖွင့်ထားသည်')}
+                  {t('admin.settingsPage.autoVerificationActive')}
                 </>
               ) : (
                 <>
                   <AlertTriangle className="w-3.5 h-3.5" />
-                  {tr('Manual review mode', 'ကိုယ်တိုင်စစ်ဆေးခြင်း mode')}
+                  {t('admin.settingsPage.manualReviewMode')}
                 </>
               )}
             </div>
@@ -211,25 +205,25 @@ export default function AdminSettingsPage() {
               <CheckCircle className="w-4 h-4 text-green-400" />
             </div>
             <h3 className="text-sm font-bold text-white">
-              {tr('When OCR is ON', 'OCR ဖွင့်ထားသောအခါ')}
+              {t('admin.settingsPage.whenOcrOn')}
             </h3>
           </div>
           <ul className="space-y-2 text-sm text-gray-400">
             <li className="flex items-start gap-2">
               <span className="text-green-400 mt-0.5">•</span>
-              {tr('Screenshots are auto-scanned for payment data', 'Screenshot များကို ငွေပေးချေမှုဒေတာအတွက် အလိုအလျောက်စစ်သည်')}
+              {t('admin.settingsPage.onAutoScanned')}
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-400 mt-0.5">•</span>
-              {tr('High-confidence orders complete automatically', 'ယုံကြည်မှုမြင့်သော order များ အလိုအလျောက်ပြီးစီးသည်')}
+              {t('admin.settingsPage.onHighConfidence')}
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-400 mt-0.5">•</span>
-              {tr('Low-confidence orders require manual review', 'ယုံကြည်မှုနိမ့်သော order များ ကိုယ်တိုင်စစ်ဆေးရန်လိုသည်')}
+              {t('admin.settingsPage.onLowConfidence')}
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-400 mt-0.5">•</span>
-              {tr('Order status: "Verifying" → "Completed"/"Rejected"', 'Order status: "စစ်ဆေးနေသည်" → "ပြီးဆုံး"/"ပယ်ချ"')}
+              {t('admin.settingsPage.onStatusFlow')}
             </li>
           </ul>
         </div>
@@ -240,25 +234,25 @@ export default function AdminSettingsPage() {
               <AlertTriangle className="w-4 h-4 text-amber-400" />
             </div>
             <h3 className="text-sm font-bold text-white">
-              {tr('When OCR is OFF', 'OCR ပိတ်ထားသောအခါ')}
+              {t('admin.settingsPage.whenOcrOff')}
             </h3>
           </div>
           <ul className="space-y-2 text-sm text-gray-400">
             <li className="flex items-start gap-2">
               <span className="text-amber-400 mt-0.5">•</span>
-              {tr('No automatic screenshot scanning', 'Screenshot အလိုအလျောက်စစ်ဆေးခြင်းမရှိ')}
+              {t('admin.settingsPage.offNoAutoScan')}
             </li>
             <li className="flex items-start gap-2">
               <span className="text-amber-400 mt-0.5">•</span>
-              {tr('All orders go to "Pending" for admin review', 'Order အားလုံးကို admin စစ်ဆေးရန် "စောင့်ဆိုင်းနေသည်" သို့ပို့သည်')}
+              {t('admin.settingsPage.offAllPending')}
             </li>
             <li className="flex items-start gap-2">
               <span className="text-amber-400 mt-0.5">•</span>
-              {tr('Admin checks payment screenshots manually', 'Admin မှ ငွေပေးချေမှု screenshot များကို ကိုယ်တိုင်စစ်ဆေးသည်')}
+              {t('admin.settingsPage.offManualCheck')}
             </li>
             <li className="flex items-start gap-2">
               <span className="text-amber-400 mt-0.5">•</span>
-              {tr('Order status: "Pending" → "Completed"/"Rejected"', 'Order status: "စောင့်ဆိုင်းနေသည်" → "ပြီးဆုံး"/"ပယ်ချ"')}
+              {t('admin.settingsPage.offStatusFlow')}
             </li>
           </ul>
         </div>
@@ -272,13 +266,10 @@ export default function AdminSettingsPage() {
           </div>
           <div className="flex-1">
             <h2 className="text-lg font-bold text-white mb-1">
-              {tr('Payment Accounts', 'ငွေပေးချေမှုအကောင့်များ')}
+              {t('admin.settingsPage.paymentAccounts')}
             </h2>
             <p className="text-sm text-gray-400 max-w-lg">
-              {tr(
-                'Configure your payment account details. These will be shown to customers during checkout so they know where to send payment.',
-                'ငွေပေးချေမှုအကောင့်အချက်အလက်များကို ပြင်ဆင်ပါ။ ဝယ်သူများ checkout လုပ်သောအခါ ဘယ်ကိုငွေလွှဲရမလဲဆိုတာ ပြပေးပါလိမ့်မည်။'
-              )}
+              {t('admin.settingsPage.paymentAccountsDescription')}
             </p>
           </div>
         </div>
@@ -317,19 +308,19 @@ export default function AdminSettingsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-gray-400 block mb-1">
-                        {tr('Account Name', 'အကောင့်နာမည်')}
+                        {t('admin.settingsPage.accountName')}
                       </label>
                       <input
                         type="text"
                         value={account.accountName}
                         onChange={(e) => updatePaymentAccount(index, 'accountName', e.target.value)}
-                        placeholder={tr('e.g. Aung Aung', 'ဥပမာ: မောင်မောင်')}
+                        placeholder={t('admin.settingsPage.accountNamePlaceholder')}
                         className="input-field text-sm"
                       />
                     </div>
                     <div>
                       <label className="text-xs text-gray-400 block mb-1">
-                        {tr('Phone / Account Number', 'ဖုန်း / အကောင့်နံပါတ်')}
+                        {t('admin.settingsPage.phoneOrAccountNumber')}
                       </label>
                       <input
                         type="text"
@@ -357,7 +348,7 @@ export default function AdminSettingsPage() {
             ) : (
               <Save className="w-4 h-4" />
             )}
-            {tr('Save Payment Accounts', 'ငွေပေးချေမှုအကောင့်များ သိမ်းမည်')}
+            {t('admin.settingsPage.savePaymentAccounts')}
           </button>
         </div>
       </div>

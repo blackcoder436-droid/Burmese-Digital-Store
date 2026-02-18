@@ -37,64 +37,64 @@ function SocialIcon({ type }: { type: 'telegram' | 'whatsapp' | 'viber' | 'faceb
 }
 
 export default function ContactPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const containerRef = useScrollFade();
 
   const contacts = [
     {
       type: 'telegram' as const,
-      title: tr('Telegram Bot', 'Telegram Bot'),
-      subtitle: tr('Buy key, get free test key, and auto support via bot', 'Bot မှတဆင့် key ဝယ်ရန်၊ free test key ယူရန်၊ support ရယူရန်'),
+      title: t('contact.page.telegramBot'),
+      subtitle: t('contact.page.telegramBotSubtitle'),
       value: '@BurmeseDigitalStore_bot',
       href: 'https://t.me/BurmeseDigitalStore_bot',
     },
     {
       type: 'telegram' as const,
-      title: tr('Telegram Channel', 'Telegram Channel'),
-      subtitle: tr('Announcements, updates, and important notices', 'ကြေညာချက်များ၊ updates များနှင့် အရေးကြီးအချက်များ'),
+      title: t('contact.page.telegramChannel'),
+      subtitle: t('contact.page.telegramChannelSubtitle'),
       value: '@BurmeseDigitalStore',
       href: 'https://t.me/BurmeseDigitalStore',
     },
     {
       type: 'whatsapp' as const,
       title: 'WhatsApp',
-      subtitle: tr('Send message via WhatsApp', 'WhatsApp မှ မက်ဆေ့ချ် ပို့ပါ'),
+      subtitle: t('contact.page.whatsappSubtitle'),
       value: '+1 (857) 334-2772',
       href: 'https://wa.me/18573342772',
     },
     {
       type: 'viber' as const,
       title: 'Viber',
-      subtitle: tr('Call or message on Viber', 'Viber မှ call/message လုပ်နိုင်သည်'),
+      subtitle: t('contact.page.viberSubtitle'),
       value: '+1 (857) 334-2772',
       href: 'viber://chat?number=%2B18573342772',
     },
     {
       type: 'email' as const,
-      title: tr('Email', 'အီးမေးလ်'),
-      subtitle: tr('For account and payment support', 'Account နှင့် payment support အတွက်'),
+      title: t('auth.email'),
+      subtitle: t('contact.page.emailSubtitle'),
       value: 'support@burmesedigital.store',
       href: 'mailto:support@burmesedigital.store',
     },
     {
       type: 'facebook' as const,
       title: 'Facebook',
-      subtitle: tr('Follow our official page', 'Official page ကို Follow လုပ်ပါ'),
+      subtitle: t('contact.page.facebookSubtitle'),
       value: 'Burmese Digital Store',
       href: 'https://www.facebook.com/BurmeseDigitalStore/',
     },
   ];
 
   return (
-    <div className="min-h-screen py-16 sm:py-24 bg-mesh relative z-[1]" ref={containerRef}>
+    <div className="min-h-screen pt-8 sm:pt-10 pb-16 sm:pb-20 bg-mesh relative z-[1]" ref={containerRef}>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="scroll-fade text-center mb-16">
           <h1 className="heading-lg mb-4">
-            {tr('Contact', 'ဆက်သွယ်')} <span className="text-accent-gradient">{tr('Us', 'ရန်')}</span>
+            {t('contact.page.contact')} <span className="text-accent-gradient">{t('contact.page.us')}</span>
           </h1>
           <p className="text-gray-400 max-w-2xl mx-auto text-lg">
-            {tr('Need help with orders, payments, or VPN setup? Use Telegram Bot or contact us directly via social channels below.', 'Order, payment, VPN setup အကူအညီလိုပါက Telegram Bot သို့မဟုတ် အောက်ပါ social channels များမှ တိုက်ရိုက် ဆက်သွယ်နိုင်ပါသည်။')}
+            {t('contact.page.helpText')}
           </p>
         </div>
 

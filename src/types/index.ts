@@ -105,6 +105,8 @@ export interface JWTPayload {
   email: string;
   role: 'user' | 'admin';
   tokenVersion?: number;
+  iat?: number;
+  exp?: number;
 }
 
 export interface OCRResult {

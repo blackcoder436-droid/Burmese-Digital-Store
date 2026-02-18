@@ -50,6 +50,7 @@ function ProductCarousel({ products, title, onCategoryClick }: {
   products: Product[];
   title?: string;
   onCategoryClick?: () => void;
+  viewAllLabel?: string;
 }) {
   if (products.length === 0) return null;
 
@@ -60,7 +61,7 @@ function ProductCarousel({ products, title, onCategoryClick }: {
           <h3 className="text-base font-bold text-white">{title}</h3>
           {onCategoryClick && (
             <button onClick={onCategoryClick} className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors">
-              အားလုံးကြည့်မည် <ArrowRight className="w-3 h-3" />
+              {viewAllLabel} <ArrowRight className="w-3 h-3" />
             </button>
           )}
         </div>
@@ -87,7 +88,7 @@ export default function ShopPage() {
 }
 
 function ShopContent() {
-  const { tr } = useLanguage();
+  const { t, lang } = useLanguage();
   const containerRef = useScrollFade();
   const searchParams = useSearchParams();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -169,39 +170,39 @@ function ShopContent() {
   };
 
   const categories = [
-    { value: '', label: tr('All', 'အားလုံး') },
+    { value: '', label: t('shop.page.all') },
     { value: 'vpn', label: 'VPN' },
     { value: 'streaming', label: 'Streaming' },
     { value: 'gaming', label: 'Gaming' },
     { value: 'software', label: 'Software' },
     { value: 'gift-card', label: 'Gift Cards' },
-    { value: 'other', label: tr('Other', 'အခြား') },
+    { value: 'other', label: t('shop.other') },
   ];
 
-  const selectedCategoryLabel = categories.find((c) => c.value === category)?.label || tr('All', 'အားလုံး');
+  const selectedCategoryLabel = categories.find((c) => c.value === category)?.label || t('shop.page.all');
 
   return (
     <div className="min-h-screen pt-[2.5rem] pb-12" ref={containerRef}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Hero row: tagline left + search right */}
-        <div className="scroll-fade flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div className="scroll-fade relative z-[60] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           {/* Left: tagline */}
           <div className="shrink-0">
             <h1 className="text-lg sm:text-xl font-bold text-white">
-              {tr('Premium Digital Products', 'အရည်အသွေးမြင့် Digital Products')}
+              {t('shop.page.premiumDigitalProducts')}
             </h1>
             <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-              {tr('Instant delivery • Best prices in Myanmar', 'ချက်ချင်းရယူ • မြန်မာနိုင်ငံတွင် အကောင်းဆုံးစျေး')}
+              {t('shop.page.instantDeliveryBestPrices')}
             </p>
           </div>
 
           {/* Right: search box */}
-          <div className="relative flex items-center w-full sm:w-80">
+          <div className="relative z-[70] flex items-center w-full sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 z-10" />
             <input
               ref={searchInputRef}
               type="text"
-              placeholder={tr('Search...', 'ရှာမည်...')}
+              placeholder={t('shop.page.searchPlaceholder')}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="input-field !pl-9 !pr-28 sm:!pr-32 w-full !bg-dark-800/80 !border-dark-600 focus:!border-purple-500/60 !text-sm !py-2 !rounded-xl"
@@ -233,12 +234,12 @@ function ShopContent() {
                 >
                   <Filter className="w-3 h-3" />
                   <span className="hidden sm:inline">{selectedCategoryLabel}</span>
-                  <ChevronDown className={`w-3 h-3 transition-transform ${showCategoryDropdown ? 'rotate-0' : 'rotate-180'}`} />
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
                 </button>
 
-                {/* Dropdown — opens upward to avoid overflow */}
+                {/* Dropdown */}
                 {showCategoryDropdown && (
-                  <div className="absolute right-0 bottom-full mb-1.5 w-48 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl shadow-black/50 overflow-hidden z-50">
+                  <div className="absolute right-0 top-full mt-2 w-44 bg-dark-800/95 backdrop-blur-xl border border-dark-600 rounded-xl shadow-2xl shadow-black/60 overflow-hidden z-[80]">
                     {categories.map((cat) => {
                       const count = getCategoryCount(cat.value);
                       const isActive = category === cat.value;
@@ -286,7 +287,7 @@ function ShopContent() {
               </span>
             )}
             <button onClick={clearAllFilters} className="text-xs text-gray-600 hover:text-red-400 transition-colors ml-auto">
-              {tr('Clear', 'ဖျက်')}
+              {t('common.clear')}
             </button>
           </div>
         )}
@@ -314,14 +315,14 @@ function ShopContent() {
             <div className="w-20 h-20 mx-auto mb-6 bg-dark-800 rounded-2xl flex items-center justify-center">
               <Package className="w-10 h-10 text-gray-600" />
             </div>
-            <p className="text-gray-400 text-lg">{tr('No products found.', 'ပစ္စည်းမတွေ့ပါ။')}</p>
-            <p className="text-gray-600 mt-2">{tr('Try a different search or category.', 'အခြားရှာဖွေမှု သို့မဟုတ် အမျိုးအစားကို စမ်းကြည့်ပါ။')}</p>
+            <p className="text-gray-400 text-lg">{t('shop.page.noProductsFound')}</p>
+            <p className="text-gray-600 mt-2">{t('shop.page.tryDifferentSearchOrCategory')}</p>
             {hasActiveFilters && (
               <button
                 onClick={clearAllFilters}
                 className="mt-4 text-sm text-purple-400 hover:text-purple-300 underline underline-offset-4 transition-colors"
               >
-                {tr('Clear all filters', 'Filter အားလုံးဖျက်')}
+                {t('shop.clearFilters')}
               </button>
             )}
           </div>
@@ -342,7 +343,8 @@ function ShopContent() {
                       <ProductCarousel
                         key={cat}
                         products={grouped[cat]}
-                        title={tr(CATEGORY_LABELS[cat]?.en || cat, CATEGORY_LABELS[cat]?.my || cat)}
+                        title={lang === 'my' ? (CATEGORY_LABELS[cat]?.my || cat) : (CATEGORY_LABELS[cat]?.en || cat)}
+                        viewAllLabel={t('shop.page.viewAll')}
                         onCategoryClick={() => {
                           setCategory(cat);
                           setPage(1);
@@ -380,7 +382,7 @@ function ShopContent() {
                   className="btn-secondary !px-4 !py-2.5"
                 >
                   <ChevronLeft className="w-5 h-5" />
-                  {tr('Previous', 'ရှေ့စာမျက်နှာ')}
+                  {t('common.previous')}
                 </button>
 
                 {/* Page Numbers */}
@@ -417,7 +419,7 @@ function ShopContent() {
                   disabled={page === totalPages}
                   className="btn-secondary !px-4 !py-2.5"
                 >
-                  {tr('Next', 'နောက်စာမျက်နှာ')}
+                  {t('common.next')}
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>

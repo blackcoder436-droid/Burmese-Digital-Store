@@ -37,7 +37,7 @@ const actionConfig: Record<string, { icon: any; color: string; label: string; la
 };
 
 export default function ActivityLogPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -69,22 +69,22 @@ export default function ActivityLogPage() {
 
   function timeAgo(date: string) {
     const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
-    if (seconds < 60) return tr('just now', 'ယခုလေးတင်');
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}${tr('m ago', 'မိနစ်အရင်')}`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}${tr('h ago', 'နာရီအရင်')}`;
-    if (seconds < 604800) return `${Math.floor(seconds / 86400)}${tr('d ago', 'ရက်အရင်')}`;
+    if (seconds < 60) return t('admin.activityPage.justNow');
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}${t('admin.activityPage.mAgo')}`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}${t('admin.activityPage.hAgo')}`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)}${t('admin.activityPage.dAgo')}`;
     return new Date(date).toLocaleDateString();
   }
 
   const actionFilters = [
-    { value: '', label: tr('All Actions', 'အားလုံး') },
-    { value: 'order_approved', label: tr('Approved', 'အတည်ပြု') },
-    { value: 'order_rejected', label: tr('Rejected', 'ပယ်ချ') },
-    { value: 'product_created', label: tr('Product Created', 'ပစ္စည်းအသစ်') },
-    { value: 'product_updated', label: tr('Product Updated', 'ပစ္စည်းပြင်ဆင်') },
-    { value: 'user_promoted', label: tr('User Promoted', 'သုံးပြုသူတိုး') },
-    { value: 'user_deleted', label: tr('User Deleted', 'သုံးပြုသူဖျက်') },
-    { value: 'settings_updated', label: tr('Settings', 'ဆက်တင်') },
+    { value: '', label: t('admin.activityPage.allActions') },
+    { value: 'order_approved', label: t('admin.activityPage.approved') },
+    { value: 'order_rejected', label: t('admin.activityPage.rejected') },
+    { value: 'product_created', label: t('admin.activityPage.productCreated') },
+    { value: 'product_updated', label: t('admin.activityPage.productUpdated') },
+    { value: 'user_promoted', label: t('admin.activityPage.userPromoted') },
+    { value: 'user_deleted', label: t('admin.activityPage.userDeleted') },
+    { value: 'settings_updated', label: t('admin.activityPage.settingsUpdated') },
   ];
 
   return (
@@ -95,8 +95,8 @@ export default function ActivityLogPage() {
             <History className="w-5 h-5 text-purple-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">{tr('Activity Log', 'လုပ်ဆောင်ချက်မှတ်တမ်း')}</h1>
-            <p className="text-xs text-gray-500">{tr('Track all admin actions', 'Admin လုပ်ဆောင်ချက်များ ခြေရာခံ')}</p>
+            <h1 className="text-xl font-bold text-white">{t('admin.activityPage.title')}</h1>
+            <p className="text-xs text-gray-500">{t('admin.activityPage.subtitle')}</p>
           </div>
         </div>
 
@@ -124,7 +124,7 @@ export default function ActivityLogPage() {
         ) : logs.length === 0 ? (
           <div className="text-center py-20">
             <History className="w-10 h-10 text-dark-600 mx-auto mb-3" />
-            <p className="text-gray-500">{tr('No activity logs yet', 'လုပ်ဆောင်ချက်မှတ်တမ်း မရှိသေးပါ')}</p>
+            <p className="text-gray-500">{t('admin.activityPage.noLogs')}</p>
           </div>
         ) : (
           <div className="divide-y divide-dark-600/50">
@@ -138,7 +138,7 @@ export default function ActivityLogPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-white">{tr(config.label, config.labelMy)}</span>
+                      <span className="text-sm font-semibold text-white">{t(`admin.activityPage.actions.${log.action}`)}</span>
                       <span className="text-xs text-gray-500">•</span>
                       <span className="text-xs text-gray-500">{log.admin?.name || 'Admin'}</span>
                     </div>

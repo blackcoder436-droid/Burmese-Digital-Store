@@ -11,6 +11,7 @@ import {
   Store,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
+import NotificationBell from '@/components/NotificationBell';
 
 interface AuthUser {
   id: string;
@@ -21,7 +22,7 @@ interface AuthUser {
 }
 
 export default function AdminHeader() {
-  const { lang, setLang, tr } = useLanguage();
+  const { lang, setLang, t } = useLanguage();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -86,7 +87,7 @@ export default function AdminHeader() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-purple-500/20 transition-all"
           >
             <Store className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{tr('View Store', 'ဆိုင်ကိုကြည့်ရန်')}</span>
+            <span className="hidden sm:inline">{t('nav.viewStore')}</span>
           </Link>
 
           {/* Language toggle */}
@@ -112,6 +113,8 @@ export default function AdminHeader() {
               </svg>
             )}
           </button>
+
+          {user && <NotificationBell isAdmin />}
 
           {/* User dropdown */}
           {user && (
@@ -145,7 +148,7 @@ export default function AdminHeader() {
                       onClick={() => setShowDropdown(false)}
                     >
                       <User className="w-4 h-4" />
-                      {tr('My Account', 'ကျွန်ုပ်အကောင့်')}
+                      {t('nav.myAccount')}
                     </Link>
                     <Link
                       href="/account/orders"
@@ -153,7 +156,7 @@ export default function AdminHeader() {
                       onClick={() => setShowDropdown(false)}
                     >
                       <ShoppingBag className="w-4 h-4" />
-                      {tr('My Orders', 'ကျွန်ုပ်အော်ဒါများ')}
+                      {t('nav.myOrders')}
                     </Link>
                   </div>
                   <div className="p-1.5 border-t border-white/5">
@@ -162,7 +165,7 @@ export default function AdminHeader() {
                       className="flex items-center gap-3 px-3 py-2 w-full text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all"
                     >
                       <LogOut className="w-4 h-4" />
-                      {tr('Log Out', 'ထွက်မည်')}
+                      {t('nav.logOut')}
                     </button>
                   </div>
                 </div>

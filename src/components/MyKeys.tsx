@@ -17,7 +17,7 @@ interface MyKeysProps {
 }
 
 export default function MyKeys({ keys, productName }: MyKeysProps) {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<number, boolean>>({});
 
@@ -52,7 +52,7 @@ export default function MyKeys({ keys, productName }: MyKeysProps) {
           <Key className="w-5 h-5 text-purple-400" />
         </div>
         <h3 className="text-lg font-bold text-white">
-          {tr('My Keys', 'ကျွန်ုပ်၏ Key များ')} — {productName}
+          {t('account.myKeys')} — {productName}
         </h3>
       </div>
 
@@ -66,7 +66,7 @@ export default function MyKeys({ keys, productName }: MyKeysProps) {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <span className="text-xs text-gray-500 font-medium uppercase tracking-wider block mb-1">
-                    {tr('Serial Key', 'Serial Key')}
+                    {t('account.serialKey')}
                   </span>
                   <code className="text-base text-purple-400 font-mono break-all">
                     {key.serialKey}
@@ -77,7 +77,7 @@ export default function MyKeys({ keys, productName }: MyKeysProps) {
                     copyToClipboard(key.serialKey!, `serial-${index}`)
                   }
                   className="ml-4 p-2.5 bg-dark-800 hover:bg-purple-500/10 border border-dark-600 hover:border-purple-500/50 rounded-xl transition-all flex-shrink-0"
-                  title={tr('Copy', 'ကူးယူရန်')}
+                  title={t('common.copy')}
                 >
                   {copiedField === `serial-${index}` ? (
                     <Check className="w-5 h-5 text-emerald-400" />
@@ -92,7 +92,7 @@ export default function MyKeys({ keys, productName }: MyKeysProps) {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <span className="text-xs text-slate-500 block mb-0.5">
-                    {tr('Email / Username', 'Email / Username')}
+                    {t('account.emailUsername')}
                   </span>
                   <code className="text-sm text-sky-400 font-mono break-all">
                     {key.loginEmail}
@@ -103,7 +103,7 @@ export default function MyKeys({ keys, productName }: MyKeysProps) {
                     copyToClipboard(key.loginEmail!, `email-${index}`)
                   }
                   className="ml-3 p-2 hover:bg-white/5 rounded-lg transition-colors flex-shrink-0"
-                  title={tr('Copy', 'ကူးယူရန်')}
+                  title={t('common.copy')}
                 >
                   {copiedField === `email-${index}` ? (
                     <Check className="w-4 h-4 text-emerald-400" />
@@ -118,7 +118,7 @@ export default function MyKeys({ keys, productName }: MyKeysProps) {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <span className="text-xs text-slate-500 block mb-0.5">
-                    {tr('Password', 'လျှို့ဝှက်နံပါတ်')}
+                    {t('auth.password')}
                   </span>
                   <code className="text-sm text-amber-400 font-mono break-all">
                     {showPasswords[index]
@@ -130,7 +130,7 @@ export default function MyKeys({ keys, productName }: MyKeysProps) {
                   <button
                     onClick={() => togglePassword(index)}
                     className="p-2 hover:bg-white/5 rounded-lg transition-colors"
-                    title={showPasswords[index] ? tr('Hide', 'ဖျောက်ရန်') : tr('Show', 'ပြရန်')}
+                    title={showPasswords[index] ? t('common.hide') : t('common.show')}
                   >
                     {showPasswords[index] ? (
                       <EyeOff className="w-4 h-4 text-slate-500" />
@@ -143,7 +143,7 @@ export default function MyKeys({ keys, productName }: MyKeysProps) {
                       copyToClipboard(key.loginPassword!, `pass-${index}`)
                     }
                     className="p-2 hover:bg-white/5 rounded-lg transition-colors"
-                    title={tr('Copy', 'ကူးယူရန်')}
+                    title={t('common.copy')}
                   >
                     {copiedField === `pass-${index}` ? (
                       <Check className="w-4 h-4 text-emerald-400" />
@@ -158,7 +158,7 @@ export default function MyKeys({ keys, productName }: MyKeysProps) {
             {key.additionalInfo && (
               <div className="pt-1.5 border-t border-surface-border">
                 <span className="text-xs text-slate-500 block mb-0.5">
-                  {tr('Additional Info', 'ထပ်ဆောင်းအချက်အလက်')}
+                  {t('account.additionalInfo')}
                 </span>
                 <p className="text-sm text-slate-400">{key.additionalInfo}</p>
               </div>

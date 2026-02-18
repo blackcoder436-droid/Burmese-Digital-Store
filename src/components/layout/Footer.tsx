@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useLanguage } from '@/lib/language';
 
 export default function Footer() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
 
   return (
     <footer className="bg-dark-900 border-t border-dark-600/50">
@@ -27,10 +27,7 @@ export default function Footer() {
               </span>
             </Link>
             <p className="mt-3 text-sm text-gray-500 leading-relaxed max-w-xs">
-              {tr(
-                'Your trusted source for premium digital products — VPN, streaming, gaming & more.',
-                'VPN၊ streaming၊ gaming စသည့် premium digital products များအတွက် ယုံကြည်ရသော အရင်းအမြစ်။'
-              )}
+              {t('footer.description')}
             </p>
           </div>
 
@@ -38,11 +35,11 @@ export default function Footer() {
             {/* Quick Links */}
             <div>
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
-                {tr('Shop', 'ဆိုင်')}
+                {t('footer.shop')}
               </h4>
               <ul className="space-y-2.5">
                 {[
-                  { label: tr('VPN Accounts', 'VPN အကောင့်များ'), href: '/shop?category=vpn' },
+                  { label: t('footer.vpnAccounts'), href: '/shop?category=vpn' },
                   { label: 'Streaming', href: '/shop?category=streaming' },
                   { label: 'Gaming', href: '/shop?category=gaming' },
                   { label: 'Software', href: '/shop?category=software' },
@@ -59,14 +56,14 @@ export default function Footer() {
             {/* Support */}
             <div>
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
-                {tr('Support', 'ပံ့ပိုးမှု')}
+                {t('footer.support')}
               </h4>
               <ul className="space-y-2.5">
                 {[
-                  { label: tr('Contact Us', 'ဆက်သွယ်ရန်'), href: '/contact' },
-                  { label: tr('VPN Plans', 'VPN အစီအစဉ်များ'), href: '/vpn' },
-                  { label: tr('My Account', 'ကျွန်ုပ်အကောင့်'), href: '/account' },
-                  { label: tr('My Orders', 'ကျွန်ုပ်၏အော်ဒါများ'), href: '/account/orders' },
+                  { label: t('footer.contactUs'), href: '/contact' },
+                  { label: t('footer.vpnPlans'), href: '/vpn' },
+                  { label: t('nav.myAccount'), href: '/account' },
+                  { label: t('nav.myOrders'), href: '/account/orders' },
                 ].map((link) => (
                   <li key={link.label}>
                     <Link href={link.href} className="text-sm text-gray-500 hover:text-purple-400 transition-colors">
@@ -81,7 +78,7 @@ export default function Footer() {
           {/* Payment Methods */}
           <div className="lg:col-span-4">
             <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
-              {tr('We Accept', 'ငွေပေးချေနည်းများ')}
+              {t('footer.weAccept')}
             </h4>
             <div className="flex flex-wrap gap-2">
               {['KBZ Pay', 'WaveMoney', 'UAB Pay', 'AYA Pay'].map((method) => (
@@ -99,12 +96,12 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="mt-10 pt-6 border-t border-dark-600/30 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-gray-600">
-            &copy; {new Date().getFullYear()} Burmese Digital Store. {tr('All rights reserved.', 'မူပိုင်ခွင့်များအားလုံးကို သိမ်းဆည်းထားသည်။')}
+            &copy; {new Date().getFullYear()} Burmese Digital Store. {t('footer.allRightsReserved')}
           </p>
           <div className="flex items-center gap-5 text-xs text-gray-600">
-            <Link href="/terms" className="hover:text-purple-400 transition-colors">{tr('Terms', 'စည်းကမ်းချက်များ')}</Link>
-            <Link href="/privacy" className="hover:text-purple-400 transition-colors">{tr('Privacy', 'ကိုယ်ရေးလုံခြုံမှု')}</Link>
-            <Link href="/refund-policy" className="hover:text-purple-400 transition-colors">{tr('Refund Policy', 'ငွေပြန်အမ်းမူဝါဒ')}</Link>
+            <Link href="/terms" className="hover:text-purple-400 transition-colors">{t('footer.terms')}</Link>
+            <Link href="/privacy" className="hover:text-purple-400 transition-colors">{t('footer.privacy')}</Link>
+            <Link href="/refund-policy" className="hover:text-purple-400 transition-colors">{t('footer.refundPolicy')}</Link>
           </div>
         </div>
       </div>

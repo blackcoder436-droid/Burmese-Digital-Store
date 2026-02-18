@@ -24,7 +24,7 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
   const [authorized, setAuthorized] = useState(false);
@@ -56,17 +56,17 @@ export default function AdminLayout({
   }
 
   const navItems = [
-    { href: '/admin', label: tr('Dashboard', 'ဒက်ရှ်ဘုတ်'), icon: LayoutDashboard },
-    { href: '/admin/products', label: tr('Products', 'ပစ္စည်းများ'), icon: Package },
-    { href: '/admin/orders', label: tr('Orders', 'အော်ဒါများ'), icon: ShoppingCart },
-    { href: '/admin/vpn-keys', label: tr('VPN Keys', 'VPN Keys'), icon: Key },
-    { href: '/admin/servers', label: tr('Servers', 'Servers'), icon: Server },
-    { href: '/admin/users', label: tr('Users', 'အသုံးပြုသူများ'), icon: Users },
-    { href: '/admin/analytics', label: tr('Analytics', 'Analytics'), icon: BarChart3 },
-    { href: '/admin/activity', label: tr('Activity', 'မှတ်တမ်း'), icon: History },
-    { href: '/admin/coupons', label: tr('Coupons', 'ကူပွန်များ'), icon: Tag },
-    { href: '/admin/export', label: tr('Export', 'Export'), icon: Download },
-    { href: '/admin/settings', label: tr('Settings', 'ဆက်တင်'), icon: Settings },
+    { href: '/admin', label: t('admin.nav.dashboard'), icon: LayoutDashboard },
+    { href: '/admin/products', label: t('admin.nav.products'), icon: Package },
+    { href: '/admin/orders', label: t('admin.nav.orders'), icon: ShoppingCart },
+    { href: '/admin/vpn-keys', label: t('admin.nav.vpnKeys'), icon: Key },
+    { href: '/admin/servers', label: t('admin.nav.servers'), icon: Server },
+    { href: '/admin/users', label: t('admin.nav.users'), icon: Users },
+    { href: '/admin/analytics', label: t('admin.nav.analytics'), icon: BarChart3 },
+    { href: '/admin/activity', label: t('admin.nav.activity'), icon: History },
+    { href: '/admin/coupons', label: t('admin.nav.coupons'), icon: Tag },
+    { href: '/admin/export', label: t('admin.nav.export'), icon: Download },
+    { href: '/admin/settings', label: t('admin.nav.settings'), icon: Settings },
   ];
 
   return (

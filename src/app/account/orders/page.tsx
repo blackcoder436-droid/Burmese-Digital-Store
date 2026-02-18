@@ -46,7 +46,7 @@ interface Order {
 }
 
 export default function OrdersPage() {
-  const { tr } = useLanguage();
+  const { t } = useLanguage();
   const containerRef = useScrollFade();
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -80,7 +80,7 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12 relative z-[1]" ref={containerRef}>
+    <div className="min-h-screen pt-8 pb-12 relative z-[1]" ref={containerRef}>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="scroll-fade flex items-center justify-between mb-10">
@@ -90,14 +90,14 @@ export default function OrdersPage() {
               className="inline-flex items-center space-x-2 text-sm text-gray-500 hover:text-purple-400 mb-4 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>{tr('Back to Account', 'အကောင့်သို့ပြန်မည်')}</span>
+              <span>{t('account.orders.backToAccount')}</span>
             </Link>
-            <h1 className="heading-lg">{tr('My Orders', 'ကျွန်ုပ်၏အော်ဒါများ')}</h1>
+            <h1 className="heading-lg">{t('account.orders.myOrders')}</h1>
           </div>
           <button
             onClick={() => fetchOrders()}
             className="p-3 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-xl transition-all"
-            title={tr('Refresh', 'ပြန်လည်တင်ရန်')}
+            title={t('account.orders.refresh')}
           >
             <RefreshCw className="w-5 h-5" />
           </button>
@@ -106,11 +106,11 @@ export default function OrdersPage() {
         {/* Filters */}
         <div className="scroll-fade flex flex-wrap gap-2 mb-8" data-delay="100">
           {[
-            { value: '', label: tr('All', 'အားလုံး') },
-            { value: 'pending', label: tr('Pending', 'စောင့်ဆိုင်းနေသည်') },
-            { value: 'verifying', label: tr('Verifying', 'စစ်ဆေးနေသည်') },
-            { value: 'completed', label: tr('Completed', 'ပြီးဆုံးသည်') },
-            { value: 'rejected', label: tr('Rejected', 'ပယ်ချသည်') },
+            { value: '', label: t('account.orders.all') },
+            { value: 'pending', label: t('account.orders.pending') },
+            { value: 'verifying', label: t('account.orders.verifying') },
+            { value: 'completed', label: t('account.orders.completed') },
+            { value: 'rejected', label: t('account.orders.rejected') },
           ].map((f) => (
             <button
               key={f.value}
@@ -139,13 +139,13 @@ export default function OrdersPage() {
               <Package className="w-10 h-10 text-gray-600" />
             </div>
             <h3 className="text-xl font-bold text-white mb-2">
-              {tr('No orders yet', 'အော်ဒါမရှိသေးပါ')}
+              {t('account.orders.noOrdersYet')}
             </h3>
             <p className="text-gray-500 mb-8">
-              {tr('Browse our shop to find amazing digital products.', 'Digital products များကိုရှာရန် ဆိုင်ကိုကြည့်ပါ။')}
+              {t('account.orders.browseShopMsg')}
             </p>
             <Link href="/shop" className="btn-electric">
-              {tr('Browse Shop', 'ဆိုင်ကြည့်မည်')}
+              {t('account.orders.browseShop')}
             </Link>
           </div>
         ) : (
@@ -183,7 +183,7 @@ export default function OrdersPage() {
                     </div>
                     {order.ocrVerified && (
                       <span className="inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        ✓ {tr('OCR Verified', 'OCR အတည်ပြုပြီး')}
+                        ✓ {t('account.orders.ocrVerified')}
                       </span>
                     )}
                   </div>
