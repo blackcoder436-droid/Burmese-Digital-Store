@@ -100,7 +100,7 @@ function HowItWorksCarousel({ language }: { language: 'en' | 'my' }) {
 }
 
 export default function HomePage() {
-  const { t, language } = useLanguage();
+  const { t, lang: language } = useLanguage();
   const containerRef = useScrollFade();
 
   return (

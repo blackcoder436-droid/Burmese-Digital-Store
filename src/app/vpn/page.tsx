@@ -159,7 +159,7 @@ interface LiveServerHealth {
 }
 
 export default function VPNPage() {
-  const { t, language } = useLanguage();
+  const { t, lang: language } = useLanguage();
   const router = useRouter();
   const [activeDevice, setActiveDevice] = useState(1);
   const [openFaq, setOpenFaq] = useState<number | null>(null);

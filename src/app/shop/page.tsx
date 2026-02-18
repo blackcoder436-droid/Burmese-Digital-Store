@@ -46,7 +46,7 @@ const CATEGORY_LABELS: Record<string, { en: string; my: string }> = {
 const MANY_PRODUCTS_THRESHOLD = 8;
 
 // Auto-scrolling horizontal carousel for mobile
-function ProductCarousel({ products, title, onCategoryClick }: {
+function ProductCarousel({ products, title, onCategoryClick, viewAllLabel }: {
   products: Product[];
   title?: string;
   onCategoryClick?: () => void;

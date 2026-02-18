@@ -64,7 +64,7 @@ export default function ProductCard({ product }: { product: Product }) {
           {hasImage ? (
             <>
               <Image
-                src={product.image}
+                src={product.image!}
                 alt={product.name}
                 fill
                 className="object-cover group-hover:scale-105 transition-transform duration-500"
