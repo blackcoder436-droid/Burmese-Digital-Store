@@ -27,7 +27,6 @@ const CouponSchema: Schema = new Schema(
     code: {
       type: String,
       required: [true, 'Coupon code is required'],
-      unique: true,
       trim: true,
       uppercase: true,
       maxlength: [30, 'Coupon code cannot exceed 30 characters'],
@@ -94,7 +93,7 @@ const CouponSchema: Schema = new Schema(
   }
 );
 
-CouponSchema.index({ code: 1 });
+CouponSchema.index({ code: 1 }, { unique: true });
 CouponSchema.index({ active: 1, validUntil: 1 });
 
 const Coupon: Model<ICouponDocument> =

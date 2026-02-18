@@ -88,8 +88,6 @@ const OrderSchema: Schema = new Schema(
   {
     orderNumber: {
       type: String,
-      unique: true,
-      sparse: true,
     },
     user: {
       type: Schema.Types.ObjectId,
@@ -208,7 +206,6 @@ const OrderSchema: Schema = new Schema(
     },
     screenshotHash: {
       type: String,
-      index: true,
     },
     fraudFlags: {
       type: [String],
