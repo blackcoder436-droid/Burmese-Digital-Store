@@ -4,6 +4,9 @@ import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
 import { hashPassword } from '@/lib/auth';
 import { rateLimit } from '@/lib/rateLimit';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/auth/reset-password' });
 
 // ==========================================
 // Reset Password API - Burmese Digital Store
@@ -79,7 +82,7 @@ export async function POST(request: NextRequest) {
       message: 'Password has been reset successfully',
     });
   } catch (error) {
-    console.error('Reset password error:', error);
+    log.error('Reset password error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Something went wrong' },
       { status: 500 }

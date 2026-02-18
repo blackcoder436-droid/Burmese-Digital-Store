@@ -45,6 +45,7 @@ export interface IVerificationChecklist {
 }
 
 export interface IOrderDocument extends Document {
+  orderNumber: string; // Human-readable: BD-000001
   user: mongoose.Types.ObjectId;
   product?: mongoose.Types.ObjectId; // optional for VPN orders
   orderType: 'product' | 'vpn';
@@ -68,6 +69,9 @@ export interface IOrderDocument extends Document {
   adminNote?: string;
   couponCode?: string;
   discountAmount?: number;
+  // Telegram screenshot storage
+  telegramFileId?: string;
+  telegramMessageId?: number;
   // Payment verification & fraud detection fields
   paymentExpiresAt?: Date;
   screenshotHash?: string;
@@ -82,6 +86,11 @@ export interface IOrderDocument extends Document {
 
 const OrderSchema: Schema = new Schema(
   {
+    orderNumber: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     user: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -175,6 +184,14 @@ const OrderSchema: Schema = new Schema(
       type: String,
       maxlength: [500, 'Admin note cannot exceed 500 characters'],
     },
+    telegramFileId: {
+      type: String,
+      default: null,
+    },
+    telegramMessageId: {
+      type: Number,
+      default: null,
+    },
     couponCode: {
       type: String,
       trim: true,
@@ -226,7 +243,32 @@ const OrderSchema: Schema = new Schema(
   }
 );
 
+// Auto-generate orderNumber before save
+OrderSchema.pre('save', async function (next) {
+  if (!this.orderNumber) {
+    try {
+      const lastOrder = await mongoose.models.Order
+        .findOne({ orderNumber: { $exists: true, $ne: null } })
+        .sort({ orderNumber: -1 })
+        .select('orderNumber')
+        .lean() as { orderNumber?: string } | null;
+
+      let nextNum = 1;
+      if (lastOrder?.orderNumber) {
+        const match = lastOrder.orderNumber.match(/BD-(\d+)/);
+        if (match) nextNum = parseInt(match[1], 10) + 1;
+      }
+      this.orderNumber = `BD-${String(nextNum).padStart(6, '0')}`;
+    } catch {
+      // Fallback: timestamp-based
+      this.orderNumber = `BD-${Date.now().toString(36).toUpperCase()}`;
+    }
+  }
+  next();
+});
+
 // Indexes
+OrderSchema.index({ orderNumber: 1 }, { unique: true, sparse: true });
 OrderSchema.index({ user: 1, status: 1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ transactionId: 1 });

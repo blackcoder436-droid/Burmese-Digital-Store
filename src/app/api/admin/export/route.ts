@@ -6,6 +6,9 @@ import Product from '@/models/Product';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { trackDataExport } from '@/lib/monitoring';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/admin/export' });
 
 // GET /api/admin/export?type=orders|users|products
 export async function GET(request: NextRequest) {
@@ -134,7 +137,7 @@ export async function GET(request: NextRequest) {
     if (error.message === 'Admin access required' || error.message === 'Authentication required') {
       return NextResponse.json({ success: false, error: error.message }, { status: 403 });
     }
-    console.error('Export error:', error);
+    log.error('Export error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }

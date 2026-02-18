@@ -124,14 +124,12 @@ export default function HomePage() {
             {/* Main Heading */}
             <h1 className="scroll-fade heading-xl !leading-[1.3] sm:!leading-[1.26] lg:!leading-[1.22] tracking-normal" data-delay="100">
               {tr('Premium Digital Products', 'အဆင့်မြင့် Digital Products')}
-              <br />
-              <span className="text-accent-gradient">{tr('Delivered Instantly', 'ချက်ချင်းပို့ဆောင်ပေးသည်')}</span>
             </h1>
 
             <p className="scroll-fade text-xl text-gray-400 max-w-2xl mx-auto leading-[1.8] sm:leading-[1.7]" data-delay="200">
               {tr(
-                'VPN accounts, streaming subscriptions, gaming credits, and software licenses. Pay with local payment methods — verified automatically.',
-                'VPN အကောင့်များ၊ streaming subscriptions၊ gaming credits နှင့် software licenses များကို ပြည်တွင်းငွေပေးချေမှုဖြင့် အလိုအလျောက်စစ်ဆေးကာ ဝယ်ယူနိုင်ပါသည်။'
+                'Buy VPN accounts, streaming subscriptions, gaming credits, and software licenses with local payment methods and automatic verification.',
+                'VPN အကောင့်များ၊ Subscriptions နှင့် Digital Products များကို မြန်မာပြည်တွင်း ငွေပေးချေမှုဖြင့် အချိန်မရွေးလွယ်ကူစွာ ဝယ်ယူနိုင်ပါသည်။'
               )}
             </p>
 
@@ -151,8 +149,8 @@ export default function HomePage() {
             {/* Trust Indicators */}
             <div className="scroll-fade flex flex-wrap items-center justify-center gap-x-8 gap-y-3 pt-6" data-delay="400">
               {[
-                tr('Instant Delivery', 'ချက်ချင်းပို့ဆောင်မှု'),
-                tr('Auto-Verified Payments', 'အလိုအလျောက်ငွေစစ်ဆေးမှု'),
+                tr('Delivery in Seconds', 'စက္ကန့်ပိုင်းအတွင်း ပို့ဆောင်မှု'),
+                tr('Auto-Verified Payments', 'ငွေပေးချေမှု အလိုအလျောက်အတည်ပြုမှု'),
                 tr('Secure & Trusted', 'လုံခြုံပြီး ယုံကြည်စိတ်ချရမှု'),
                 tr('24/7 Support', '24/7 အကူအညီ')
               ].map(

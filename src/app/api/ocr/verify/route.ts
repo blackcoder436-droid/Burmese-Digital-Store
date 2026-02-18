@@ -11,6 +11,9 @@ import {
   ALLOWED_IMAGE_TYPES,
   MAX_SCREENSHOT_SIZE,
 } from '@/lib/security';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/ocr/verify' });
 
 // POST /api/ocr/verify - Verify payment screenshot with OCR
 export async function POST(request: NextRequest) {
@@ -95,7 +98,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error: unknown) {
-    console.error('OCR verify error:', error);
+    log.error('OCR verify error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Failed to process screenshot' },
       { status: 500 }

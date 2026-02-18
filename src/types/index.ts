@@ -42,11 +42,24 @@ export interface IProductDetail {
 
 export type OrderStatus = 'pending' | 'verifying' | 'completed' | 'rejected' | 'refunded';
 export type PaymentMethod = 'kpay' | 'wavemoney' | 'cbpay' | 'ayapay';
+export type FraudFlag = 'duplicate_txid' | 'duplicate_screenshot' | 'amount_time_suspicious' | 'first_time_user' | 'high_amount';
+
+export interface IVerificationChecklist {
+  amountVerified?: boolean;
+  timeVerified?: boolean;
+  accountVerified?: boolean;
+  txidVerified?: boolean;
+  payerVerified?: boolean;
+  completedAt?: Date;
+  completedBy?: string;
+}
 
 export interface IOrder {
   _id: string;
+  orderNumber: string;
   user: string | IUser;
-  product: string | IProduct;
+  product?: string | IProduct;
+  orderType: 'product' | 'vpn';
   quantity: number;
   totalAmount: number;
   paymentMethod: PaymentMethod;
@@ -60,6 +73,21 @@ export interface IOrder {
   };
   status: OrderStatus;
   deliveredKeys: IProductDetail[];
+  // VPN-specific
+  vpnPlan?: IVpnPlan;
+  vpnKey?: IVpnKey;
+  vpnProvisionStatus?: VpnProvisionStatus;
+  // Coupon
+  couponCode?: string;
+  discountAmount?: number;
+  // Fraud detection
+  fraudFlags: FraudFlag[];
+  requiresManualReview: boolean;
+  reviewReason?: string;
+  verificationChecklist?: IVerificationChecklist;
+  rejectReason?: string;
+  paymentExpiresAt?: Date;
+  screenshotHash?: string;
   adminNote?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -110,3 +138,119 @@ export interface IVpnKey {
 }
 
 export type VpnProvisionStatus = 'pending' | 'provisioned' | 'failed' | 'revoked';
+
+// ==========================================
+// Coupon Types
+// ==========================================
+
+export interface ICoupon {
+  _id: string;
+  code: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number;
+  usageLimit?: number;
+  usageCount: number;
+  perUserLimit?: number;
+  categories?: string[];
+  startDate?: Date;
+  endDate?: Date;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ==========================================
+// Notification Types
+// ==========================================
+
+export type NotificationType = 'order_status' | 'order_new' | 'system' | 'vpn_provision' | 'vpn_expiry' | 'payment';
+
+export interface INotification {
+  _id: string;
+  user: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  read: boolean;
+  link?: string;
+  createdAt: Date;
+}
+
+// ==========================================
+// Site Settings Types
+// ==========================================
+
+export interface IPaymentAccount {
+  method: string;
+  accountName: string;
+  accountNumber: string;
+  qrCode?: string;
+}
+
+export interface ISiteSettings {
+  _id: string;
+  ocrEnabled: boolean;
+  paymentAccounts: IPaymentAccount[];
+  highAmountThreshold: number;
+  paymentWindowMinutes: number;
+  requireManualReviewForNewUsers: boolean;
+}
+
+// ==========================================
+// Activity Log Types
+// ==========================================
+
+export type ActivityAction =
+  | 'order_approve' | 'order_reject' | 'order_refund'
+  | 'user_promote' | 'user_demote' | 'user_delete'
+  | 'product_create' | 'product_update' | 'product_delete'
+  | 'coupon_create' | 'coupon_update' | 'coupon_delete'
+  | 'settings_update' | 'server_create' | 'server_update' | 'server_delete'
+  | 'vpn_provisioned' | 'vpn_revoked' | 'vpn_provision_failed'
+  | 'export_data';
+
+export interface IActivityLog {
+  _id: string;
+  admin: string | IUser;
+  action: ActivityAction;
+  target?: string;
+  targetModel?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+}
+
+// ==========================================
+// VPN Server Types
+// ==========================================
+
+export interface IVpnServer {
+  _id: string;
+  serverId: string;
+  name: string;
+  flag: string;
+  url: string;
+  panelPath: string;
+  domain: string;
+  subPort: number;
+  trojanPort?: number;
+  protocols: string[];
+  enabled: boolean;
+  online: boolean;
+  latency?: number;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ==========================================
+// Pagination Type
+// ==========================================
+
+export interface IPagination {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+}

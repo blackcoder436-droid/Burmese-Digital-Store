@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Product from '@/models/Product';
 import { apiLimiter } from '@/lib/rateLimit';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/products/[id]' });
 
 // GET /api/products/[id] - Get single product
 export async function GET(
@@ -34,7 +37,7 @@ export async function GET(
       data: { product },
     });
   } catch (error: unknown) {
-    console.error('Product GET error:', error);
+    log.error('Product GET error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

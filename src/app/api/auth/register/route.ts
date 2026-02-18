@@ -1,54 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
 import { hashPassword, generateToken, COOKIE_NAME } from '@/lib/auth';
-import { authLimiter } from '@/lib/rateLimit';
+import { registerLimiter } from '@/lib/rateLimit';
 import { sanitizeString, isValidEmail } from '@/lib/security';
+import { createLogger } from '@/lib/logger';
+import { registerSchema, parseBody } from '@/lib/validations';
+import { sendVerificationEmail } from '@/lib/email';
+
+const log = createLogger({ route: '/api/auth/register' });
 
 // POST /api/auth/register
 export async function POST(request: NextRequest) {
-  // Rate limiting
-  const limited = await authLimiter(request);
+  // Rate limiting — 1 registration per 3 minutes per IP
+  const limited = await registerLimiter(request);
   if (limited) return limited;
 
   try {
     await connectDB();
 
     const body = await request.json();
-
-    // Sanitize all inputs
-    const name = sanitizeString(body.name || '');
-    const email = (body.email || '').trim().toLowerCase();
-    const password = body.password || '';
-
-    // Validation
-    if (!name || !email || !password) {
+    const parsed = parseBody(registerSchema, body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: 'All fields are required' },
+        { success: false, error: parsed.error },
         { status: 400 }
       );
     }
 
-    if (name.length < 2 || name.length > 50) {
-      return NextResponse.json(
-        { success: false, error: 'Name must be 2-50 characters' },
-        { status: 400 }
-      );
-    }
-
-    if (!isValidEmail(email)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid email address' },
-        { status: 400 }
-      );
-    }
-
-    if (password.length < 6 || password.length > 128) {
-      return NextResponse.json(
-        { success: false, error: 'Password must be 6-128 characters' },
-        { status: 400 }
-      );
-    }
+    const { name, email, password } = parsed.data;
 
     // Check if user already exists (use generic message to prevent email enumeration)
     const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -59,12 +40,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash password and create user
+    // Hash password and create user with email verification token
     const hashedPassword = await hashPassword(password);
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+
     const user = await User.create({
       name,
       email: email.toLowerCase(),
       password: hashedPassword,
+      emailVerified: false,
+      emailVerificationToken: hashedToken,
+      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+    });
+
+    // Send verification email (non-blocking so registration isn't delayed)
+    sendVerificationEmail(user.email, rawToken).catch((err) => {
+      log.error('Failed to send verification email', { email: user.email, error: String(err) });
     });
 
     // Generate JWT token
@@ -84,9 +76,10 @@ export async function POST(request: NextRequest) {
             name: user.name,
             email: user.email,
             role: user.role,
+            emailVerified: false,
           },
         },
-        message: 'Registration successful',
+        message: 'Registration successful. Please check your email to verify your account.',
       },
       { status: 201 }
     );
@@ -101,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error: unknown) {
-    console.error('Register error:', error);
+    log.error('Register error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

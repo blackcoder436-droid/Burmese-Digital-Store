@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { getSiteSettings } from '@/models/SiteSettings';
 import { apiLimiter } from '@/lib/rateLimit';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/settings/payment-accounts' });
 
 // GET /api/settings/payment-accounts - Public endpoint for payment account info
 export async function GET(request: NextRequest) {
@@ -27,7 +30,7 @@ export async function GET(request: NextRequest) {
       data: { accounts },
     });
   } catch (error) {
-    console.error('Payment accounts GET error:', error);
+    log.error('Payment accounts GET error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

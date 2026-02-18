@@ -40,7 +40,88 @@
 
 ---
 
-## 🚀 Production Deployment Checklist
+## � Phase 4 — Shopping Cart & UX Improvements (2026-02-18)
+
+> Product card UX ပြင်ဆင်ခြင်း + Shopping Cart system ထည့်သွင်းခြင်း + SEO/DX improvements
+
+### Cart System
+- ✅ `src/lib/cart.tsx` — CartProvider context (localStorage persistence, add/remove/update/clear)
+- ✅ `src/app/cart/page.tsx` — Full cart page (item list, quantity edit, coupon, payment, checkout)
+- ✅ `src/app/api/orders/cart/route.ts` — Bulk cart checkout API (multiple products, single payment)
+- ✅ CartProvider integrated into root layout
+- ✅ Navbar cart icon with item count badge
+
+### Product Card UX Fix
+- ✅ ProductCard "Buy Now" → "View Details" ပြောင်းပြီး (click → detail page, not instant buy feel)
+- ✅ Product detail page: "Add to Cart" + "Buy Now" dual buttons ရှိပြီးသား
+
+### Admin Dashboard Fix
+- ✅ Revenue calculation bug fix (was only summing 5 orders → now uses analytics API for accurate totals)
+
+### SEO Improvements
+- ✅ `src/app/sitemap.ts` — Dynamic sitemap generation (static pages + all active products)
+- ✅ `src/app/robots.ts` — Robots.txt with proper allow/disallow rules
+- ✅ `src/app/shop/[id]/layout.tsx` — `generateMetadata()` for dynamic product SEO (OG, Twitter, canonical)
+
+### DX & Config
+- ✅ Myanmar font (Noto Sans Myanmar, Padauk) added to Tailwind config + globals.css
+- ✅ `reactStrictMode: true` added to next.config.js
+- ✅ `/api/health` endpoint (DB status, uptime, latency)
+- ✅ Structured logging: all API routes migrated from `console.error` → `createLogger` (15 files, 35 edits)
+- ✅ Human-readable order IDs: `orderNumber` field (BD-000001 format, auto-increment)
+- ✅ `src/types/index.ts` synced with all models (ICoupon, INotification, ISiteSettings, IActivityLog, IVpnServer, IPagination, FraudFlag, IVerificationChecklist added)
+
+### Remaining TODOs (Future)
+- ✅ Accessibility: ARIA attributes for Navbar/dropdowns, keyboard navigation (Escape), skip-to-content link
+- ✅ i18n: Extract inline translations to dictionary files (`src/lib/i18n/en.ts`, `my.ts`, `index.ts`)
+- ✅ Testing: API route integration tests (`__tests__/api-routes.test.ts`), fraud detection tests (`__tests__/fraud-detection.test.ts`)
+- ✅ Account pages: `/account/vpn-keys`, `/account/notifications`, `/account/orders/[id]`
+- ✅ User account deletion flow (privacy/GDPR) — `/api/auth/delete-account` + UI in account page
+- ✅ Email verification on registration (`emailVerified` field, 24hr expiry, blocks orders if unverified, Google OAuth auto-verified)
+- ✅ Registration rate limit: 1 per 3 minutes per IP (`registerLimiter`)
+- ✅ Payment countdown timer component (`PaymentCountdown.tsx`) — live seconds countdown on order detail page
+- ✅ Cron endpoint for auto-expiring overdue orders (`/api/cron/expire-orders`)
+- ✅ Soft-delete pattern for Users/Products (`deletedAt`/`deletedBy` fields + auto-filter middleware)
+- ✅ JSON-LD structured data (Product schema, Organization schema, WebSite schema, Breadcrumb)
+- ✅ Error reporting service — Telegram-based error reporter (`src/lib/error-reporter.ts`)
+- ✅ Zod-based env validation — `src/lib/env.ts` (server + client env schemas)
+- ✅ Zod-based API request body validation — `src/lib/validations.ts` (login, register, Google auth, delete account schemas)
+- ✅ VPN page: fetch server list from API instead of hardcoded static array
+- ✅ `/api/auth/logout` dedicated route
+- ✅ CORS headers for future mobile app support (`CORS_ALLOWED_ORIGINS` env var)
+
+---
+
+## 🔑 Phase 5 — Authentication & Integration (2026-02-18)
+
+> Google OAuth, Telegram integration, account management
+
+### Google OAuth
+- ✅ `src/app/api/auth/google/route.ts` — Google ID token verification + auto create/login
+- ✅ Google Sign-In button on Login page (Google Identity Services SDK)
+- ✅ Google Sign-Up button on Register page
+- ✅ `GOOGLE_CLIENT_ID` / `NEXT_PUBLIC_GOOGLE_CLIENT_ID` env vars required
+
+### Telegram Integration
+- ✅ `src/lib/telegram.ts` — Telegram Bot API (sendPaymentScreenshot, sendOrderNotification, getTelegramFileUrl)
+- ✅ Payment screenshots stored in Telegram channel (non-blocking, graceful fallback)
+- ✅ Order model: `telegramFileId`, `telegramMessageId` fields
+- ✅ `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHANNEL_ID` env vars required
+
+### Account Management
+- ✅ `/account/orders/[id]` — Full order detail page (status stepper, keys, VPN display)
+- ✅ `/account/vpn-keys` — Active VPN keys listing with expiry status
+- ✅ `/account/notifications` — Notifications page with mark-all-read
+- ✅ Delete account with GDPR compliance (password verify, pending order check, order anonymization)
+
+### API Improvements
+- ✅ `/api/auth/logout` — Dedicated logout POST route
+- ✅ Zod validation schemas (`src/lib/validations.ts`) for auth + order APIs
+- ✅ `googleId` field added to User model for Google OAuth tracking
+
+---
+
+## �🚀 Production Deployment Checklist
 
 ### 🎯 သင်လုပ်ရမယ့် အဓိကအဆင့် 4 ဆင့်
 
@@ -107,11 +188,13 @@
 - ✅ Manual test ပြီး — Telegram group ထဲ backup ဖိုင်ရောက်ပြီး
 - ✅ Nightly cron: `30 17 * * *` (UTC) = midnight MMT
 
-### 6. File Storage (⚠️ Production Issue)
-> `public/uploads/` ကို local filesystem ထဲ သိမ်းထား → redeploy/restart ရင် ပျောက်နိုင်
-- ⬜ **DigitalOcean Spaces** (S3-compatible) သို့ migrate လုပ်ရန် — OR
-- ⬜ **Persistent volume** mount လုပ်ရန် (DigitalOcean block storage)
-- ⬜ ယခုအတွက် DigitalOcean droplet ပေါ် direct filesystem သုံးနိုင် (PM2 restart ဆို file မပျောက်)
+### 6. File Storage (✅ Telegram Storage)
+> `public/uploads/` ကို local filesystem ထဲ သိမ်းထား → Telegram channel သို့ migrate
+- ✅ **`TelegramStorage` class** — `src/lib/storage.ts` (`StorageProvider` interface implement)
+- ✅ `STORAGE_PROVIDER=telegram` env var နဲ့ switch လုပ်လို့ရပြီး
+- ✅ `resolveStorageUrl()` helper for telegram:// URI resolution
+- ✅ URL cache (50min TTL) for Telegram file URLs
+- ⚬ ယခင်အတွက် DigitalOcean droplet ပေါ် direct filesystem သုံးနိုင် (PM2 restart ဆို file မပျောက်)
 
 ### 7. Security (Production Must-Do)
 - ✅ `JWT_SECRET` ကို strong random value ပြောင်းပြီး
@@ -153,6 +236,7 @@
 ### S8 — CI Security Gates (MEDIUM)
 - ✅ CI မှာ `npm audit --omit=dev --audit-level=high` enforce ထားပြီး (high/critical ဖြစ်ရင် fail)
 - ✅ Secret scanning (Gitleaks) + dependency review workflow ထည့်ပြီး
+- ✅ CI test job ထည့်ပြီး (`vitest run` in GitHub Actions, build depends on test pass)
 
 ### S9 — Incident Runbooks (LOW-MEDIUM)
 - ✅ `SECURITY.md` (reporting + support policy)
@@ -168,7 +252,7 @@
 
 ---
 
-## 🚧 Next Features (in order)
+## � Next Features (in order)
 
 1. ~~**Profile Avatar Upload**~~ ✅
    - ~~Allow users to upload/change their profile picture~~
@@ -196,7 +280,40 @@
 
 ---
 
-## 📋 Quick Production Deploy Commands (Reference)
+## � Phase 7 — Code Quality & DX Improvements (2026-02-18)
+
+> Bug fixes, performance improvements, developer experience
+
+### Completed
+- ✅ `requireAdmin()` double DB query fix — was 2 DB queries per admin request, now 1 (reuses `getAuthUser()` result)
+- ✅ S3Storage `S3Client` created once in constructor instead of per-request
+- ✅ `TelegramStorage` class — new storage provider for Telegram-based file storage
+- ✅ `resolveStorageUrl()` utility for telegram:// URI resolution with 50min URL cache
+- ✅ VPN order Zod validation schema (`createVpnOrderSchema` — validates serverId, planId, devices 1-5, months 1/3/5/7/9/12)
+- ✅ Password strength requirements (min 8 chars, uppercase + lowercase + number + special char)
+- ✅ Accessibility: Navbar ARIA attributes, keyboard Escape handler, skip-to-content link
+- ✅ i18n: Dictionary-based translation files (`src/lib/i18n/en.ts`, `my.ts`)
+- ✅ `useLanguage()` now exports `t('nav.home')` dictionary lookup + legacy `tr()` for backward compat
+- ✅ Soft-delete: `deletedAt`/`deletedBy` fields on User + Product models with auto-filter query middleware
+- ✅ JSON-LD: Organization, WebSite, Product, Breadcrumb structured data for SEO
+- ✅ Error reporting: Telegram-based lightweight error reporter (`src/lib/error-reporter.ts`) with dedup + rate limit
+- ✅ Zod env validation: `src/lib/env.ts` (server + client env schemas, fail-hard in production)
+- ✅ CORS headers: `CORS_ALLOWED_ORIGINS` env var based whitelist + OPTIONS preflight handling
+- ✅ CI test job: GitHub Actions `vitest run` before build (build depends on test pass)
+
+### Remaining TODOs
+- ⬜ API route integration tests (auth, orders, admin)
+- ⬜ Fraud detection unit tests
+- ⬜ Component/UI tests (React Testing Library)
+- ⬜ `expireOverdueOrders()` cron/scheduler (currently only triggers on admin page load)
+- ⬜ Migrate existing components from `tr()` to `t()` dictionary-based translations
+- ⬜ Product review/rating system
+- ⬜ Real-time notifications (SSE/WebSocket)
+- ⬜ Admin rate limit dashboard (Upstash Redis usage visualization)
+
+---
+
+## �📋 Quick Production Deploy Commands (Reference)
 
 ```bash
 # DigitalOcean Droplet ပေါ်မှာ

@@ -5,6 +5,9 @@ import { getAuthUser, COOKIE_NAME, generateToken } from '@/lib/auth';
 import { sanitizeString } from '@/lib/security';
 import { authLimiter } from '@/lib/rateLimit';
 import bcrypt from 'bcryptjs';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/auth/me' });
 
 // GET /api/auth/me - Get current user
 export async function GET(request: NextRequest) {
@@ -43,7 +46,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error: unknown) {
-    console.error('Auth me error:', error);
+    log.error('Auth me error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -151,7 +154,7 @@ export async function PUT(request: NextRequest) {
       message: 'Profile updated successfully',
     });
   } catch (error: unknown) {
-    console.error('Profile update error:', error);
+    log.error('Profile update error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -242,7 +245,7 @@ export async function PATCH(request: NextRequest) {
 
     return response;
   } catch (error: unknown) {
-    console.error('Password change error:', error);
+    log.error('Password change error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

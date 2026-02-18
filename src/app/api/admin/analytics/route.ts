@@ -5,6 +5,9 @@ import Product from '@/models/Product';
 import User from '@/models/User';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/admin/analytics' });
 
 // ==========================================
 // Analytics API - Burmese Digital Store
@@ -99,7 +102,7 @@ export async function GET(request: NextRequest) {
     if (error.message === 'Admin access required' || error.message === 'Authentication required') {
       return NextResponse.json({ success: false, error: error.message }, { status: 403 });
     }
-    console.error('Analytics GET error:', error);
+    log.error('Analytics GET error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }

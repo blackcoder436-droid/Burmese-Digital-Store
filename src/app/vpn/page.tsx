@@ -58,7 +58,7 @@ const features = [
   { icon: '\uD83C\uDF81', titleEn: 'Free Test Key', titleMy: 'Free Test Key \u1021\u1001\u103C\u1031\u1038', descEn: 'Get a free VPN test key via Telegram Bot (@BurmeseDigitalStore_bot). Join the channel and press "🎁 Free Test Key" to try before you buy!', descMy: 'Telegram Bot (@BurmeseDigitalStore_bot) \u1019\u103E\u102C "🎁 Free Test Key" \u1000\u102D\u102F \u1014\u103E\u102D\u1015\u103A\u1015\u103C\u102E\u1038 Channel Join \u101C\u102F\u1015\u103A\u101B\u102F\u1036\u1016\u103C\u1004\u103A\u1037 Free VPN Key \u1000\u102D\u102F \u1021\u1001\u103C\u1031\u1038\u101B\u101A\u1030\u1014\u102D\u102F\u1004\u103A\u1015\u102B\u101E\u100A\u103A\u104B \u101D\u101A\u103A\u1019\u101A\u1030\u1001\u1004\u103A \u1021\u101B\u1004\u103A\u1005\u1019\u103A\u1038\u1000\u103C\u100A\u103A\u1037\u1015\u102B!' },
 ];
 
-const servers = [
+const defaultServers = [
   { id: 'sg1', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 1', online: true },
   { id: 'sg2', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 2', online: true },
   { id: 'sg3', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 3', online: true },
@@ -165,13 +165,35 @@ export default function VPNPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [appStore, setAppStore] = useState<'playstore' | 'appstore'>('playstore');
   const [liveServers, setLiveServers] = useState<LiveServerHealth[]>(
-    servers.map((s) => ({ id: s.id, name: s.name, flag: s.flag, online: s.online, latencyMs: null }))
+    defaultServers.map((s) => ({ id: s.id, name: s.name, flag: s.flag, online: s.online, latencyMs: null }))
   );
 
   const wrapRef = useFadeIn();
   const onlineServers = liveServers.filter((server) => server.online);
 
-  // Fetch live server health on mount
+  // Fetch dynamic server list from DB on mount
+  useEffect(() => {
+    async function fetchServers() {
+      try {
+        const res = await fetch('/api/vpn/servers');
+        const data = await res.json();
+        if (data.success && data.data?.servers?.length > 0) {
+          setLiveServers(data.data.servers.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            flag: s.flag,
+            online: s.online,
+            latencyMs: null,
+          })));
+        }
+      } catch {
+        // Keep fallback servers
+      }
+    }
+    fetchServers();
+  }, []);
+
+  // Fetch live server health (requires auth, graceful fallback)
   useEffect(() => {
     async function fetchHealth() {
       try {

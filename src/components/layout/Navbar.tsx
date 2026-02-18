@@ -8,12 +8,14 @@ import {
   Menu,
   X,
   ShoppingBag,
+  ShoppingCart,
   User,
   ChevronDown,
   LogOut,
   LayoutDashboard,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
+import { useCart } from '@/lib/cart';
 
 interface AuthUser {
   id: string;
@@ -25,6 +27,7 @@ interface AuthUser {
 
 export default function Navbar() {
   const { lang, setLang, tr } = useLanguage();
+  const { getItemCount } = useCart();
   const [isOpen, setIsOpen] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -50,8 +53,18 @@ export default function Navbar() {
         setShowDropdown(false);
       }
     }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setShowDropdown(false);
+        setIsOpen(false);
+      }
+    }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, []);
 
   async function fetchUser() {
@@ -73,24 +86,34 @@ export default function Navbar() {
   }
 
   const navLinks = [
-    { href: '/', label: tr('Home', 'မူလစာမျက်နှာ') },
+    { href: '/', label: tr('Home', 'မူလ') },
     { href: '/shop', label: tr('Shop', 'ဆိုင်') },
     { href: '/vpn', label: 'VPN' },
     { href: '/contact', label: tr('Contact', 'ဆက်သွယ်ရန်') },
   ];
 
   return (
+    <>
+    {/* Skip to content link for keyboard users */}
+    <a
+      href="#main-content"
+      className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:px-4 focus:py-2 focus:bg-purple-600 focus:text-white focus:rounded-lg focus:text-sm focus:font-semibold"
+    >
+      Skip to main content
+    </a>
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled
           ? 'bg-dark-950/95 backdrop-blur-xl border-b border-dark-600/50 shadow-lg shadow-black/30'
           : 'bg-transparent'
       }`}
+      role="navigation"
+      aria-label={tr('Main navigation', 'အဓိက navigation')}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-18">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 sm:gap-3 group min-w-0">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3 group min-w-0 shrink-0">
             <Image
               src="/logo.jpg"
               alt="Burmese Digital Store"
@@ -99,21 +122,21 @@ export default function Navbar() {
               priority
               className="rounded-xl shadow-glow-sm group-hover:shadow-glow transition-shadow duration-300 sm:w-11 sm:h-11"
             />
-            <span className="hidden sm:inline text-xl font-bold text-white whitespace-nowrap">
+            <span className="hidden lg:inline text-xl font-bold text-white whitespace-nowrap">
               Burmese<span className="text-accent-gradient"> Digital Store</span>
             </span>
-            <span className="sm:hidden text-base font-bold text-white truncate">
-              Burmese<span className="text-accent-gradient"> Digital Store</span>
+            <span className="hidden sm:inline lg:hidden text-base font-bold text-white whitespace-nowrap">
+              BDS
             </span>
           </Link>
 
           {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-0.5 lg:gap-1">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                className={`px-3 lg:px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-200 ${
                   pathname === link.href
                     ? 'text-purple-400 bg-purple-500/10'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -126,13 +149,27 @@ export default function Navbar() {
 
           {/* Right Side */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Cart Icon - only show when items in cart */}
+            {getItemCount() > 0 && (
+              <Link
+                href="/cart"
+                className="relative p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all animate-slide-up"
+                aria-label={tr(`Shopping cart, ${getItemCount()} items`, `စျေးခြင်းတောင်း၊ ${getItemCount()} ခု`)}
+              >
+                <ShoppingCart className="w-5 h-5" />
+                <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-purple-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-glow-sm">
+                  {getItemCount() > 99 ? '99+' : getItemCount()}
+                </span>
+              </Link>
+            )}
+
             <button
               onClick={() => setLang(lang === 'my' ? 'en' : 'my')}
               className="hidden md:flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-dark-800/80 border border-dark-600/50 text-xs font-medium text-gray-300 hover:border-purple-500/50 hover:text-white transition-all"
-              title={lang === 'my' ? 'Switch to English' : 'မြန်မာဘာသာသို့ ပြောင်းရန်'}
+              aria-label={lang === 'my' ? 'Switch to English' : 'မြန်မာဘာသာသို့ ပြောင်းရန်'}
             >
               {lang === 'my' ? (
-                <svg className="w-5 h-4 rounded-sm overflow-hidden" viewBox="0 0 60 40">
+                <svg className="w-5 h-4 rounded-sm overflow-hidden" viewBox="0 0 60 40" aria-hidden="true">
                   <rect width="60" height="40" fill="#012169"/>
                   <path d="M0,0 L60,40 M60,0 L0,40" stroke="#fff" strokeWidth="6"/>
                   <path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" strokeWidth="4"/>
@@ -140,7 +177,7 @@ export default function Navbar() {
                   <path d="M30,0 V40 M0,20 H60" stroke="#C8102E" strokeWidth="6"/>
                 </svg>
               ) : (
-                <svg className="w-5 h-4 rounded-sm overflow-hidden" viewBox="0 0 60 40">
+                <svg className="w-5 h-4 rounded-sm overflow-hidden" viewBox="0 0 60 40" aria-hidden="true">
                   <rect width="60" height="13.33" fill="#FECB00"/>
                   <rect y="13.33" width="60" height="13.33" fill="#34B233"/>
                   <rect y="26.67" width="60" height="13.33" fill="#EA2839"/>
@@ -154,6 +191,9 @@ export default function Navbar() {
                 <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setShowDropdown(!showDropdown)}
+                  aria-expanded={showDropdown}
+                  aria-haspopup="true"
+                  aria-label={tr('User menu', 'အသုံးပြုသူ menu')}
                   className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg bg-dark-800/80 border border-dark-600/50 hover:border-purple-500/50 hover:shadow-glow-sm transition-all duration-200"
                 >
                   <div className="w-7 h-7 rounded-lg overflow-hidden bg-gradient-to-br from-purple-400 to-cyan-500 flex items-center justify-center">
@@ -173,7 +213,7 @@ export default function Navbar() {
                 </button>
 
                 {showDropdown && (
-                  <div className="absolute right-0 mt-3 w-56 glass-panel shadow-2xl shadow-black/50 overflow-hidden animate-slide-up">
+                  <div className="absolute right-0 mt-3 w-56 glass-panel shadow-2xl shadow-black/50 overflow-hidden animate-slide-up" role="menu" aria-orientation="vertical">
                     <div className="px-4 py-4 border-b border-white/5 bg-gradient-to-r from-purple-500/10 to-transparent">
                       <p className="text-sm font-semibold text-white truncate">{user.name}</p>
                       <p className="text-xs text-gray-500 truncate mt-1">{user.email}</p>
@@ -233,9 +273,12 @@ export default function Navbar() {
             {/* Mobile Toggle */}
             <button
               onClick={() => setIsOpen(!isOpen)}
+              aria-expanded={isOpen}
+              aria-controls="mobile-menu"
+              aria-label={isOpen ? tr('Close menu', 'Menu ပိတ်ရန်') : tr('Open menu', 'Menu ဖွင့်ရန်')}
               className="md:hidden p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all"
             >
-              {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {isOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
             </button>
           </div>
         </div>
@@ -243,7 +286,7 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {isOpen && (
-        <div className="md:hidden bg-dark-900/95 backdrop-blur-xl border-t border-dark-600/50 animate-slide-up">
+        <div id="mobile-menu" className="md:hidden bg-dark-900/95 backdrop-blur-xl border-t border-dark-600/50 animate-slide-up" role="menu">
           <div className="px-4 py-4 space-y-1">
             <div className="mb-3">
               <button
@@ -343,5 +386,6 @@ export default function Navbar() {
         </div>
       )}
     </nav>
+    </>
   );
 }

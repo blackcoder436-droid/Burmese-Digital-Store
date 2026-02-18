@@ -5,6 +5,9 @@ import dbConnect from '@/lib/mongodb';
 import Order from '@/models/Order';
 import { isValidObjectId } from 'mongoose';
 import { getVpnClientStats } from '@/lib/xui';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/vpn/status/[orderId]' });
 
 // ==========================================
 // GET /api/vpn/status/[orderId]
@@ -101,7 +104,7 @@ export async function GET(
 
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
-    console.error('VPN status error:', error);
+    log.error('VPN status error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Failed to fetch VPN status' },
       { status: 500 }

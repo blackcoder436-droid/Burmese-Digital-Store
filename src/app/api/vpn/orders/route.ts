@@ -13,6 +13,7 @@ import { extractPaymentInfo } from '@/lib/ocr';
 import { getSiteSettings } from '@/models/SiteSettings';
 import { validateCoupon, recordCouponUsage } from '@/models/Coupon';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
+import User from '@/models/User';
 
 import {
   validateImageUpload,
@@ -40,6 +41,15 @@ export async function POST(request: NextRequest) {
     }
 
     await connectDB();
+
+    // Block unverified users from placing orders
+    const dbUser = await User.findById(authUser.userId).select('emailVerified').lean() as { emailVerified?: boolean } | null;
+    if (dbUser && !dbUser.emailVerified) {
+      return NextResponse.json(
+        { success: false, error: 'Please verify your email before placing orders. Check your inbox for the verification link.' },
+        { status: 403 }
+      );
+    }
 
     const formData = await request.formData();
     const serverId = sanitizeString((formData.get('serverId') as string) || '');

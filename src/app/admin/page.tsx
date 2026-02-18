@@ -32,30 +32,39 @@ export default function AdminDashboard() {
 
   async function fetchStats() {
     try {
-      const [productsRes, ordersRes, usersRes] = await Promise.all([
+      const [productsRes, ordersRes, usersRes, analyticsRes] = await Promise.all([
         fetch('/api/admin/products?limit=1'),
         fetch('/api/admin/orders?limit=5'),
         fetch('/api/admin/users?limit=1'),
+        fetch('/api/admin/analytics?range=all'),
       ]);
 
       const productsData = await productsRes.json();
       const ordersData = await ordersRes.json();
       const usersData = await usersRes.json();
+      const analyticsData = await analyticsRes.json();
 
       if (productsData.success && ordersData.success) {
         const orders = ordersData.data.orders;
         setRecentOrders(orders);
+
+        // Use analytics API for accurate revenue + order counts
+        const totalRevenue = analyticsData.success
+          ? analyticsData.data.overviewStats?.totalRevenue || 0
+          : 0;
+        const completedCount = analyticsData.success
+          ? analyticsData.data.overviewStats?.completedOrders || 0
+          : orders.filter((o: any) => o.status === 'completed').length;
+        const pendingCount = analyticsData.success
+          ? analyticsData.data.overviewStats?.pendingOrders || 0
+          : orders.filter((o: any) => o.status === 'pending' || o.status === 'verifying').length;
+
         setStats({
           totalProducts: productsData.data.pagination.total,
           totalOrders: ordersData.data.pagination.total,
-          pendingOrders: orders.filter(
-            (o: any) => o.status === 'pending' || o.status === 'verifying'
-          ).length,
-          completedOrders: orders.filter((o: any) => o.status === 'completed')
-            .length,
-          revenue: orders
-            .filter((o: any) => o.status === 'completed')
-            .reduce((sum: number, o: any) => sum + o.totalAmount, 0),
+          pendingOrders: pendingCount,
+          completedOrders: completedCount,
+          revenue: totalRevenue,
           totalUsers: usersData.success ? usersData.data.pagination.total : 0,
         });
       }

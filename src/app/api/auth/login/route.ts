@@ -6,6 +6,7 @@ import { authLimiter } from '@/lib/rateLimit';
 import { isValidEmail } from '@/lib/security';
 import { createLogger } from '@/lib/logger';
 import { trackLoginFailure } from '@/lib/monitoring';
+import { loginSchema, parseBody } from '@/lib/validations';
 
 const log = createLogger({ route: '/api/auth/login' });
 
@@ -17,35 +18,16 @@ export async function POST(request: NextRequest) {
   try {
     await connectDB();
 
-    const { email, password } = await request.json();
-
-    if (!email || !password) {
+    const body = await request.json();
+    const parsed = parseBody(loginSchema, body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: 'Email and password are required' },
+        { success: false, error: parsed.error },
         { status: 400 }
       );
     }
 
-    if (typeof email !== 'string' || typeof password !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'Invalid input types' },
-        { status: 400 }
-      );
-    }
-
-    if (!isValidEmail(email)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid email format' },
-        { status: 400 }
-      );
-    }
-
-    if (password.length > 128) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid password' },
-        { status: 400 }
-      );
-    }
+    const { email, password } = parsed.data;
 
     // Find user with password field
     const user = await User.findOne({ email: email.toLowerCase() }).select(

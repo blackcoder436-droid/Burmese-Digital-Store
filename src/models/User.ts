@@ -12,10 +12,16 @@ export interface IUserDocument extends Document {
   role: 'user' | 'admin';
   balance: number;
   avatar?: string;
+  googleId?: string;
   tokenVersion: number;
   freeVpnTestUsedAt?: Date;
+  emailVerified: boolean;
+  emailVerificationToken?: string;
+  emailVerificationExpires?: Date;
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
+  deletedAt?: Date;
+  deletedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +69,11 @@ const UserSchema: Schema = new Schema(
       type: String,
       default: null,
     },
+    googleId: {
+      type: String,
+      default: null,
+      sparse: true,
+    },
     tokenVersion: {
       type: Number,
       default: 0,
@@ -70,6 +81,21 @@ const UserSchema: Schema = new Schema(
     freeVpnTestUsedAt: {
       type: Date,
       default: null,
+    },
+    // Email verification fields
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    emailVerificationExpires: {
+      type: Date,
+      default: null,
+      select: false,
     },
     resetPasswordToken: {
       type: String,
@@ -81,6 +107,16 @@ const UserSchema: Schema = new Schema(
       default: null,
       select: false,
     },
+    // Soft-delete fields
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -89,6 +125,30 @@ const UserSchema: Schema = new Schema(
 
 // Index for faster queries (email index already created by unique: true)
 UserSchema.index({ role: 1 });
+UserSchema.index({ deletedAt: 1 });
+
+// Soft-delete: auto-exclude deleted users from normal queries
+UserSchema.pre('find', function () {
+  if (!this.getQuery().includeDeleted) {
+    this.where({ deletedAt: null });
+  } else {
+    delete this.getQuery().includeDeleted;
+  }
+});
+UserSchema.pre('findOne', function () {
+  if (!this.getQuery().includeDeleted) {
+    this.where({ deletedAt: null });
+  } else {
+    delete this.getQuery().includeDeleted;
+  }
+});
+UserSchema.pre('countDocuments', function () {
+  if (!this.getQuery().includeDeleted) {
+    this.where({ deletedAt: null });
+  } else {
+    delete this.getQuery().includeDeleted;
+  }
+});
 
 const User: Model<IUserDocument> =
   mongoose.models.User || mongoose.model<IUserDocument>('User', UserSchema);

@@ -1,13 +1,19 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { getDictionary, t as translate, type TranslationKeys } from '@/lib/i18n';
 
 export type Language = 'my' | 'en';
 
 type LanguageContextValue = {
   lang: Language;
   setLang: (language: Language) => void;
+  /** Inline bilingual helper (legacy — prefer `t()` for new code) */
   tr: (enText: string, myText: string) => string;
+  /** Dictionary-based translation: t('nav.home') */
+  t: (key: string) => string;
+  /** Full dictionary for current language */
+  dict: TranslationKeys;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
@@ -32,6 +38,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       lang,
       setLang: setLangState,
       tr: (enText: string, myText: string) => (lang === 'my' ? myText : enText),
+      t: (key: string) => translate(key, lang),
+      dict: getDictionary(lang),
     }),
     [lang]
   );

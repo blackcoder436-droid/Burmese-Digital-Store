@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ShoppingBag, Zap } from 'lucide-react';
+import { ShoppingBag } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 
 interface Product {
@@ -108,8 +108,8 @@ export default function ProductCard({ product }: { product: Product }) {
           <div className={`flex items-center gap-2 text-sm font-bold ${inStock ? 'text-white' : 'text-gray-600'}`}>
             {inStock ? (
               <>
-                <Zap className="w-4 h-4 text-purple-400" />
-                {tr('Buy Now', 'ယခုဝယ်မည်')}
+                <ShoppingBag className="w-4 h-4 text-purple-400" />
+                {tr('View Details', 'အသေးစိတ်ကြည့်မည်')}
               </>
             ) : (
               <>

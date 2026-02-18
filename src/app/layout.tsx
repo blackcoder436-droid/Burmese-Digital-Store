@@ -5,7 +5,9 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import TechBackground from '@/components/TechBackground';
 import { LanguageProvider } from '@/lib/language';
+import { CartProvider } from '@/lib/cart';
 import { LayoutShell } from '@/components/layout/LayoutShell';
+import { getOrganizationJsonLd, getWebsiteJsonLd } from '@/lib/jsonld';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -47,6 +49,21 @@ export default async function RootLayout({
 
   return (
     <html lang="my" className="dark">
+      <head>
+        {/* JSON-LD Structured Data for SEO */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(getOrganizationJsonLd()),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(getWebsiteJsonLd()),
+          }}
+        />
+      </head>
       <body className="min-h-screen flex flex-col bg-[#0a0a1a]" suppressHydrationWarning>
         {/* ── Global animated tech network background ── */}
         <div className="fixed inset-0 pointer-events-none z-0" aria-hidden="true">
@@ -54,6 +71,7 @@ export default async function RootLayout({
         </div>
 
         <LanguageProvider>
+          <CartProvider>
           <Toaster
             position="top-right"
             toastOptions={{
@@ -77,8 +95,11 @@ export default async function RootLayout({
             navbar={<Navbar />}
             footer={<Footer />}
           >
-            {children}
+            <main id="main-content">
+              {children}
+            </main>
           </LayoutShell>
+          </CartProvider>
         </LanguageProvider>
       </body>
     </html>

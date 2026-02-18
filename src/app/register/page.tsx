@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
 
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
 export default function RegisterPage() {
   const { tr } = useLanguage();
   const containerRef = useScrollFade();
@@ -15,6 +17,7 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -64,6 +67,60 @@ export default function RegisterPage() {
       setLoading(false);
     }
   }
+
+  async function handleGoogleLogin(credential: string) {
+    setGoogleLoading(true);
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(tr('Welcome!', 'ကြိုဆိုပါသည်!'));
+        window.location.href = data.data.user.role === 'admin' ? '/admin' : '/account';
+      } else {
+        toast.error(data.error || tr('Google sign up failed', 'Google sign up မအောင်မြင်ပါ'));
+      }
+    } catch {
+      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
+  // Initialize Google Sign-In
+  useEffect(() => {
+    if (checking || !GOOGLE_CLIENT_ID) return;
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).google?.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (response: { credential: string }) => {
+          handleGoogleLogin(response.credential);
+        },
+      });
+      const btnContainer = document.getElementById('google-signup-btn');
+      if (btnContainer) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).google?.accounts.id.renderButton(btnContainer, {
+          theme: 'filled_black',
+          size: 'large',
+          width: '100%',
+          text: 'signup_with',
+          shape: 'rectangular',
+          logo_alignment: 'center',
+        });
+      }
+    };
+    document.head.appendChild(script);
+    return () => { script.remove(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checking]);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden" ref={containerRef}>
@@ -143,6 +200,23 @@ export default function RegisterPage() {
               )}
             </button>
           </form>
+
+          {/* Google Sign-Up */}
+          {GOOGLE_CLIENT_ID && (
+            <>
+              <div className="flex items-center gap-3 my-5">
+                <div className="flex-1 h-px bg-dark-600" />
+                <span className="text-xs text-gray-500">{tr('or', 'သို့မဟုတ်')}</span>
+                <div className="flex-1 h-px bg-dark-600" />
+              </div>
+              <div id="google-signup-btn" className="flex justify-center" />
+              {googleLoading && (
+                <div className="flex items-center justify-center mt-3">
+                  <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <p className="scroll-fade text-center text-gray-500 mt-8" data-delay="250">

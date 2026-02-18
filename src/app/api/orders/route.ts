@@ -15,6 +15,8 @@ import { getSiteSettings } from '@/models/SiteSettings';
 import { validateCoupon, recordCouponUsage } from '@/models/Coupon';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import { saveToQuarantine } from '@/lib/quarantine';
+import { sendPaymentScreenshot, buildScreenshotCaption } from '@/lib/telegram';
+import User from '@/models/User';
 
 import {
   validateImageUpload,
@@ -108,6 +110,15 @@ export async function POST(request: NextRequest) {
     }
 
     await connectDB();
+
+    // Block unverified users from placing orders
+    const dbUser = await User.findById(authUser.userId).select('emailVerified').lean() as { emailVerified?: boolean } | null;
+    if (dbUser && !dbUser.emailVerified) {
+      return NextResponse.json(
+        { success: false, error: 'Please verify your email before placing orders. Check your inbox for the verification link.' },
+        { status: 403 }
+      );
+    }
 
     const formData = await request.formData();
     const productId = formData.get('productId') as string;
@@ -253,6 +264,27 @@ export async function POST(request: NextRequest) {
     const paymentWindowMinutes = siteSettings.paymentWindowMinutes || 30;
     const paymentExpiresAt = new Date(Date.now() + paymentWindowMinutes * 60 * 1000);
 
+    // Send screenshot to Telegram channel
+    let telegramFileId: string | undefined;
+    let telegramMessageId: number | undefined;
+    try {
+      const caption = buildScreenshotCaption({
+        orderNumber: '', // Will update after order is created
+        userName: authUser.email,
+        productName: product.name,
+        amount: totalAmount,
+        paymentMethod,
+        transactionId: transactionId || (ocrData?.transactionId ?? undefined),
+      });
+      const tgResult = await sendPaymentScreenshot(screenshotBuffer, filename, caption);
+      if (tgResult) {
+        telegramFileId = tgResult.fileId;
+        telegramMessageId = tgResult.messageId;
+      }
+    } catch (e) {
+      log.warn('Telegram screenshot upload failed (non-blocking)', { error: e instanceof Error ? e.message : String(e) });
+    }
+
     // Create order
     const order = await Order.create({
       user: authUser.userId,
@@ -261,6 +293,8 @@ export async function POST(request: NextRequest) {
       totalAmount,
       paymentMethod,
       paymentScreenshot: screenshotUrl,
+      telegramFileId,
+      telegramMessageId,
       transactionId: transactionId || (ocrData?.transactionId ?? ''),
       ocrVerified: ocrEnabled && ocrData ? ocrData.confidence > 60 && ocrData.transactionId !== null : false,
       ocrExtractedData: ocrData

@@ -143,3 +143,86 @@ export async function sendPasswordResetEmail(
     html,
   });
 }
+
+/**
+ * Send email verification link after registration.
+ * Token expires in 24 hours.
+ */
+export async function sendVerificationEmail(
+  email: string,
+  verificationToken: string
+): Promise<void> {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const verifyUrl = `${baseUrl}/api/auth/verify-email?token=${verificationToken}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    </head>
+    <body style="margin:0;padding:0;background:#0a0a0f;font-family:Arial,Helvetica,sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0f;padding:40px 0;">
+        <tr>
+          <td align="center">
+            <table width="480" cellpadding="0" cellspacing="0" style="background:#13131a;border-radius:16px;border:1px solid rgba(139,92,246,0.2);overflow:hidden;">
+              <!-- Header -->
+              <tr>
+                <td style="background:linear-gradient(135deg,#7c3aed,#06b6d4);padding:32px 40px;text-align:center;">
+                  <h1 style="margin:0;color:#fff;font-size:24px;font-weight:700;">
+                    ✉️ Verify Your Email
+                  </h1>
+                </td>
+              </tr>
+              <!-- Body -->
+              <tr>
+                <td style="padding:40px;">
+                  <p style="color:#d1d5db;font-size:16px;line-height:1.6;margin:0 0 20px;">
+                    Welcome to <strong style="color:#a78bfa;">Burmese Digital Store</strong>! Please verify your email address to start placing orders.
+                  </p>
+                  <p style="color:#d1d5db;font-size:16px;line-height:1.6;margin:0 0 30px;">
+                    Click the button below to verify. This link expires in <strong style="color:#22d3ee;">24 hours</strong>.
+                  </p>
+                  <!-- Button -->
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td align="center">
+                        <a href="${verifyUrl}"
+                           style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;text-decoration:none;padding:14px 40px;border-radius:12px;font-size:16px;font-weight:600;letter-spacing:0.5px;">
+                          Verify Email
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                  <p style="color:#9ca3af;font-size:13px;line-height:1.6;margin:30px 0 0;border-top:1px solid rgba(255,255,255,0.05);padding-top:20px;">
+                    If you didn't create an account, you can safely ignore this email.
+                  </p>
+                  <p style="color:#6b7280;font-size:12px;line-height:1.5;margin:15px 0 0;word-break:break-all;">
+                    If the button doesn't work, copy and paste this link:<br/>
+                    <a href="${verifyUrl}" style="color:#a78bfa;text-decoration:underline;">${verifyUrl}</a>
+                  </p>
+                </td>
+              </tr>
+              <!-- Footer -->
+              <tr>
+                <td style="padding:20px 40px;background:rgba(0,0,0,0.3);text-align:center;">
+                  <p style="color:#6b7280;font-size:12px;margin:0;">
+                    © ${new Date().getFullYear()} Burmese Digital Store. All rights reserved.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: 'Verify Your Email - Burmese Digital Store',
+    html,
+  });
+}

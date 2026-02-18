@@ -13,6 +13,9 @@ import {
   ALLOWED_IMAGE_TYPES,
   MAX_AVATAR_SIZE,
 } from '@/lib/security';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/auth/avatar' });
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'avatars');
 const AVATAR_SIZE = 256; // Resize to 256x256
@@ -133,7 +136,7 @@ export async function POST(request: NextRequest) {
       message: 'Avatar uploaded successfully',
     });
   } catch (error: unknown) {
-    console.error('Avatar upload error:', error);
+    log.error('Avatar upload error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -184,7 +187,7 @@ export async function DELETE(request: NextRequest) {
       message: 'Avatar removed successfully',
     });
   } catch (error: unknown) {
-    console.error('Avatar delete error:', error);
+    log.error('Avatar delete error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

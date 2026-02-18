@@ -151,7 +151,12 @@ export default function OrdersPage() {
         ) : (
           <div className="space-y-6">
             {orders.map((order, i) => (
-              <div key={order._id} className="scroll-fade game-card overflow-hidden" data-delay={`${i * 80}`}>
+              <Link
+                key={order._id}
+                href={`/account/orders/${order._id}`}
+                className="scroll-fade game-card overflow-hidden block hover:border-purple-500/30 transition-all"
+                data-delay={`${i * 80}`}
+              >
                 {/* Order Header */}
                 <div className="p-6 border-b border-dark-600/50">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -208,7 +213,7 @@ export default function OrdersPage() {
                       <VpnKeyDisplay vpnKey={order.vpnKey} vpnPlan={order.vpnPlan} />
                     </div>
                   )}
-              </div>
+              </Link>
             ))}
           </div>
         )}

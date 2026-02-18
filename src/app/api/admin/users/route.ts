@@ -7,6 +7,9 @@ import { apiLimiter } from '@/lib/rateLimit';
 import { sanitizeString, isValidObjectId } from '@/lib/security';
 import { logActivity } from '@/models/ActivityLog';
 import { trackAdminPrivilegeChange } from '@/lib/monitoring';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/admin/users' });
 
 // GET /api/admin/users - List all users (admin)
 export async function GET(request: NextRequest) {
@@ -91,7 +94,7 @@ export async function GET(request: NextRequest) {
         { status: 403 }
       );
     }
-    console.error('Admin users GET error:', error);
+    log.error('Admin users GET error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -200,7 +203,7 @@ export async function PATCH(request: NextRequest) {
         { status: 403 }
       );
     }
-    console.error('Admin users PATCH error:', error);
+    log.error('Admin users PATCH error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -285,7 +288,7 @@ export async function DELETE(request: NextRequest) {
         { status: 403 }
       );
     }
-    console.error('Admin users DELETE error:', error);
+    log.error('Admin users DELETE error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

@@ -97,31 +97,16 @@ export async function requireAuth(): Promise<JWTPayload> {
 /**
  * Require admin access with DB tokenVersion verification.
  * Prevents stale JWT from granting admin access after demotion.
+ * Note: getAuthUser() (called by requireAuth()) already verifies
+ * tokenVersion + role from DB, so we only need to check the result.
  */
 export async function requireAdmin(): Promise<JWTPayload> {
   const user = await requireAuth();
+
+  // getAuthUser() already synced role from DB and verified tokenVersion.
+  // If role is not admin, either JWT was never admin or DB role changed.
   if (user.role !== 'admin') {
     throw new Error('Admin access required');
-  }
-
-  // DB verification: check tokenVersion matches
-  await connectDB();
-  const dbUser = await User.findById(user.userId).select('role tokenVersion').lean() as { role?: string; tokenVersion?: number } | null;
-
-  if (!dbUser) {
-    throw new Error('Admin access required');
-  }
-
-  // Check DB role (in case JWT is stale after demotion)
-  if (dbUser.role !== 'admin') {
-    throw new Error('Admin access required');
-  }
-
-  // Check tokenVersion (in case JWT was issued before a role/password change)
-  const dbVersion = dbUser.tokenVersion ?? 0;
-  const jwtVersion = user.tokenVersion ?? 0;
-  if (jwtVersion < dbVersion) {
-    throw new Error('Session expired — please log in again');
   }
 
   return user;

@@ -4,10 +4,24 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, ShoppingBag, Minus, Plus, Loader2, CheckCircle, Zap, Tag, LogIn } from 'lucide-react';
+import {
+  ArrowLeft,
+  ShoppingBag,
+  ShoppingCart,
+  Minus,
+  Plus,
+  Loader2,
+  CheckCircle,
+  Zap,
+  Tag,
+  LogIn,
+  Check,
+  Package,
+} from 'lucide-react';
 import PaymentUpload from '@/components/PaymentUpload';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
+import { useCart } from '@/lib/cart';
 import { useScrollFade } from '@/hooks/useScrollFade';
 
 interface Product {
@@ -28,6 +42,7 @@ const categoryLabel: Record<string, string> = {
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
   const { tr } = useLanguage();
+  const { addItem, isInCart, getItem } = useCart();
   const containerRef = useScrollFade();
   const router = useRouter();
   const [product, setProduct] = useState<Product | null>(null);
@@ -43,17 +58,16 @@ export default function ProductDetailPage() {
   const [appliedCoupon, setAppliedCoupon] = useState('');
   const [couponValidating, setCouponValidating] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [justAdded, setJustAdded] = useState(false);
 
   useEffect(() => {
     fetchProduct();
-    // Fetch payment account info
     fetch('/api/settings/payment-accounts')
       .then((res) => res.json())
       .then((data) => {
         if (data.success) setPaymentAccounts(data.data.accounts);
       })
       .catch(() => {});
-    // Check auth status silently
     fetch('/api/auth/me')
       .then((res) => res.json())
       .then((data) => setIsLoggedIn(data.success === true))
@@ -71,6 +85,21 @@ export default function ProductDetailPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleAddToCart() {
+    if (!product || product.stock <= 0) return;
+    addItem({
+      productId: product._id,
+      name: product.name,
+      price: product.price,
+      stock: product.stock,
+      category: product.category,
+      image: product.image,
+    }, quantity);
+    setJustAdded(true);
+    toast.success(tr(`${product.name} added to cart`, `${product.name} ကို cart ထဲထည့်ပြီးပါပြီ`));
+    setTimeout(() => setJustAdded(false), 2000);
   }
 
   async function handleApplyCoupon() {
@@ -151,6 +180,8 @@ export default function ProductDetailPage() {
 
   const subtotal = product.price * quantity;
   const total = Math.max(0, subtotal - couponDiscount);
+  const alreadyInCart = isInCart(product._id);
+  const cartItem = getItem(product._id);
 
   return (
     <div className="min-h-screen pt-24 pb-12" ref={containerRef}>
@@ -221,16 +252,46 @@ export default function ProductDetailPage() {
             )}
           </div>
 
+          {/* Action Buttons */}
           {product.stock > 0 && !showPayment && (
-            isLoggedIn === false ? (
-              <Link href={`/login?redirect=/shop/${params.id}`} className="btn-electric w-full mt-6 text-center">
-                <LogIn className="w-5 h-5" /> {tr('Login to Purchase', 'ဝယ်ယူရန် အကောင့်ဝင်ပါ')}
-              </Link>
-            ) : (
-              <button onClick={() => setShowPayment(true)} className="btn-electric w-full mt-6">
-                <Zap className="w-5 h-5" /> {tr('Proceed to Payment', 'ငွေပေးချေရန် ဆက်သွားမည်')}
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              {/* Add to Cart Button (Primary) */}
+              <button
+                onClick={handleAddToCart}
+                className={`flex-1 btn ${
+                  justAdded || alreadyInCart
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 hover:shadow-glow-sm'
+                }`}
+              >
+                {justAdded ? (
+                  <><Check className="w-5 h-5" /> {tr('Added to Cart!', 'Cart ထဲထည့်ပြီး!')}</>
+                ) : alreadyInCart ? (
+                  <><Check className="w-5 h-5" /> {tr(`In Cart (${cartItem?.quantity})`, `Cart ထဲ (${cartItem?.quantity})`)}</>
+                ) : (
+                  <><ShoppingCart className="w-5 h-5" /> {tr('Add to Cart', 'Cart ထဲထည့်မည်')}</>
+                )}
               </button>
-            )
+
+              {/* View Cart or Go to Checkout */}
+              {alreadyInCart && (
+                <Link href="/cart" className="btn-secondary flex-1 text-center">
+                  <ShoppingCart className="w-5 h-5" />
+                  {tr('View Cart', 'Cart ကြည့်မည်')}
+                </Link>
+              )}
+
+              {/* Buy Now (Direct) */}
+              {isLoggedIn === false ? (
+                <Link href={`/login?redirect=/shop/${params.id}`} className="btn-electric flex-1 text-center">
+                  <LogIn className="w-5 h-5" /> {tr('Login to Purchase', 'ဝယ်ယူရန် အကောင့်ဝင်ပါ')}
+                </Link>
+              ) : (
+                <button onClick={() => setShowPayment(true)} className="btn-electric flex-1">
+                  <Zap className="w-5 h-5" /> {tr('Buy Now', 'ယခုဝယ်မည်')}
+                </button>
+              )}
+            </div>
           )}
           </div>
         </div>

@@ -4,6 +4,9 @@ import Notification from '@/models/Notification';
 import { getAuthUser } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { isValidObjectId } from '@/lib/security';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/notifications' });
 
 // ==========================================
 // Notifications API - Burmese Digital Store
@@ -50,7 +53,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error: unknown) {
-    console.error('Notifications GET error:', error);
+    log.error('Notifications GET error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -114,7 +117,7 @@ export async function PATCH(request: NextRequest) {
       message: 'Notifications updated',
     });
   } catch (error: unknown) {
-    console.error('Notifications PATCH error:', error);
+    log.error('Notifications PATCH error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

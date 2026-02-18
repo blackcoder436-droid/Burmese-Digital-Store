@@ -38,8 +38,8 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'Noto Sans Myanmar', 'Padauk', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['Inter', 'Noto Sans Myanmar', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       backgroundImage: {

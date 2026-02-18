@@ -6,6 +6,9 @@ import { sendPasswordResetEmail } from '@/lib/email';
 import { rateLimit } from '@/lib/rateLimit';
 import { isValidEmail } from '@/lib/security';
 import { trackPasswordResetRequest } from '@/lib/monitoring';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/auth/forgot-password' });
 
 // ==========================================
 // Forgot Password API - Burmese Digital Store
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
       user.resetPasswordExpires = undefined;
       await user.save();
 
-      console.error('Failed to send password reset email:', emailError);
+      log.error('Failed to send password reset email', { error: emailError instanceof Error ? emailError.message : String(emailError) });
       return NextResponse.json(
         { success: false, error: 'Failed to send email. Please try again later.' },
         { status: 500 }
@@ -76,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     return successResponse;
   } catch (error) {
-    console.error('Forgot password error:', error);
+    log.error('Forgot password error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Something went wrong' },
       { status: 500 }

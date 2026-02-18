@@ -61,6 +61,12 @@ export default function AccountPage() {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [savingPassword, setSavingPassword] = useState(false);
 
+  // Delete account state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     fetchUserData();
   }, []);
@@ -217,6 +223,32 @@ export default function AccountPage() {
       toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
     } finally {
       setSavingPassword(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteConfirmText !== 'DELETE') {
+      toast.error(tr('Please type DELETE to confirm', 'အတည်ပြုရန် DELETE ဟုရိုက်ပါ'));
+      return;
+    }
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/auth/delete-account', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: deletePassword, confirmation: deleteConfirmText }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(tr('Account deleted', 'အကောင့်ဖျက်ပြီးပါပြီ'));
+        window.location.href = '/';
+      } else {
+        toast.error(data.error || tr('Failed to delete account', 'အကောင့်ဖျက်ရန်မအောင်မြင်ပါ'));
+      }
+    } catch {
+      toast.error(tr('Something went wrong', 'တစ်ခုခုမှားယွင်းနေပါသည်'));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -443,6 +475,74 @@ export default function AccountPage() {
                   {tr('Update Password', 'စကားဝှက်ပြောင်းမည်')}
                 </button>
                 <button onClick={() => { setShowPasswordForm(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} className="btn-primary text-xs flex items-center gap-1.5">
+                  <X className="w-3 h-3" /> {tr('Cancel', 'မလုပ်တော့ပါ')}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Delete Account Section */}
+        <div className="scroll-fade game-card p-6 mt-5 border border-red-500/10" data-delay="400">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-5">
+              <div className="w-14 h-14 bg-red-500/20 rounded-2xl flex items-center justify-center">
+                <Trash2 className="w-7 h-7 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">{tr('Delete Account', 'အကောင့်ဖျက်မည်')}</h3>
+                <p className="text-sm text-gray-500">{tr('Permanently delete your account and data', 'အကောင့်နှင့်ဒေတာအားလုံး အပြီးအပိုင်ဖျက်မည်')}</p>
+              </div>
+            </div>
+            {!showDeleteConfirm && (
+              <button onClick={() => setShowDeleteConfirm(true)} className="text-xs px-3 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-all flex items-center gap-1.5">
+                <Trash2 className="w-3 h-3" /> {tr('Delete', 'ဖျက်မည်')}
+              </button>
+            )}
+          </div>
+          {showDeleteConfirm && (
+            <div className="mt-4 space-y-3 pt-4 border-t border-red-500/10">
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                <p className="text-sm text-red-300">
+                  <AlertCircle className="w-4 h-4 inline mr-1.5" />
+                  {tr(
+                    'This action is irreversible. All your data will be permanently deleted. Orders will be anonymized for business records.',
+                    'ဤလုပ်ဆောင်ချက်ကို ပြန်ပြင်၍မရပါ။ သင့်ဒေတာအားလုံး အပြီးအပိုင်ဖျက်ပါမည်။'
+                  )}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">{tr('Enter your password', 'စကားဝှက်ထည့်ပါ')}</label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  className="input-field text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">{tr('Type DELETE to confirm', 'အတည်ပြုရန် DELETE ဟုရိုက်ပါ')}</label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="DELETE"
+                  className="input-field text-sm"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleting || deleteConfirmText !== 'DELETE'}
+                  className="text-xs px-4 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-all flex items-center gap-1.5"
+                >
+                  {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  {tr('Permanently Delete', 'အပြီးအပိုင်ဖျက်မည်')}
+                </button>
+                <button
+                  onClick={() => { setShowDeleteConfirm(false); setDeletePassword(''); setDeleteConfirmText(''); }}
+                  className="btn-primary text-xs flex items-center gap-1.5"
+                >
                   <X className="w-3 h-3" /> {tr('Cancel', 'မလုပ်တော့ပါ')}
                 </button>
               </div>

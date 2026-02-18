@@ -3,6 +3,9 @@ import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import dbConnect from '@/lib/mongodb';
 import Order from '@/models/Order';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger({ route: '/api/admin/vpn-keys' });
 
 // ==========================================
 // GET /api/admin/vpn-keys
@@ -86,7 +89,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Admin VPN keys error:', error);
+    log.error('Admin VPN keys error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json(
       { success: false, error: 'Failed to fetch VPN keys' },
       { status: 500 }

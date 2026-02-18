@@ -24,6 +24,8 @@ export interface IProductDocument extends Document {
   image?: string;
   featured: boolean;
   active: boolean;
+  deletedAt?: Date;
+  deletedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -102,6 +104,16 @@ const ProductSchema: Schema = new Schema(
       type: Boolean,
       default: true,
     },
+    // Soft-delete fields
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -117,6 +129,30 @@ ProductSchema.virtual('availableStock').get(function (this: IProductDocument) {
 ProductSchema.index({ category: 1, active: 1 });
 ProductSchema.index({ featured: 1, active: 1 });
 ProductSchema.index({ name: 'text', description: 'text' });
+ProductSchema.index({ deletedAt: 1 });
+
+// Soft-delete: auto-exclude deleted products from normal queries
+ProductSchema.pre('find', function () {
+  if (!this.getQuery().includeDeleted) {
+    this.where({ deletedAt: null });
+  } else {
+    delete this.getQuery().includeDeleted;
+  }
+});
+ProductSchema.pre('findOne', function () {
+  if (!this.getQuery().includeDeleted) {
+    this.where({ deletedAt: null });
+  } else {
+    delete this.getQuery().includeDeleted;
+  }
+});
+ProductSchema.pre('countDocuments', function () {
+  if (!this.getQuery().includeDeleted) {
+    this.where({ deletedAt: null });
+  } else {
+    delete this.getQuery().includeDeleted;
+  }
+});
 
 const Product: Model<IProductDocument> =
   mongoose.models.Product || mongoose.model<IProductDocument>('Product', ProductSchema);
