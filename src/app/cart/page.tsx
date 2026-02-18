@@ -31,7 +31,7 @@ export default function CartPage() {
     removeItem,
     updateQuantity,
     clearCart,
-    getTotal,
+    getSubtotal,
     getItemCount,
   } = useCart();
   const router = useRouter();
@@ -61,7 +61,7 @@ export default function CartPage() {
       .catch(() => {});
   }, []);
 
-  const subtotal = getTotal();
+  const subtotal = getSubtotal();
   const total = Math.max(0, subtotal - couponDiscount);
 
   async function handleApplyCoupon() {
