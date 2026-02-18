@@ -115,6 +115,7 @@
 - ✅ `/account/vpn-keys` — Active VPN keys listing with expiry status
 - ✅ `/account/notifications` — Notifications page with mark-all-read
 - ✅ Delete account with GDPR compliance (password verify, pending order check, order anonymization)
+- ✅ Session UX improvement — remaining session time + expiry timestamp shown in Navbar/account for clearer re-login expectations
 
 ### API Improvements
 - ✅ `/api/auth/logout` — Dedicated logout POST route
