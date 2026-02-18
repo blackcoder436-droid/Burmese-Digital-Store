@@ -196,5 +196,11 @@ const en = {
   },
 } as const;
 
-export type TranslationKeys = typeof en;
+// Recursively convert literal string types to `string` so translations
+// only need to match the *shape*, not the exact English values.
+type DeepString<T> = {
+  [K in keyof T]: T[K] extends string ? string : DeepString<T[K]>;
+};
+
+export type TranslationKeys = DeepString<typeof en>;
 export default en;
