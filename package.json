@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:vps": "NODE_OPTIONS=--max-old-space-size=1024 next build",
     "start": "next start",
     "lint": "eslint .",
     "prepare": "husky",
