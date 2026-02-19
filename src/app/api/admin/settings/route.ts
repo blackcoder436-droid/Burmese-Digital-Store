@@ -55,7 +55,7 @@ export async function PATCH(request: NextRequest) {
 
     // Update payment accounts if provided
     if (Array.isArray(body.paymentAccounts)) {
-      const validMethods = ['kpay', 'wave', 'cbpay', 'ayapay'];
+      const validMethods = ['kpay', 'wave', 'uabpay', 'ayapay'];
       const sanitizedAccounts = body.paymentAccounts
         .filter((a: any) => validMethods.includes(a.method))
         .map((a: any) => ({

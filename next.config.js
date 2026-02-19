@@ -11,6 +11,14 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'burmesedigital.store',
       },
+      {
+        protocol: 'https',
+        hostname: 'cdn.burmesedigital.store',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.r2.dev',
+      },
     ],
   },
   serverExternalPackages: ['tesseract.js', 'sharp'],

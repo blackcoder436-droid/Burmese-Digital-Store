@@ -15,6 +15,7 @@ import { validateCoupon, recordCouponUsage } from '@/models/Coupon';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import User from '@/models/User';
 import { createNotification, notifyAdmins } from '@/models/Notification';
+import { sendOrderWithApproveButtons } from '@/lib/telegram';
 
 import {
   validateImageUpload,
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
     const plan = getPlan(planId)!;
 
     // Validate payment method
-    const validMethods = ['kpay', 'wavemoney', 'cbpay', 'ayapay'];
+    const validMethods = ['kpay', 'wavemoney', 'uabpay', 'ayapay'];
     if (!validMethods.includes(paymentMethod)) {
       return NextResponse.json(
         { success: false, error: 'Invalid payment method' },
@@ -259,8 +260,23 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // NOTE: VPN orders do NOT auto-complete with OCR — they always require admin approval
-    // because provisioning a VPN key involves calling the 3xUI API.
+    // Send Telegram approve/reject buttons for VPN order
+    try {
+      const serverInfo = (await import('@/lib/vpn-servers')).getServer(serverId);
+      const serverObj = await serverInfo;
+      await sendOrderWithApproveButtons({
+        orderId: order._id.toString(),
+        orderNumber: order.orderNumber,
+        userName: authUser.email,
+        productName: `VPN ${plan.name} — ${serverObj?.name || serverId}`,
+        amount: totalAmount,
+        paymentMethod,
+        orderType: 'vpn',
+        transactionId: transactionId || (ocrData?.transactionId ?? undefined),
+      });
+    } catch (e) {
+      log.warn('Telegram approve buttons failed (non-blocking)', { error: e instanceof Error ? e.message : String(e) });
+    }
 
     return NextResponse.json(
       {

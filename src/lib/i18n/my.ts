@@ -454,6 +454,37 @@ const my: TranslationKeys = {
     refundPolicy: 'ငွေပြန်အမ်းမူဝါဒ',
   },
 
+  // Reviews
+  reviews: {
+    title: 'ဝယ်သူသုံးသပ်ချက်များ',
+    writeReview: 'သုံးသပ်ချက်ရေးမယ်',
+    noReviews: 'သုံးသပ်ချက်မရှိသေးပါ။ ပထမဆုံးသုံးသပ်ချက်ပေးပါ!',
+    rating: 'အဆင့်သတ်မှတ်ချက်',
+    comment: 'သင့်သုံးသပ်ချက်',
+    commentPlaceholder: 'ဒီပစ္စည်းနဲ့ ပတ်သက်တဲ့ အတွေ့အကြုံကို မျှဝေပါ (အနည်းဆုံး စာလုံး ၅ လုံး)...',
+    submit: 'တင်သွင်းမယ်',
+    submitting: 'တင်သွင်းနေသည်...',
+    selectOrder: 'အော်ဒါရွေးပါ',
+    selectOrderHint: 'ဒီသုံးသပ်ချက်အတွက် ပြီးဆုံးပြီးသား အော်ဒါကို ရွေးပါ',
+    alreadyReviewed: 'ဒီပစ္စည်းကို သုံးသပ်ချက် ပေးပြီးပါပြီ',
+    reviewSuccess: 'သုံးသပ်ချက် အောင်မြင်စွာ တင်သွင်းပြီးပါပြီ!',
+    reviewFailed: 'သုံးသပ်ချက် တင်သွင်းမှု မအောင်မြင်ပါ',
+    loginToReview: 'သုံးသပ်ချက်ရေးရန် အကောင့်ဝင်ပါ',
+    purchaseRequired: 'သုံးသပ်ချက်ရေးရန် ဒီပစ္စည်းကို ဝယ်ယူထားရန် လိုအပ်ပါသည်',
+    verified: 'အတည်ပြုပြီးသော ဝယ်ယူမှု',
+    helpful: 'အကူအညီဖြစ်တယ်',
+    sortNewest: 'အသစ်ဆုံး',
+    sortOldest: 'အဟောင်းဆုံး',
+    sortHighest: 'အမြင့်ဆုံး',
+    sortLowest: 'အနိမ့်ဆုံး',
+    sortHelpful: 'အကူအညီအဖြစ်ဆုံး',
+    stars: 'ကြယ်',
+    outOf5: '/၅',
+    basedOn: '',
+    reviewsCount: 'သုံးသပ်ချက်',
+    showMore: 'နောက်ထပ်ကြည့်မယ်',
+  },
+
   // Notifications
   notifications: {
     title: 'အသိပေးချက်များ',
@@ -492,6 +523,7 @@ const my: TranslationKeys = {
     unknown: 'မသိပါ',
     pageNotFound: 'ဒီစာမျက်နှာ မတွေ့ပါ',
     goHome: 'ပင်မစာမျက်နှာသို့',
+    more: 'နောက်ထပ်',
   },
 
   // Admin
@@ -989,7 +1021,7 @@ const my: TranslationKeys = {
       clickOrDragReplace: 'အစားထိုးရန် နှိပ်ပါ သို့မဟုတ် ဆွဲထည့်ပါ',
       dropHere: 'Screenshot ကိုဒီနေရာတွင်ချပါ',
       uploadScreenshot: 'ငွေပေးချေမှု screenshot တင်ပါ',
-      supportedFormats: 'Kpay, WaveMoney, CBPay, AYA Pay • PNG, JPG, WebP • အများဆုံး 5MB',
+      supportedFormats: 'Kpay, WaveMoney, UAB Pay, AYA Pay • PNG, JPG, WebP • အများဆုံး 5MB',
       checking: 'ငွေပေးချေမှု screenshot ကို စစ်ဆေးနေသည်...',
       verified: 'ငွေပေးချေမှု အတည်ပြုပြီးပါပြီ!',
       manualReview: 'လူကြီးမင်းအတွက် လူကိုယ်တိုင်စစ်ဆေးရန်လိုနိုင်သည်',

@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { notificationEvents } from '@/lib/notification-events';
 
 // ==========================================
 // Notification Model - Burmese Digital Store
@@ -10,7 +11,8 @@ export type NotificationType =
   | 'order_completed'
   | 'order_rejected'
   | 'order_refunded'
-  | 'admin_new_order';
+  | 'admin_new_order'
+  | 'vpn_expiry_reminder';
 
 export interface INotificationDocument extends Document {
   user: mongoose.Types.ObjectId;
@@ -40,6 +42,7 @@ const NotificationSchema: Schema = new Schema(
         'order_rejected',
         'order_refunded',
         'admin_new_order',
+        'vpn_expiry_reminder',
       ],
     },
     title: {
@@ -86,7 +89,22 @@ export async function createNotification(data: {
   message: string;
   orderId?: string | mongoose.Types.ObjectId;
 }): Promise<INotificationDocument> {
-  return Notification.create(data);
+  const doc = await Notification.create(data);
+
+  // Push real-time SSE event
+  try {
+    notificationEvents.emit(data.user.toString(), {
+      type: data.type,
+      title: data.title,
+      message: data.message,
+      notificationId: doc._id.toString(),
+      orderId: data.orderId?.toString(),
+    });
+  } catch {
+    // SSE push is best-effort
+  }
+
+  return doc;
 }
 
 /**
@@ -113,5 +131,21 @@ export async function notifyAdmins(data: {
     read: false,
   }));
 
-  await Notification.insertMany(notifications);
+  const docs = await Notification.insertMany(notifications);
+
+  // Push real-time SSE events to all admins
+  try {
+    const adminIds = admins.map((a: any) => a._id.toString());
+    for (let i = 0; i < adminIds.length; i++) {
+      notificationEvents.emit(adminIds[i], {
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        notificationId: docs[i]._id.toString(),
+        orderId: data.orderId?.toString(),
+      });
+    }
+  } catch {
+    // SSE push is best-effort
+  }
 }

@@ -161,9 +161,11 @@ interface LiveServerHealth {
 export default function VPNPage() {
   const { t, lang: language } = useLanguage();
   const router = useRouter();
-  const [activeDevice, setActiveDevice] = useState(1);
+  const [activeDevice, setActiveDevice] = useState(3);
+  const [selectedServer, setSelectedServer] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [appStore, setAppStore] = useState<'playstore' | 'appstore'>('playstore');
+  const deviceTabsRef = useRef<HTMLDivElement>(null);
   const [liveServers, setLiveServers] = useState<LiveServerHealth[]>(
     defaultServers.map((s) => ({ id: s.id, name: s.name, flag: s.flag, online: s.online, latencyMs: null }))
   );
@@ -223,40 +225,118 @@ export default function VPNPage() {
   };
 
   const pricingCard = (p: typeof pricing[1][0], i: number, extraClass = '') => {
-    const feats = ['Unlimited Data'];
-    if (activeDevice > 1) feats.push(`${activeDevice} Devices Simultaneous`);
-    feats.push('All Servers Access', 'Multi-Protocol Support');
-    if (p.popular) feats.push('Popular Choice');
-    if (p.months === 12) feats.push('Maximum Savings');
-    feats.push('24/7 Service');
+    // Calculate per-month cost and savings
+    const priceNum = parseInt(p.price.replace(/,/g, ''));
+    const monthlyRate = pricing[activeDevice][0]; // 1month price for this device count
+    const monthlyNum = parseInt(monthlyRate.price.replace(/,/g, ''));
+    const fullPrice = monthlyNum * p.months;
+    const saved = fullPrice - priceNum;
+    const savedPct = p.months > 1 ? Math.round((saved / fullPrice) * 100) : 0;
+    const perMonth = Math.round(priceNum / p.months).toLocaleString();
+
+    const isPopular = !!p.popular;
+    const isBestValue = p.months === 12;
+
+    // Badge config
+    const badge = isPopular
+      ? { text: '\u2B50 Most Popular', gradient: 'from-purple-600 to-cyan-500' }
+      : isBestValue
+        ? { text: '\uD83D\uDCA0 Best Value', gradient: 'from-amber-500 to-orange-500' }
+        : null;
 
     return (
       <div key={`${activeDevice}-${p.months}`}
-        className={`flex flex-col bg-[#12122a] border rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(108,92,231,0.15)] relative overflow-hidden ${p.popular ? 'border-purple-500 shadow-[0_0_40px_rgba(108,92,231,0.15)]' : 'border-purple-500/15'} ${extraClass}`}
-        style={{ animation: 'vpn-fadeInUp 0.4s ease forwards', animationDelay: `${i * 0.05}s` }}>
-        {p.popular && (
-          <div className="flex justify-center py-1.5 bg-gradient-to-r from-purple-600 to-cyan-500">
-            <span className="text-white text-xs font-semibold">Popular</span>
+        className={`group flex flex-col rounded-2xl transition-all duration-300 hover:-translate-y-2 relative overflow-hidden ${
+          isPopular
+            ? 'bg-gradient-to-b from-purple-900/40 to-[#12122a] border-2 border-purple-500 shadow-[0_0_50px_rgba(108,92,231,0.2)] scale-[1.02]'
+            : isBestValue
+              ? 'bg-gradient-to-b from-amber-900/20 to-[#12122a] border-2 border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.1)]'
+              : 'bg-[#12122a] border border-purple-500/15 hover:border-purple-500/40 hover:shadow-[0_0_40px_rgba(108,92,231,0.1)]'
+        } ${extraClass}`}
+        style={{ animation: 'vpn-fadeInUp 0.4s ease forwards', animationDelay: `${i * 0.06}s` }}>
+
+        {/* Top accent line */}
+        <div className={`h-1 w-full ${isPopular ? 'bg-gradient-to-r from-purple-600 via-cyan-400 to-purple-600' : isBestValue ? 'bg-gradient-to-r from-amber-500 via-orange-400 to-amber-500' : 'bg-gradient-to-r from-purple-600/30 to-cyan-500/30 opacity-0 group-hover:opacity-100 transition-opacity'}`} />
+
+        {/* Badge */}
+        {badge && (
+          <div className="flex justify-center -mt-px">
+            <div className={`bg-gradient-to-r ${badge.gradient} text-white text-[10px] sm:text-xs font-bold px-4 py-1 rounded-b-lg shadow-lg`}>
+              {badge.text}
+            </div>
           </div>
         )}
-        <div className="p-5 sm:p-8 flex flex-col flex-1">
-        <div className="text-xs sm:text-sm text-purple-300 font-semibold mb-1.5">{monthLabel(p.months)}</div>
-        <div className="text-3xl sm:text-4xl font-extrabold text-white mb-1">{p.price} <span className="text-sm sm:text-base font-medium text-gray-500">Ks</span></div>
-        <div className="text-xs text-gray-500 mb-4 sm:mb-6">{perLabel(activeDevice, p.months)}</div>
-        <ul className="space-y-1.5 sm:space-y-2 mb-6 sm:mb-8 flex-1">
-          {feats.map((feat) => (
-            <li key={feat} className="flex items-center gap-2 text-xs sm:text-sm text-gray-400">
-              <span className="text-cyan-400 font-bold text-xs">{'\u2713'}</span>
-              {feat}
-            </li>
-          ))}
-        </ul>
-        <button
-          onClick={() => router.push(`/vpn/order?devices=${activeDevice}&months=${p.months}`)}
-          className={`w-full flex items-center justify-center gap-2 py-2.5 sm:py-3.5 rounded-lg text-sm sm:text-base font-semibold transition-all ${p.popular ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-[0_4px_20px_rgba(108,92,231,0.3)] hover:shadow-[0_8px_30px_rgba(108,92,231,0.4)] hover:-translate-y-0.5' : 'border border-purple-500/20 text-white hover:bg-purple-500/10 hover:border-purple-500 hover:-translate-y-0.5'}`}
-        >
-          {t('vpn.landing.buyNow')}
-        </button>
+
+        {/* Savings ribbon for multi-month */}
+        {savedPct > 0 && (
+          <div className="absolute top-3 -right-8 rotate-45 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[9px] font-bold px-8 py-0.5 shadow-lg">
+            {savedPct}% OFF
+          </div>
+        )}
+
+        <div className="p-5 sm:p-7 flex flex-col flex-1">
+          {/* Duration label */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">{p.months === 1 ? '\u23F1' : p.months <= 5 ? '\uD83D\uDCC5' : p.months <= 9 ? '\uD83D\uDD25' : '\uD83D\uDC8E'}</span>
+            <span className={`text-sm sm:text-base font-bold ${isPopular ? 'text-purple-300' : isBestValue ? 'text-amber-300' : 'text-gray-300'}`}>
+              {monthLabel(p.months)}
+            </span>
+          </div>
+
+          {/* Price */}
+          <div className="mb-1">
+            <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">{p.price}</span>
+            <span className="text-sm sm:text-base font-medium text-gray-500 ml-1.5">Ks</span>
+          </div>
+
+          {/* Per month breakdown */}
+          {p.months > 1 && (
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs text-gray-500">{perMonth} Ks / month</span>
+              <span className="text-[10px] font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">Save {saved.toLocaleString()} Ks</span>
+            </div>
+          )}
+
+          <div className="text-[11px] text-gray-600 mb-4 sm:mb-5">{perLabel(activeDevice, p.months)}</div>
+
+          {/* Divider */}
+          <div className={`h-px mb-4 sm:mb-5 ${isPopular ? 'bg-purple-500/20' : 'bg-white/5'}`} />
+
+          {/* Features */}
+          <ul className="space-y-2 sm:space-y-2.5 mb-6 sm:mb-7 flex-1">
+            {[
+              { icon: '\u267E\uFE0F', text: 'Unlimited Data' },
+              { icon: '\uD83C\uDF10', text: 'All Servers Access' },
+              { icon: '\uD83D\uDD12', text: 'Multi-Protocol' },
+              ...(activeDevice > 1 ? [{ icon: '\uD83D\uDCF1', text: `${activeDevice} Devices` }] : []),
+              { icon: '\u2728', text: '24/7 Support' },
+            ].map((feat) => (
+              <li key={feat.text} className="flex items-center gap-2.5 text-xs sm:text-sm text-gray-400">
+                <span className="text-xs flex-shrink-0">{feat.icon}</span>
+                {feat.text}
+              </li>
+            ))}
+          </ul>
+
+          {/* CTA Button */}
+          <button
+            onClick={() => {
+              if (!selectedServer) {
+                document.getElementById('servers')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return;
+              }
+              router.push(`/vpn/order?devices=${activeDevice}&months=${p.months}&server=${selectedServer}`);
+            }}
+            className={`w-full flex items-center justify-center gap-2 py-3 sm:py-3.5 rounded-xl text-sm sm:text-base font-bold transition-all duration-200 ${
+              isPopular
+                ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-[0_4px_24px_rgba(108,92,231,0.35)] hover:shadow-[0_8px_32px_rgba(108,92,231,0.5)] hover:-translate-y-0.5 active:scale-[0.98]'
+                : isBestValue
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-[0_4px_24px_rgba(245,158,11,0.25)] hover:shadow-[0_8px_32px_rgba(245,158,11,0.4)] hover:-translate-y-0.5 active:scale-[0.98]'
+                  : 'border border-purple-500/25 text-white hover:bg-purple-500/10 hover:border-purple-500 hover:-translate-y-0.5 active:scale-[0.98]'
+            }`}
+          >
+            {!selectedServer ? (language === 'en' ? '\uD83D\uDC46 Select Server' : 'Server ရွေးပါ') : `${t('vpn.landing.buyNow')} \u2192`}
+          </button>
         </div>
       </div>
     );
@@ -390,7 +470,15 @@ export default function VPNPage() {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
             {liveServers.map((s, i) => (
-              <div key={i} className={`vpn-fade bg-[#12122a] border rounded-2xl p-7 text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(108,92,231,0.15)] ${s.online ? 'border-purple-500/15 hover:border-purple-500' : 'border-red-500/15 hover:border-red-500/40 opacity-70'}`}
+              <button key={i}
+                disabled={!s.online}
+                onClick={() => {
+                  setSelectedServer(s.id);
+                  setTimeout(() => {
+                    deviceTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 100);
+                }}
+                className={`vpn-fade bg-[#12122a] border rounded-2xl p-7 text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(108,92,231,0.15)] ${selectedServer === s.id ? 'border-purple-500 ring-2 ring-purple-500/30 shadow-[0_0_40px_rgba(108,92,231,0.2)]' : s.online ? 'border-purple-500/15 hover:border-purple-500' : 'border-red-500/15 hover:border-red-500/40 opacity-70 cursor-not-allowed'}`}
                 style={{ transitionDelay: `${i * 0.1}s` }}>
                 <div className="text-5xl mb-3">{s.flag}</div>
                 <div className="font-bold text-white mb-2">{s.name}</div>
@@ -401,9 +489,19 @@ export default function VPNPage() {
                 {s.online && s.latencyMs !== null && (
                   <div className="text-xs text-gray-500 mt-1">{s.latencyMs}ms</div>
                 )}
-              </div>
+                {selectedServer === s.id && (
+                  <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded-full">
+                    <span>✓</span> Selected
+                  </div>
+                )}
+              </button>
             ))}
           </div>
+          {!selectedServer && (
+            <p className="vpn-fade text-center text-gray-500 text-sm mt-6 animate-pulse">
+              👆 {language === 'en' ? 'Click a server to continue' : 'Server တစ်ခုကို ရွေးပါ'}
+            </p>
+          )}
         </div>
       </section>
 
@@ -418,8 +516,19 @@ export default function VPNPage() {
             <p className="text-gray-400 max-w-xl mx-auto">{t('vpn.landing.longerCheaper')}</p>
           </div>
 
+          {/* Selected server indicator */}
+          {selectedServer && (
+            <div className="vpn-fade flex justify-center mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm">
+                <span className="text-lg">{liveServers.find(s => s.id === selectedServer)?.flag}</span>
+                <span className="text-purple-300 font-semibold">{liveServers.find(s => s.id === selectedServer)?.name}</span>
+                <button onClick={() => setSelectedServer(null)} className="ml-1 text-gray-500 hover:text-white transition-colors">✕</button>
+              </div>
+            </div>
+          )}
+
           {/* Device tabs */}
-          <div className="vpn-fade flex justify-center gap-2 mb-8 sm:mb-12 flex-wrap">
+          <div ref={deviceTabsRef} className="vpn-fade flex justify-center gap-2 mb-8 sm:mb-12 flex-wrap">
             {[1, 2, 3, 4, 5].map((d) => (
               <button key={d} onClick={() => setActiveDevice(d)}
                 className={`px-4 py-2 rounded-full text-xs sm:text-sm font-medium transition-all border ${activeDevice === d ? 'bg-purple-600 text-white border-purple-600' : 'bg-[#12122a] text-gray-400 border-purple-500/15 hover:bg-purple-600 hover:text-white hover:border-purple-600'}`}>

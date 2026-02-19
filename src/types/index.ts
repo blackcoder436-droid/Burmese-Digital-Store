@@ -17,6 +17,7 @@ export interface IUser {
 export interface IProduct {
   _id: string;
   name: string;
+  slug?: string;
   category: 'vpn' | 'streaming' | 'gaming' | 'software' | 'gift-card' | 'other';
   description: string;
   price: number;
@@ -25,6 +26,8 @@ export interface IProduct {
   image?: string;
   featured: boolean;
   active: boolean;
+  averageRating: number;
+  reviewCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -41,8 +44,21 @@ export interface IProductDetail {
 }
 
 export type OrderStatus = 'pending' | 'verifying' | 'completed' | 'rejected' | 'refunded';
-export type PaymentMethod = 'kpay' | 'wavemoney' | 'cbpay' | 'ayapay';
+export type PaymentMethod = 'kpay' | 'wavemoney' | 'uabpay' | 'ayapay';
 export type FraudFlag = 'duplicate_txid' | 'duplicate_screenshot' | 'amount_time_suspicious' | 'first_time_user' | 'high_amount';
+
+export interface IReview {
+  _id: string;
+  user: { _id: string; name: string; avatar?: string };
+  product: string;
+  order: string;
+  rating: number;
+  comment: string;
+  helpful: number;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface IVerificationChecklist {
   amountVerified?: boolean;

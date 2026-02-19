@@ -25,51 +25,60 @@ export default function AdminDashboard() {
   });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     fetchStats();
   }, []);
 
-  async function fetchStats() {
+  async function safeFetch(url: string) {
     try {
-      const [productsRes, ordersRes, usersRes, analyticsRes] = await Promise.all([
-        fetch('/api/admin/products?limit=1'),
-        fetch('/api/admin/orders?limit=5'),
-        fetch('/api/admin/users?limit=1'),
-        fetch('/api/admin/analytics?range=all'),
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.success ? data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function fetchStats() {
+    setLoading(true);
+    setFetchError(false);
+    try {
+      const [productsData, ordersData, usersData, analyticsData] = await Promise.all([
+        safeFetch('/api/admin/products?limit=1'),
+        safeFetch('/api/admin/orders?limit=5'),
+        safeFetch('/api/admin/users?limit=1'),
+        safeFetch('/api/admin/analytics?range=all'),
       ]);
 
-      const productsData = await productsRes.json();
-      const ordersData = await ordersRes.json();
-      const usersData = await usersRes.json();
-      const analyticsData = await analyticsRes.json();
-
-      if (productsData.success && ordersData.success) {
-        const orders = ordersData.data.orders;
-        setRecentOrders(orders);
-
-        // Use analytics API for accurate revenue + order counts
-        const totalRevenue = analyticsData.success
-          ? analyticsData.data.overviewStats?.totalRevenue || 0
-          : 0;
-        const completedCount = analyticsData.success
-          ? analyticsData.data.overviewStats?.completedOrders || 0
-          : orders.filter((o: any) => o.status === 'completed').length;
-        const pendingCount = analyticsData.success
-          ? analyticsData.data.overviewStats?.pendingOrders || 0
-          : orders.filter((o: any) => o.status === 'pending' || o.status === 'verifying').length;
-
-        setStats({
-          totalProducts: productsData.data.pagination.total,
-          totalOrders: ordersData.data.pagination.total,
-          pendingOrders: pendingCount,
-          completedOrders: completedCount,
-          revenue: totalRevenue,
-          totalUsers: usersData.success ? usersData.data.pagination.total : 0,
-        });
+      // If both core endpoints failed, show error state
+      if (!productsData && !ordersData) {
+        setFetchError(true);
+        return;
       }
+
+      const orders = ordersData?.data?.orders || [];
+      setRecentOrders(orders);
+
+      const totalRevenue = analyticsData?.data?.overviewStats?.totalRevenue || 0;
+      const completedCount = analyticsData?.data?.overviewStats?.completedOrders
+        ?? orders.filter((o: any) => o.status === 'completed').length;
+      const pendingCount = analyticsData?.data?.overviewStats?.pendingOrders
+        ?? orders.filter((o: any) => o.status === 'pending' || o.status === 'verifying').length;
+
+      setStats({
+        totalProducts: productsData?.data?.pagination?.total || 0,
+        totalOrders: ordersData?.data?.pagination?.total || 0,
+        pendingOrders: pendingCount,
+        completedOrders: completedCount,
+        revenue: totalRevenue,
+        totalUsers: usersData?.data?.pagination?.total || 0,
+      });
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+      setFetchError(true);
     } finally {
       setLoading(false);
     }
@@ -81,6 +90,23 @@ export default function AdminDashboard() {
         {[...Array(4)].map((_, i) => (
           <div key={i} className="game-card h-32 animate-pulse" />
         ))}
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <div className="w-14 h-14 bg-red-500/15 rounded-full flex items-center justify-center">
+          <AlertCircle className="w-7 h-7 text-red-400" />
+        </div>
+        <p className="text-gray-400 text-sm">{t('common.error')}</p>
+        <button
+          onClick={fetchStats}
+          className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 transition-all"
+        >
+          {t('common.retry')}
+        </button>
       </div>
     );
   }

@@ -20,6 +20,9 @@ import {
   UserX,
   DollarSign,
   Timer,
+  CheckSquare,
+  Square,
+  ListChecks,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
@@ -91,6 +94,69 @@ export default function AdminOrdersPage() {
     payerVerified: false,
   });
   const [showReviewOnly, setShowReviewOnly] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkRejectReason, setBulkRejectReason] = useState('');
+  const [showBulkRejectDialog, setShowBulkRejectDialog] = useState(false);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === orders.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(orders.map(o => o._id)));
+    }
+  };
+
+  const selectedPendingCount = orders.filter(o => selectedIds.has(o._id) && (o.status === 'pending' || o.status === 'verifying')).length;
+
+  async function bulkAction(action: 'bulk_approve' | 'bulk_reject', rejectReason?: string) {
+    if (selectedIds.size === 0) return;
+    setBulkProcessing(true);
+    try {
+      const res = await fetch('/api/admin/orders/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          orderIds: Array.from(selectedIds),
+          rejectReason,
+          verificationChecklist: action === 'bulk_approve' ? {
+            amountVerified: true,
+            timeVerified: true,
+            accountVerified: true,
+            txidVerified: true,
+            payerVerified: true,
+          } : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || `${data.data.successCount} orders processed`);
+        if (data.data.failCount > 0) {
+          toast.error(`${data.data.failCount} orders failed`);
+        }
+        setSelectedIds(new Set());
+        setShowBulkRejectDialog(false);
+        setBulkRejectReason('');
+        fetchOrders();
+      } else {
+        toast.error(data.error || 'Bulk action failed');
+      }
+    } catch {
+      toast.error('Bulk action failed');
+    } finally {
+      setBulkProcessing(false);
+    }
+  }
 
   const copyText = async (text: string, fieldId: string) => {
     try {
@@ -240,6 +306,87 @@ export default function AdminOrdersPage() {
           {t('admin.ordersPage.reviewRequired')}
         </button>
       </div>
+
+      {/* Bulk Actions Bar */}
+      {selectedIds.size > 0 && (
+        <div className="game-card flex flex-wrap items-center gap-3 p-4 border-purple-500/30 bg-purple-500/5">
+          <div className="flex items-center gap-2 text-sm text-purple-300">
+            <ListChecks className="w-4 h-4" />
+            <span className="font-semibold">{selectedIds.size} selected</span>
+            {selectedPendingCount > 0 && (
+              <span className="text-xs text-gray-400">({selectedPendingCount} pending/verifying)</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            {selectedPendingCount > 0 && (
+              <>
+                <button
+                  onClick={() => {
+                    if (confirm(`Approve ${selectedPendingCount} orders? This will auto-deliver keys/provision VPN.`)) {
+                      bulkAction('bulk_approve');
+                    }
+                  }}
+                  disabled={bulkProcessing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-lg text-green-400 transition-all disabled:opacity-50"
+                >
+                  {bulkProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                  Approve All
+                </button>
+                <button
+                  onClick={() => setShowBulkRejectDialog(true)}
+                  disabled={bulkProcessing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg text-red-400 transition-all disabled:opacity-50"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  Reject All
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Reject Dialog */}
+      {showBulkRejectDialog && (
+        <div className="game-card p-4 border-red-500/30 bg-red-500/5 space-y-3">
+          <p className="text-sm font-semibold text-red-400">Reject {selectedPendingCount} orders — reason required:</p>
+          <textarea
+            value={bulkRejectReason}
+            onChange={(e) => setBulkRejectReason(e.target.value)}
+            placeholder="Enter rejection reason..."
+            className="w-full px-3 py-2 text-sm bg-dark-800 border border-red-500/20 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-red-500"
+            rows={2}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                if (!bulkRejectReason.trim()) {
+                  toast.error('Reject reason is required');
+                  return;
+                }
+                bulkAction('bulk_reject', bulkRejectReason.trim());
+              }}
+              disabled={bulkProcessing}
+              className="px-4 py-2 text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg text-red-400 transition-all disabled:opacity-50"
+            >
+              {bulkProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" /> : null}
+              Confirm Reject
+            </button>
+            <button
+              onClick={() => { setShowBulkRejectDialog(false); setBulkRejectReason(''); }}
+              className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Order Detail Modal */}
       {selectedOrder && (
@@ -608,6 +755,11 @@ export default function AdminOrdersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-400 uppercase border-b border-dark-700 bg-dark-800/50">
+                  <th className="p-4 w-10">
+                    <button onClick={toggleSelectAll} className="text-gray-400 hover:text-purple-400 transition-colors">
+                      {selectedIds.size === orders.length && orders.length > 0 ? <CheckSquare className="w-4 h-4 text-purple-400" /> : <Square className="w-4 h-4" />}
+                    </button>
+                  </th>
                   <th className="p-4 font-semibold">{t('admin.ordersPage.customer')}</th>
                   <th className="p-4 font-semibold">{t('admin.ordersPage.product')}</th>
                   <th className="p-4 font-semibold">{t('admin.ordersPage.amount')}</th>
@@ -622,8 +774,13 @@ export default function AdminOrdersPage() {
                 {orders.map((order) => (
                   <tr
                     key={order._id}
-                    className="text-gray-200 hover:bg-purple-500/5 transition-colors"
+                    className={`text-gray-200 hover:bg-purple-500/5 transition-colors ${selectedIds.has(order._id) ? 'bg-purple-500/10' : ''}`}
                   >
+                    <td className="p-4 w-10">
+                      <button onClick={() => toggleSelect(order._id)} className="text-gray-400 hover:text-purple-400 transition-colors">
+                        {selectedIds.has(order._id) ? <CheckSquare className="w-4 h-4 text-purple-400" /> : <Square className="w-4 h-4" />}
+                      </button>
+                    </td>
                     <td className="p-4">
                       <div>
                         <p className="font-medium text-white">

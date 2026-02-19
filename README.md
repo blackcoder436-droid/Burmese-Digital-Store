@@ -19,7 +19,7 @@
 - 🛡️ **Role-Based Auth** — Admin (manage products/orders) & User (browse/order)
 - 🔍 **OCR Payment Verification** — Auto-extract Transaction ID & Amount from Kpay/WaveMoney screenshots
 - 📦 **Digital Inventory** — Auto-deliver serial keys/login details upon payment approval
-- 💳 **Local Payments** — KBZ Pay, WaveMoney, CB Pay, AYA Pay
+- 💳 **Local Payments** — KBZ Pay, WaveMoney, UAB Pay, AYA Pay
 - 📱 **Mobile First** — Responsive design optimized for phone users
 - 🔒 **Security** — Rate limiting, input validation, JWT auth, HttpOnly cookies
 - ⚡ **Instant Delivery** — Keys delivered immediately after payment verification

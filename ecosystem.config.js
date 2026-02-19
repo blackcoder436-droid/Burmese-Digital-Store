@@ -14,5 +14,30 @@ module.exports = {
         PORT: 3000,
       },
     },
+    // ---- Cron Jobs ----
+    {
+      name: 'cron-expire-orders',
+      script: 'scripts/cron-runner.sh',
+      args: '/api/cron/expire-orders',
+      cwd: '/var/www/burmese-digital-store',
+      cron_restart: '*/5 * * * *', // Every 5 minutes
+      autorestart: false,
+      watch: false,
+      env: {
+        NODE_ENV: 'production',
+      },
+    },
+    {
+      name: 'cron-vpn-expiry-reminders',
+      script: 'scripts/cron-runner.sh',
+      args: '/api/cron/vpn-expiry-reminders',
+      cwd: '/var/www/burmese-digital-store',
+      cron_restart: '0 9 * * *', // Daily at 9:00 AM
+      autorestart: false,
+      watch: false,
+      env: {
+        NODE_ENV: 'production',
+      },
+    },
   ],
 };

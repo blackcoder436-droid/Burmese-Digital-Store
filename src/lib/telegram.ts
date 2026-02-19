@@ -156,3 +156,165 @@ export function buildScreenshotCaption(params: {
   }
   return lines.join('\n');
 }
+
+/**
+ * Send order notification with inline Approve/Reject buttons to Telegram
+ */
+export async function sendOrderWithApproveButtons(params: {
+  orderId: string;
+  orderNumber: string;
+  userName: string;
+  productName: string;
+  amount: number;
+  paymentMethod: string;
+  orderType: string;
+  transactionId?: string;
+}): Promise<boolean> {
+  if (!BOT_TOKEN || !CHANNEL_ID) {
+    log.warn('Telegram not configured — skipping approve button notification');
+    return false;
+  }
+
+  try {
+    const lines = [
+      `📦 <b>New Order: ${params.orderNumber}</b>`,
+      ``,
+      `👤 ${params.userName}`,
+      `🛒 ${params.productName}`,
+      `💰 <b>${params.amount.toLocaleString()} Ks</b>`,
+      `💳 ${params.paymentMethod.toUpperCase()}`,
+      `📋 Type: ${params.orderType === 'vpn' ? 'VPN' : 'Product'}`,
+    ];
+    if (params.transactionId) {
+      lines.push(`🔖 TxID: <code>${params.transactionId}</code>`);
+    }
+    lines.push(``, `⏳ <i>Awaiting approval...</i>`);
+
+    const inlineKeyboard = {
+      inline_keyboard: [
+        [
+          { text: '✅ Approve', callback_data: `approve_order:${params.orderId}` },
+          { text: '❌ Reject', callback_data: `reject_order:${params.orderId}` },
+        ],
+      ],
+    };
+
+    const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHANNEL_ID,
+        text: lines.join('\n'),
+        parse_mode: 'HTML',
+        reply_markup: inlineKeyboard,
+      }),
+    });
+
+    const data = await res.json();
+    if (!data.ok) {
+      log.error('Telegram sendMessage with buttons failed', { error: data.description });
+      return false;
+    }
+
+    log.info('Order approve buttons sent to Telegram', {
+      orderId: params.orderId,
+      messageId: data.result.message_id,
+    });
+    return true;
+  } catch (error) {
+    log.error('Telegram approve buttons error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+/**
+ * Edit a Telegram message (used to update approve/reject status)
+ */
+export async function editTelegramMessage(messageId: number, newText: string): Promise<boolean> {
+  if (!BOT_TOKEN || !CHANNEL_ID) return false;
+
+  try {
+    const res = await fetch(`${TELEGRAM_API}/editMessageText`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHANNEL_ID,
+        message_id: messageId,
+        text: newText,
+        parse_mode: 'HTML',
+        // Remove inline keyboard buttons after action to prevent duplicate clicks
+        reply_markup: JSON.stringify({ inline_keyboard: [] }),
+      }),
+    });
+    const data = await res.json();
+    return data.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Answer a Telegram callback query (dismiss the loading spinner on button press)
+ */
+export async function answerCallbackQuery(callbackQueryId: string, text: string): Promise<boolean> {
+  if (!BOT_TOKEN) return false;
+
+  try {
+    const res = await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        callback_query_id: callbackQueryId,
+        text,
+        show_alert: true,
+      }),
+    });
+    const data = await res.json();
+    return data.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send a document (file) to Telegram channel
+ */
+export async function sendDocumentToTelegram(
+  buffer: Buffer,
+  filename: string,
+  caption: string
+): Promise<boolean> {
+  if (!BOT_TOKEN || !CHANNEL_ID) {
+    log.warn('Telegram not configured — cannot send document');
+    return false;
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append('chat_id', CHANNEL_ID);
+    formData.append('document', new Blob([new Uint8Array(buffer)]), filename);
+    formData.append('caption', caption);
+    formData.append('parse_mode', 'HTML');
+
+    const res = await fetch(`${TELEGRAM_API}/sendDocument`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (!data.ok) {
+      log.error('Telegram sendDocument failed', { error: data.description });
+      return false;
+    }
+
+    log.info('Document sent to Telegram', { filename, messageId: data.result.message_id });
+    return true;
+  } catch (error) {
+    log.error('Telegram sendDocument error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}

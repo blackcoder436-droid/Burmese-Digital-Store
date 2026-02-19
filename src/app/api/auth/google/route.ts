@@ -139,9 +139,9 @@ async function verifyGoogleToken(credential: string): Promise<{
     const data = await res.json();
 
     // Verify audience (client ID)
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (clientId && data.aud !== clientId) {
-      log.warn('Google token audience mismatch', { expected: clientId, got: data.aud });
+    const configuredIds = getAllowedGoogleClientIds();
+    if (configuredIds.length > 0 && !configuredIds.includes(String(data.aud || ''))) {
+      log.warn('Google token audience mismatch', { expected: configuredIds, got: data.aud });
       return null;
     }
 
@@ -168,4 +168,18 @@ async function verifyGoogleToken(credential: string): Promise<{
     });
     return null;
   }
+}
+
+function getAllowedGoogleClientIds(): string[] {
+  const rawValues = [
+    process.env.GOOGLE_CLIENT_ID || '',
+    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
+  ];
+
+  return [...new Set(
+    rawValues
+      .flatMap((v) => v.split(','))
+      .map((v) => v.trim())
+      .filter(Boolean)
+  )];
 }

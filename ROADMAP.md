@@ -109,6 +109,9 @@
 - ✅ Payment screenshots stored in Telegram channel (non-blocking, graceful fallback)
 - ✅ Order model: `telegramFileId`, `telegramMessageId` fields
 - ✅ `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHANNEL_ID` env vars required
+- ✅ Telegram order approve/reject inline buttons (Phase 9)
+- ✅ Telegram webhook handler for callback queries (Phase 9)
+- ✅ Manual DB backup to Telegram from admin settings (Phase 9)
 
 ### Account Management
 - ✅ `/account/orders/[id]` — Full order detail page (status stepper, keys, VPN display)
@@ -202,9 +205,9 @@
 ### 7. Security (Production Must-Do)
 - ✅ `JWT_SECRET` ကို strong random value ပြောင်းပြီး
 - ✅ MongoDB Atlas: IP whitelist → DigitalOcean droplet IP only (VPS IP set)
-- ⬜ MongoDB user: read/write permission only (admin permission မပေးပါနဲ့)
+- ✅ MongoDB user: read/write permission only (admin permission မပေးပါနဲ့)
 - ✅ `.env.local` production values git ထဲ push မဝင်ကြောင်း confirm ပြီး (`.gitignore` ပါ)
-- ⬜ Admin account password ကို strong password ပြောင်းပါ
+- ✅ Admin account password ကို strong password ပြောင်းပါ
 - ✅ `/api/admin/seed` ကို bootstrap ပြီးတာနဲ့ အပြီးပိတ် (`ENABLE_ADMIN_SEED=false`)
 - ✅ Production မှာ Upstash Redis rate-limit ချိတ်ပြီး (`RATE_LIMIT_FAIL_CLOSED=true`)
 - ✅ `VPN_SERVER_ALLOWED_HOSTS` allowlist production domain/subdomains set ပြီး
@@ -251,7 +254,7 @@
 - ✅ Admin actions monitoring: user promote/demote, server URL changes, export usage
 
 ### S11 — Windows Dev Reliability (LOW)
-- ⬜ Project ကို OneDrive sync folder ပြင်ပသို့ရွှေ့ရန် (Next.js `.next/trace` EPERM issue လျော့)
+- ✅ Project ကို OneDrive sync folder ပြင်ပသို့ရွှေ့ရန် (Next.js `.next/trace` EPERM issue လျော့)
 
 ---
 
@@ -313,15 +316,139 @@
 ### Remaining TODOs
 - ✅ API route integration tests (`__tests__/api-routes.test.ts`)
 - ✅ Fraud detection unit tests (`__tests__/fraud-detection.test.ts`)
-- ⬜ Component/UI tests (React Testing Library)
+- ✅ Component/UI tests (React Testing Library) — 6 test files, 47 tests (ProductCard, OrderStatus, PaymentCountdown, Footer, NotificationBell, Navbar)
 - ✅ `expireOverdueOrders()` cron endpoint implemented (`/api/cron/expire-orders`, secret-protected)
-- ◐ Migrate existing components from `tr()` to `t()` dictionary-based translations (login/register + navbar + admin header + admin/dashboard + product card + footer + notification bell + account/notifications + account/vpn-keys completed)
-- ⬜ Product review/rating system
-- ⬜ Real-time notifications (SSE/WebSocket)
-- ⬜ Admin rate limit dashboard (Upstash Redis usage visualization)
+- ✅ Migrate existing components from `tr()` to `t()` dictionary-based translations (all components migrated, 0 remaining `tr()` calls)
+- ✅ Product review/rating system — Review model, API endpoint, ReviewSection component, star ratings on ProductCard
+- ✅ Real-time notifications (SSE) — EventSource stream endpoint, `useNotificationStream` hook, auto-reconnect with backoff, `NotificationBell` upgraded from polling to SSE
+- ✅ Admin rate limit dashboard — `/admin/rate-limits` page with real-time monitoring, limiter cards, IP tracking table
 
 ---
 
+## 🚀 Phase 8 — Performance, Ops & Testing (2026-02-19)
+
+> VPN expiry reminders, admin bulk actions, Web Vitals, DB indexing, E2E tests, Cloudflare R2 CDN
+
+### VPN Expiry Reminders
+- ✅ `/api/cron/vpn-expiry-reminders` — cron endpoint (7d, 3d, 1d before expiry)
+- ✅ In-app notification + email + Telegram for each reminder
+- ✅ `vpnExpiryReminders` field on Order to prevent duplicate sends
+- ✅ `sendVpnExpiryReminderEmail()` styled email template with urgency colors
+- ✅ `vpn_expiry_reminder` notification type added
+
+### Admin Bulk Actions
+- ✅ `POST /api/admin/orders/bulk` — bulk approve/reject orders (max 50)
+- ✅ Bulk approve: auto-delivers product keys + provisions VPN keys
+- ✅ Bulk reject: shared reject reason + VPN key revocation + quarantine cleanup
+- ✅ Admin orders page: checkbox selection + select all + bulk action bar
+- ✅ Bulk reject dialog with reason input
+
+### Performance Monitoring (Web Vitals)
+- ✅ `src/lib/web-vitals.ts` — batched Web Vitals reporting (sendBeacon)
+- ✅ `src/components/WebVitalsReporter.tsx` — client component with `web-vitals` library
+- ✅ `POST /api/analytics/vitals` — collect vitals batches (50 cap, MongoDB storage, 90d TTL)
+- ✅ `GET /api/analytics/vitals` — aggregated metrics (p50/p75/p95, daily trend, slow pages)
+- ✅ `/admin/performance` — admin dashboard with metric cards, percentile bars, slow pages table
+- ✅ Integrated into root layout (auto-tracks LCP, FID, CLS, FCP, TTFB, INP)
+
+### Database Indexing Audit
+- ✅ Order: `{ orderType, vpnProvisionStatus }` — VPN keys admin page
+- ✅ Order: `{ 'vpnPlan.serverId' }` — VPN keys server filter
+- ✅ Order: `{ orderType, status, vpnProvisionStatus, 'vpnKey.expiryTime' }` — expiry cron
+- ✅ Order: `{ status, paymentExpiresAt }` — expire overdue orders
+- ✅ Order: `{ createdAt: -1 }` — analytics aggregations
+- ✅ Order: `{ user, totalAmount, createdAt }` — fraud detection
+- ✅ User: text index on `{ name, email }` — admin user search
+- ✅ User: `{ createdAt: -1 }` — analytics user growth
+- ✅ Product: `{ active, price }` — shop price range filter
+- ✅ Product: `{ createdAt: -1 }` — sort by newest
+
+### E2E Tests (Playwright)
+- ✅ `playwright.config.ts` — Chromium + Mobile Chrome projects
+- ✅ `e2e/home.spec.ts` — home page rendering, navbar, footer, navigation links
+- ✅ `e2e/auth.spec.ts` — login/register/forgot-password forms, validation, Google button
+- ✅ `e2e/shop.spec.ts` — shop page, search, VPN page, cart empty state
+- ✅ `e2e/navigation.spec.ts` — static pages, SEO (meta/OG/JSON-LD/robots/sitemap), 404, protected routes, API health, accessibility
+- ✅ `npm run test:e2e` / `npm run test:e2e:ui` scripts
+
+### Image CDN (Cloudflare R2)
+- ✅ `R2Storage` class in `src/lib/storage.ts` (S3-compatible API)
+- ✅ `STORAGE_PROVIDER=r2` env var switch
+- ✅ Env vars: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`
+- ✅ 1-year immutable cache headers for images
+- ✅ `next.config.js` updated for `cdn.burmesedigital.store` + `*.r2.dev` remote patterns
+
+### Production Deployment Setup
+- ✅ PM2 cron jobs for expire-orders (every 5 min) + VPN expiry reminders (daily 9 AM)
+- ✅ `scripts/cron-runner.sh` — Universal cron endpoint runner with CRON_SECRET auth
+- ✅ `ecosystem.config.js` updated with cron job definitions
+- ✅ `DEPLOY.md` — Complete production deployment guide (R2 CDN, cron setup, DB index verification, checklist)
+- ✅ MongoDB index verification script (38 indexes across 8 models)
+
+---
+## 📱 Phase 9 — Telegram Ops & Admin UX (2026-02-19)
+
+> Telegram ကနေ order approve/reject, manual DB backup, admin nav/dashboard UX improvements, CBPay→UAB Pay rename
+
+### Telegram Order Approval (Inline Buttons)
+- ✅ `sendOrderWithApproveButtons()` — order notification with ✅ Approve / ❌ Reject inline keyboard buttons
+- ✅ `editTelegramMessage()` — update message after action (removes inline keyboard to prevent double-clicks)
+- ✅ `answerCallbackQuery()` — dismiss Telegram loading spinner with alert text
+- ✅ All 3 order routes (`/api/orders`, `/api/orders/cart`, `/api/vpn/orders`) send approve buttons on order creation
+- ✅ Non-blocking: approve button failure doesn't affect order creation
+
+### Telegram Webhook Handler
+- ✅ `POST /api/telegram/webhook` — callback query handler for approve/reject buttons
+- ✅ Approve flow: Product orders → deliver keys from stock. VPN orders → provision via 3xUI. Release quarantined screenshot. Create user notification. Log activity.
+- ✅ Reject flow: Set status to rejected with reason. Create user notification. Log activity. Edit Telegram message.
+- ✅ Security: `TELEGRAM_WEBHOOK_SECRET` header verification (`x-telegram-bot-api-secret-token`)
+- ✅ Rate limiting: `webhookLimiter` (60 req/min) to prevent brute-force on public endpoint
+- ✅ Idempotency: checks `order.status` before processing (skips already completed/rejected)
+- ✅ Always returns 200 to Telegram to prevent retries
+- ✅ Structured logging with `createLogger`
+
+### Telegram Webhook Setup API
+- ✅ `GET /api/admin/telegram-webhook` — check webhook status (URL, errors, pending updates)
+- ✅ `POST /api/admin/telegram-webhook` — register webhook with `TELEGRAM_WEBHOOK_SECRET`, only `callback_query` events
+- ✅ `DELETE /api/admin/telegram-webhook` — remove webhook
+- ✅ Admin-only (requireAdmin), rate-limited
+
+### Manual DB Backup to Telegram
+- ✅ `POST /api/admin/backup` — export all MongoDB collections as JSON, send to Telegram channel
+- ✅ `sendDocumentToTelegram()` — Telegram Bot sendDocument with FormData/Blob
+- ✅ Sensitive field redaction (password, resetToken, tokenVersion) for user collections
+- ✅ 50MB Telegram file size limit check
+- ✅ Admin settings page: "Database Backup" card with button + result stats (collections, docs, size, duration)
+- ✅ Activity log: `database_backup` action type added to `ActivityLog` model
+- ✅ Admin-only (requireAdmin), rate-limited
+
+### Admin Settings — Webhook UI
+- ✅ "Telegram Webhook" card in admin settings page (blue theme)
+- ✅ Auto-loads webhook status on page mount (Active green / Not registered amber)
+- ✅ One-click "Register Webhook" / "Update Webhook" button
+- ✅ "Remove Webhook" button (red trash icon, shows only when active)
+- ✅ Displays last error message, pending update count
+
+### Admin Nav Responsive Redesign
+- ✅ Desktop (lg+): all 13 nav items shown inline with labels (7 primary + separator + 6 secondary)
+- ✅ Mobile/Tablet (< lg): hamburger menu → slide-out drawer from left with grouped sections ("Main" + "Tools")
+- ✅ Large touch targets, backdrop overlay, body scroll lock, outside-click close, route-change auto-close
+
+### Admin Dashboard Resilience
+- ✅ `safeFetch()` wrapper — individual fetch failures return null instead of crashing entire dashboard
+- ✅ Error state UI with retry button on fetch failure
+- ✅ Optional chaining throughout data access
+
+### CBPay → UAB Pay Rename
+- ✅ Internal value: `cbpay` → `uabpay`, display: "CB Pay" → "UAB Pay"
+- ✅ 17 files updated: types, models, API routes, UI pages, i18n dictionaries, README
+
+### Env & Config Updates
+- ✅ `TELEGRAM_WEBHOOK_SECRET` added to `.env.local` + `.env.example`
+- ✅ `TELEGRAM_WEBHOOK_SECRET` + `TELEGRAM_CHAT_ID` added to Zod env validation (`src/lib/env.ts`)
+- ✅ `webhookLimiter` (60 req/min) added to `rateLimit.ts` + `RATE_LIMIT_CONFIGS`
+
+---
 ## �📋 Quick Production Deploy Commands (Reference)
 
 ```bash

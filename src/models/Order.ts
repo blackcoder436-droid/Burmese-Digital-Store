@@ -51,7 +51,7 @@ export interface IOrderDocument extends Document {
   orderType: 'product' | 'vpn';
   quantity: number;
   totalAmount: number;
-  paymentMethod: 'kpay' | 'wavemoney' | 'cbpay' | 'ayapay';
+  paymentMethod: 'kpay' | 'wavemoney' | 'uabpay' | 'ayapay';
   paymentScreenshot: string;
   transactionId: string;
   ocrVerified: boolean;
@@ -80,6 +80,7 @@ export interface IOrderDocument extends Document {
   reviewReason?: string;
   verificationChecklist?: IVerificationChecklist;
   rejectReason?: string;
+  vpnExpiryReminders?: Record<string, boolean>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -119,7 +120,7 @@ const OrderSchema: Schema = new Schema(
       type: String,
       required: [true, 'Payment method is required'],
       enum: {
-        values: ['kpay', 'wavemoney', 'cbpay', 'ayapay'],
+        values: ['kpay', 'wavemoney', 'uabpay', 'ayapay'],
         message: '{VALUE} is not a valid payment method',
       },
     },
@@ -234,6 +235,11 @@ const OrderSchema: Schema = new Schema(
       trim: true,
       maxlength: [500, 'Reject reason cannot exceed 500 characters'],
     },
+    vpnExpiryReminders: {
+      type: Map,
+      of: Boolean,
+      default: {},
+    },
   },
   {
     timestamps: true,
@@ -274,6 +280,13 @@ OrderSchema.index({ paymentExpiresAt: 1 }, { sparse: true });
 OrderSchema.index({ screenshotHash: 1 }, { sparse: true });
 OrderSchema.index({ fraudFlags: 1 }, { sparse: true });
 OrderSchema.index({ requiresManualReview: 1, status: 1 });
+// Database indexing audit (2026-02-19)
+OrderSchema.index({ orderType: 1, vpnProvisionStatus: 1 }); // VPN keys admin page
+OrderSchema.index({ 'vpnPlan.serverId': 1 }, { sparse: true }); // VPN keys server filter
+OrderSchema.index({ orderType: 1, status: 1, vpnProvisionStatus: 1, 'vpnKey.expiryTime': 1 }); // VPN expiry reminders cron
+OrderSchema.index({ status: 1, paymentExpiresAt: 1 }); // expireOverdueOrders batch
+OrderSchema.index({ createdAt: -1 }); // Analytics date-range aggregations
+OrderSchema.index({ user: 1, totalAmount: 1, createdAt: -1 }); // Fraud: isSuspiciousAmountTime
 
 const Order: Model<IOrderDocument> =
   mongoose.models.Order || mongoose.model<IOrderDocument>('Order', OrderSchema);

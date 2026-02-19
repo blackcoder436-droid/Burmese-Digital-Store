@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, Check, CheckCheck, ShoppingBag, AlertCircle, Package } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
+import { useNotificationStream } from '@/hooks/useNotificationStream';
 
 interface Notification {
   _id: string;
@@ -39,6 +40,25 @@ export default function NotificationBell({ isAdmin = false }: NotificationBellPr
     }
   }, []);
 
+  // Real-time SSE: receive push notifications instantly
+  useNotificationStream({
+    onNotification: useCallback((event) => {
+      // Prepend the new notification to the list
+      const newNotif: Notification = {
+        _id: event.notificationId,
+        type: event.type,
+        title: event.title,
+        message: event.message,
+        orderId: event.orderId,
+        read: false,
+        createdAt: new Date().toISOString(),
+      };
+      setNotifications((prev) => [newNotif, ...prev].slice(0, 15));
+      setUnreadCount((prev) => prev + 1);
+    }, []),
+    enabled: true,
+  });
+
   useEffect(() => {
     fetchNotifications();
     const handleVisibilityOrFocus = () => {
@@ -47,8 +67,8 @@ export default function NotificationBell({ isAdmin = false }: NotificationBellPr
       }
     };
 
-    // Poll regularly so updates appear without manual refresh
-    const interval = setInterval(fetchNotifications, 10000);
+    // Fallback poll every 60s (SSE handles real-time, this is a safety net)
+    const interval = setInterval(fetchNotifications, 60000);
     window.addEventListener('focus', handleVisibilityOrFocus);
     document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 

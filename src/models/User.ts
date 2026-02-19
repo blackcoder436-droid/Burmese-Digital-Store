@@ -126,6 +126,9 @@ const UserSchema: Schema = new Schema(
 // Index for faster queries (email index already created by unique: true)
 UserSchema.index({ role: 1 });
 UserSchema.index({ deletedAt: 1 });
+// Database indexing audit (2026-02-19)
+UserSchema.index({ name: 'text', email: 'text' }); // Admin user search
+UserSchema.index({ createdAt: -1 }); // Analytics user growth sorting
 
 // Soft-delete: auto-exclude deleted users from normal queries
 UserSchema.pre('find', function () {

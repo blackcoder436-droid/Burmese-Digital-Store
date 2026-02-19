@@ -29,6 +29,7 @@ function VpnOrderPageContent() {
 
   const devices = Number(searchParams.get('devices') || 0);
   const months = Number(searchParams.get('months') || 0);
+  const preSelectedServer = searchParams.get('server') || '';
 
   const plan = useMemo(() => {
     if (!devices || !months) return null;
@@ -46,8 +47,8 @@ function VpnOrderPageContent() {
       .catch(() => {});
   }, []);
 
-  const [step, setStep] = useState<'server' | 'protocol' | 'payment'>('server');
-  const [selectedServer, setSelectedServer] = useState('');
+  const [step, setStep] = useState<'server' | 'protocol' | 'payment'>(preSelectedServer ? 'protocol' : 'server');
+  const [selectedServer, setSelectedServer] = useState(preSelectedServer);
   const [selectedProtocol, setSelectedProtocol] = useState('trojan');
   const [paymentMethod, setPaymentMethod] = useState('kpay');
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
@@ -103,12 +104,21 @@ function VpnOrderPageContent() {
     setDiscountInfo(null);
   }
 
-  // Auto-select first server when loaded
+  // Auto-select server: use URL param if valid, otherwise first server
   useEffect(() => {
     if (servers.length > 0 && !selectedServer) {
       setSelectedServer(servers[0].id);
     }
-  }, [servers, selectedServer]);
+    // Validate pre-selected server exists and is online
+    if (servers.length > 0 && preSelectedServer) {
+      const matched = servers.find((s) => s.id === preSelectedServer && s.online);
+      if (!matched) {
+        // Pre-selected server invalid/offline — fall back to server selection
+        setSelectedServer(servers[0]?.id || '');
+        setStep('server');
+      }
+    }
+  }, [servers, selectedServer, preSelectedServer]);
 
   // Get available protocols for selected server
   const availableProtocols = useMemo(() => {
@@ -146,6 +156,9 @@ function VpnOrderPageContent() {
     );
   }
 
+  const stepIndex = step === 'server' ? 0 : step === 'protocol' ? 1 : 2;
+  const stepTitles = [t('vpn.orderPage.server'), t('vpn.orderPage.protocol'), t('order.paymentMethod')];
+
   return (
     <div className="min-h-screen pt-8 sm:pt-10 pb-8 sm:pb-10 px-4 sm:px-6">
       <div className="max-w-2xl mx-auto">
@@ -153,17 +166,46 @@ function VpnOrderPageContent() {
           ← {t('vpn.orderPage.backToPricing')}
         </button>
 
-        <div className="bg-[#12122a] border border-purple-500/20 rounded-2xl p-3.5 sm:p-5">
+        <div className="bg-[#12122a] border border-purple-500/20 rounded-2xl overflow-hidden">
+          {/* Header with step indicator */}
           {!submitSuccess && (
-            <div className="mb-4 flex items-center gap-2 text-[11px] sm:text-xs text-gray-400">
-              <span className={`px-2 py-1 rounded-md border ${step === 'server' ? 'text-purple-300 border-purple-500/40 bg-purple-500/10' : 'border-purple-500/20'}`}>1. {t('vpn.orderPage.server')}</span>
-              <span className="opacity-60">→</span>
-              <span className={`px-2 py-1 rounded-md border ${step === 'protocol' ? 'text-purple-300 border-purple-500/40 bg-purple-500/10' : 'border-purple-500/20'}`}>2. {t('vpn.orderPage.protocol')}</span>
-              <span className="opacity-60">→</span>
-              <span className={`px-2 py-1 rounded-md border ${step === 'payment' ? 'text-purple-300 border-purple-500/40 bg-purple-500/10' : 'border-purple-500/20'}`}>3. {t('order.paymentMethod')}</span>
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-purple-500/10 bg-gradient-to-r from-purple-500/5 to-transparent">
+              <div className="min-w-0">
+                <h3 className="text-base sm:text-lg font-bold text-white truncate">{stepTitles[stepIndex]}</h3>
+                <p className="text-[11px] text-gray-500 truncate">
+                  {plan.devices} Device{plan.devices > 1 ? 's' : ''} / {monthLabel(plan.months)} — {plan.price.toLocaleString()} Ks
+                </p>
+              </div>
+              <div className="flex items-center gap-0 shrink-0 ml-3">
+                {[0, 1, 2].map((s) => (
+                  <div key={s} className="flex items-center">
+                    <button
+                      onClick={() => {
+                        if (s < stepIndex) {
+                          setStep(s === 0 ? 'server' : 'protocol');
+                        }
+                      }}
+                      disabled={s > stepIndex}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-all ${
+                        s === stepIndex
+                          ? 'bg-purple-500 text-white shadow-[0_0_12px_rgba(108,92,231,0.4)]'
+                          : s < stepIndex
+                            ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 cursor-pointer'
+                            : 'bg-white/5 text-gray-600'
+                      }`}
+                    >
+                      {s < stepIndex ? '✓' : s + 1}
+                    </button>
+                    {s < 2 && (
+                      <div className={`w-4 sm:w-6 h-0.5 ${s < stepIndex ? 'bg-purple-500/40' : 'bg-white/5'}`} />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
+          <div className="p-4 sm:p-5">
           {submitSuccess ? (
             <div className="text-center py-6">
               <div className="w-14 h-14 mx-auto mb-3 bg-emerald-500/20 rounded-full flex items-center justify-center">
@@ -184,11 +226,6 @@ function VpnOrderPageContent() {
             </div>
           ) : step === 'server' ? (
             <>
-              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{t('vpn.orderPage.chooseServer')}</h3>
-              <p className="text-xs sm:text-sm text-gray-400 mb-4">
-                {plan.devices} Device{plan.devices > 1 ? 's' : ''} / {monthLabel(plan.months)} — {plan.price.toLocaleString()} Ks
-              </p>
-
               <div className="space-y-2 mb-4">
                 {servers.map((server) => (
                   <button
@@ -227,12 +264,7 @@ function VpnOrderPageContent() {
             </>
           ) : step === 'protocol' ? (
             <>
-              <button onClick={() => setStep('server')} className="text-sm text-purple-400 hover:text-purple-300 mb-3 flex items-center gap-1">
-                ← {t('vpn.orderPage.backToServerSelection')}
-              </button>
-
-              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{t('vpn.orderPage.chooseProtocol')}</h3>
-              <p className="text-xs sm:text-sm text-gray-400 mb-4">{t('vpn.orderPage.trojanRecommended')}</p>
+              <p className="text-xs sm:text-sm text-gray-400 mb-3">{t('vpn.orderPage.trojanRecommended')}</p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
                 {availableProtocols.map((protocol) => (
@@ -260,11 +292,6 @@ function VpnOrderPageContent() {
             </>
           ) : (
             <>
-              <button onClick={() => setStep('protocol')} className="text-sm text-purple-400 hover:text-purple-300 mb-3 flex items-center gap-1">
-                ← {t('vpn.orderPage.backToProtocolSelection')}
-              </button>
-
-              <h3 className="text-lg sm:text-xl font-bold text-white mb-1">{t('order.paymentMethod')}</h3>
               <p className="text-sm text-gray-400 mb-4">{t('vpn.orderPage.confirmDetailsUploadProof')}</p>
 
               <div className="flex items-start justify-between gap-3 bg-[#0a0a1f]/70 rounded-2xl px-3.5 py-3 mb-3 border border-purple-500/20">
@@ -371,7 +398,7 @@ function VpnOrderPageContent() {
                   {[
                     { value: 'kpay', label: 'KBZPay' },
                     { value: 'wavemoney', label: 'WaveMoney' },
-                    { value: 'cbpay', label: 'CBPay' },
+                    { value: 'uabpay', label: 'UAB Pay' },
                     { value: 'ayapay', label: 'AYA Pay' },
                   ].map((m) => (
                     <button
@@ -444,6 +471,7 @@ function VpnOrderPageContent() {
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
     </div>

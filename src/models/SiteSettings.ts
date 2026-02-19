@@ -6,7 +6,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 // ==========================================
 
 export interface IPaymentAccount {
-  method: 'kpay' | 'wave' | 'cbpay' | 'ayapay';
+  method: 'kpay' | 'wave' | 'uabpay' | 'ayapay';
   accountName: string;
   accountNumber: string;
   qrImage?: string; // path to QR code image
@@ -27,7 +27,7 @@ export interface ISiteSettingsDocument extends Document {
 const PaymentAccountSchema: Schema = new Schema({
   method: {
     type: String,
-    enum: ['kpay', 'wave', 'cbpay', 'ayapay'],
+    enum: ['kpay', 'wave', 'uabpay', 'ayapay'],
     required: true,
   },
   accountName: {
@@ -61,7 +61,7 @@ const SiteSettingsSchema: Schema = new Schema(
       default: [
         { method: 'kpay', accountName: '', accountNumber: '', enabled: true },
         { method: 'wave', accountName: '', accountNumber: '', enabled: true },
-        { method: 'cbpay', accountName: '', accountNumber: '', enabled: true },
+        { method: 'uabpay', accountName: '', accountNumber: '', enabled: true },
         { method: 'ayapay', accountName: '', accountNumber: '', enabled: true },
       ],
     },

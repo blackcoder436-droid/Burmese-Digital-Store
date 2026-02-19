@@ -21,7 +21,8 @@ export type ActivityAction =
   | 'coupon_deactivated'
   | 'vpn_provisioned'
   | 'vpn_provision_failed'
-  | 'vpn_revoked';
+  | 'vpn_revoked'
+  | 'database_backup';
 
 export interface IActivityLogDocument extends Document {
   admin: mongoose.Types.ObjectId;

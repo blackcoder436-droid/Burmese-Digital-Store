@@ -315,6 +315,111 @@ class S3Storage implements StorageProvider {
   }
 }
 
+// ---- Cloudflare R2 (S3-compatible CDN) ----
+// Uses S3-compatible API with Cloudflare R2 public bucket + custom domain CDN
+// Env vars: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL
+// R2_PUBLIC_URL = custom domain or r2.dev URL (e.g., https://cdn.burmesedigital.store)
+
+class R2Storage implements StorageProvider {
+  private bucketName: string;
+  private accountId: string;
+  private accessKeyId: string;
+  private secretAccessKey: string;
+  private publicUrl: string;
+  private client: unknown;
+
+  constructor() {
+    this.bucketName = process.env.R2_BUCKET_NAME || '';
+    this.accountId = process.env.R2_ACCOUNT_ID || '';
+    this.accessKeyId = process.env.R2_ACCESS_KEY_ID || '';
+    this.secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || '';
+    this.publicUrl = (process.env.R2_PUBLIC_URL || '').replace(/\/$/, ''); // trim trailing slash
+
+    if (!this.bucketName || !this.accountId || !this.accessKeyId || !this.secretAccessKey) {
+      throw new Error(
+        'R2 storage requires R2_BUCKET_NAME, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY env vars'
+      );
+    }
+
+    // Create S3-compatible client for R2
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { S3Client } = require('@aws-sdk/client-s3');
+      this.client = new S3Client({
+        region: 'auto',
+        endpoint: `https://${this.accountId}.r2.cloudflarestorage.com`,
+        credentials: {
+          accessKeyId: this.accessKeyId,
+          secretAccessKey: this.secretAccessKey,
+        },
+      });
+    } catch {
+      throw new Error('R2 storage requires @aws-sdk/client-s3 — run: npm install @aws-sdk/client-s3');
+    }
+  }
+
+  async save(buffer: Buffer, relativePath: string): Promise<string> {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PutObjectCommand } = require('@aws-sdk/client-s3');
+
+    const ext = path.extname(relativePath).toLowerCase();
+    const contentTypeMap: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+      '.avif': 'image/avif',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+    };
+    const contentType = contentTypeMap[ext] || 'application/octet-stream';
+
+    // Use content-based key for cache-busting: uploads/products/abc123.webp
+    const key = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+
+    await (this.client as { send: (cmd: unknown) => Promise<void> }).send(
+      new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        // R2 public buckets don't need ACL — public access via custom domain
+        CacheControl: 'public, max-age=31536000, immutable', // 1 year CDN cache for images
+      })
+    );
+
+    log.info('File saved (R2)', { path: key, size: buffer.length, contentType });
+    return this.url(key);
+  }
+
+  async delete(relativePath: string): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
+
+    const key = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+    try {
+      await (this.client as { send: (cmd: unknown) => Promise<void> }).send(
+        new DeleteObjectCommand({ Bucket: this.bucketName, Key: key })
+      );
+      log.info('File deleted (R2)', { path: key });
+    } catch (err) {
+      log.warn('File delete failed (R2)', {
+        path: key,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  url(relativePath: string): string {
+    const key = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+    if (this.publicUrl) {
+      return `${this.publicUrl}/${key}`;
+    }
+    // Fallback: R2 dev URL (not recommended for production)
+    return `https://${this.bucketName}.${this.accountId}.r2.dev/${key}`;
+  }
+}
+
 // ---- Factory ----
 
 let _instance: StorageProvider | null = null;
@@ -327,6 +432,9 @@ export function getStorage(): StorageProvider {
   switch (provider) {
     case 'telegram':
       _instance = new TelegramStorage();
+      break;
+    case 'r2':
+      _instance = new R2Storage();
       break;
     case 's3':
       _instance = new S3Storage();

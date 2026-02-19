@@ -14,7 +14,7 @@ const OCR_LANGUAGE = process.env.OCR_LANGUAGE || 'eng';
 
 /**
  * Extract transaction details from a payment screenshot
- * Supports: Kpay, WaveMoney, CBPay, AYA Pay
+ * Supports: Kpay, WaveMoney, UAB Pay, AYA Pay
  */
 export async function extractPaymentInfo(imagePath: string): Promise<OCRResult> {
   try {

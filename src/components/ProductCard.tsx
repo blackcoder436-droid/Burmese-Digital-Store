@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ShoppingBag, Shield, Tv, Gamepad2, MonitorSmartphone, Gift, Box } from 'lucide-react';
+import { ShoppingBag, Shield, Tv, Gamepad2, MonitorSmartphone, Gift, Box, Star } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 
 interface Product {
@@ -14,6 +14,8 @@ interface Product {
   category: string;
   stock: number;
   image?: string;
+  averageRating?: number;
+  reviewCount?: number;
 }
 
 export default function ProductCard({ product }: { product: Product }) {
@@ -100,9 +102,24 @@ export default function ProductCard({ product }: { product: Product }) {
 
         <div className="p-5 flex flex-col flex-1">
         {/* Name */}
-        <h3 className="text-base font-bold text-white mb-2 group-hover:text-purple-300 transition-colors duration-300 line-clamp-1 relative">
+        <h3 className="text-base font-bold text-white mb-1 group-hover:text-purple-300 transition-colors duration-300 line-clamp-1 relative">
           {product.name}
         </h3>
+
+        {/* Rating (if reviews exist) */}
+        {(product.reviewCount ?? 0) > 0 && (
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="flex items-center">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <Star
+                  key={s}
+                  className={`w-3 h-3 ${s <= Math.round(product.averageRating || 0) ? 'fill-amber-400 text-amber-400' : 'fill-transparent text-gray-600'}`}
+                />
+              ))}
+            </div>
+            <span className="text-[10px] text-gray-500">({product.reviewCount})</span>
+          </div>
+        )}
 
         {/* Description */}
         <p className="text-sm text-gray-500 mb-5 line-clamp-2 flex-1 leading-relaxed relative">

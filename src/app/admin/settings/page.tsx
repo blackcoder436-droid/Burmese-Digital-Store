@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Settings, Eye, EyeOff, Loader2, CheckCircle, AlertTriangle, CreditCard, Save } from 'lucide-react';
+import { Settings, Eye, EyeOff, Loader2, CheckCircle, AlertTriangle, CreditCard, Save, Database, Send, Radio, Trash2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
 
@@ -13,10 +13,24 @@ interface PaymentAccount {
   enabled: boolean;
 }
 
+interface BackupResult {
+  collections: number;
+  documents: number;
+  size: string;
+  duration: string;
+}
+
+interface WebhookInfo {
+  url: string | null;
+  pendingUpdateCount: number;
+  lastErrorDate: string | null;
+  lastErrorMessage: string | null;
+}
+
 const PAYMENT_METHODS = [
   { value: 'kpay', label: 'KBZ Pay', emoji: '🏦' },
   { value: 'wave', label: 'WaveMoney', emoji: '🌊' },
-  { value: 'cbpay', label: 'CB Pay', emoji: '💳' },
+  { value: 'uabpay', label: 'UAB Pay', emoji: '💳' },
   { value: 'ayapay', label: 'AYA Pay', emoji: '🏧' },
 ];
 
@@ -35,9 +49,16 @@ export default function AdminSettingsPage() {
     }))
   );
   const [savingPayment, setSavingPayment] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
+  const [lastBackup, setLastBackup] = useState<BackupResult | null>(null);
+  const [webhookInfo, setWebhookInfo] = useState<WebhookInfo | null>(null);
+  const [loadingWebhook, setLoadingWebhook] = useState(false);
+  const [settingWebhook, setSettingWebhook] = useState(false);
+  const [removingWebhook, setRemovingWebhook] = useState(false);
 
   useEffect(() => {
     fetchSettings();
+    fetchWebhookStatus();
   }, []);
 
   async function fetchSettings() {
@@ -116,6 +137,76 @@ export default function AdminSettingsPage() {
       toast.error(t('common.error'));
     } finally {
       setSavingPayment(false);
+    }
+  }
+
+  async function fetchWebhookStatus() {
+    setLoadingWebhook(true);
+    try {
+      const res = await fetch('/api/admin/telegram-webhook');
+      const data = await res.json();
+      if (data.success) {
+        setWebhookInfo(data.data);
+      }
+    } catch {
+      // silent fail
+    } finally {
+      setLoadingWebhook(false);
+    }
+  }
+
+  async function setupWebhook() {
+    setSettingWebhook(true);
+    try {
+      const res = await fetch('/api/admin/telegram-webhook', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Webhook registered ✓');
+        fetchWebhookStatus();
+      } else {
+        toast.error(data.error || 'Failed to set webhook');
+      }
+    } catch {
+      toast.error('Network error');
+    } finally {
+      setSettingWebhook(false);
+    }
+  }
+
+  async function removeWebhook() {
+    setRemovingWebhook(true);
+    try {
+      const res = await fetch('/api/admin/telegram-webhook', { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Webhook removed');
+        fetchWebhookStatus();
+      } else {
+        toast.error(data.error || 'Failed to remove webhook');
+      }
+    } catch {
+      toast.error('Network error');
+    } finally {
+      setRemovingWebhook(false);
+    }
+  }
+
+  async function runBackup() {
+    setBackingUp(true);
+    setLastBackup(null);
+    try {
+      const res = await fetch('/api/admin/backup', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setLastBackup(data.data);
+        toast.success('Backup sent to Telegram ✓');
+      } else {
+        toast.error(data.error || 'Backup failed');
+      }
+    } catch {
+      toast.error('Network error — backup failed');
+    } finally {
+      setBackingUp(false);
     }
   }
 
@@ -350,6 +441,155 @@ export default function AdminSettingsPage() {
             )}
             {t('admin.settingsPage.savePaymentAccounts')}
           </button>
+        </div>
+      </div>
+
+      {/* Telegram Webhook Setup */}
+      <div className="game-card p-6 sm:p-8">
+        <div className="flex items-start gap-5">
+          <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
+            <Radio className="w-6 h-6 text-blue-400" />
+          </div>
+
+          <div className="flex-1">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-white mb-1">
+                  Telegram Webhook
+                </h2>
+                <p className="text-sm text-gray-400 max-w-lg">
+                  Register a webhook so Telegram can send order approval/rejection callbacks to your server. Required for inline approve/reject buttons.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={setupWebhook}
+                  disabled={settingWebhook || removingWebhook}
+                  className="px-5 py-2.5 rounded-xl font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 text-sm"
+                >
+                  {settingWebhook ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Setting up...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      {webhookInfo?.url ? 'Update Webhook' : 'Register Webhook'}
+                    </>
+                  )}
+                </button>
+                {webhookInfo?.url && (
+                  <button
+                    onClick={removeWebhook}
+                    disabled={removingWebhook || settingWebhook}
+                    className="px-3 py-2.5 rounded-xl font-semibold text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm"
+                    title="Remove webhook"
+                  >
+                    {removingWebhook ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Webhook Status */}
+            {loadingWebhook ? (
+              <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Checking webhook status...
+              </div>
+            ) : webhookInfo ? (
+              <div className="mt-4 space-y-2">
+                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                  webhookInfo.url
+                    ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                }`}>
+                  {webhookInfo.url ? (
+                    <>
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Active
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Not registered
+                    </>
+                  )}
+                </div>
+                {webhookInfo.url && (
+                  <p className="text-xs text-gray-500 font-mono break-all">{webhookInfo.url}</p>
+                )}
+                {webhookInfo.lastErrorMessage && (
+                  <p className="text-xs text-red-400">Last error: {webhookInfo.lastErrorMessage}</p>
+                )}
+                {webhookInfo.pendingUpdateCount > 0 && (
+                  <p className="text-xs text-amber-400">Pending updates: {webhookInfo.pendingUpdateCount}</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {/* Database Backup to Telegram */}
+      <div className="game-card p-6 sm:p-8">
+        <div className="flex items-start gap-5">
+          <div className="p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
+            <Database className="w-6 h-6 text-cyan-400" />
+          </div>
+
+          <div className="flex-1">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-white mb-1">
+                  Database Backup
+                </h2>
+                <p className="text-sm text-gray-400 max-w-lg">
+                  Export all MongoDB collections as JSON and send to your Telegram channel. Useful for manual snapshots before major changes.
+                </p>
+              </div>
+
+              <button
+                onClick={runBackup}
+                disabled={backingUp}
+                className="px-5 py-2.5 rounded-xl font-semibold text-white bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 text-sm"
+              >
+                {backingUp ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Backing up...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Backup to Telegram
+                  </>
+                )}
+              </button>
+            </div>
+
+            {lastBackup && (
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: 'Collections', value: lastBackup.collections, color: 'text-cyan-400' },
+                  { label: 'Documents', value: lastBackup.documents.toLocaleString(), color: 'text-purple-400' },
+                  { label: 'Size', value: lastBackup.size, color: 'text-emerald-400' },
+                  { label: 'Duration', value: lastBackup.duration, color: 'text-amber-400' },
+                ].map((stat) => (
+                  <div key={stat.label} className="bg-[#0a0a1f]/70 rounded-xl px-3 py-2.5 border border-purple-500/10">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">{stat.label}</p>
+                    <p className={`text-lg font-bold ${stat.color} mt-0.5`}>{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

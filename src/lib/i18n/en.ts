@@ -456,6 +456,37 @@ const en = {
     refundPolicy: 'Refund Policy',
   },
 
+  // Reviews
+  reviews: {
+    title: 'Customer Reviews',
+    writeReview: 'Write a Review',
+    noReviews: 'No reviews yet. Be the first to review!',
+    rating: 'Rating',
+    comment: 'Your Review',
+    commentPlaceholder: 'Share your experience with this product (min 5 characters)...',
+    submit: 'Submit Review',
+    submitting: 'Submitting...',
+    selectOrder: 'Select Order',
+    selectOrderHint: 'Choose the completed order for this review',
+    alreadyReviewed: 'You have already reviewed this product',
+    reviewSuccess: 'Review submitted successfully!',
+    reviewFailed: 'Failed to submit review',
+    loginToReview: 'Sign in to write a review',
+    purchaseRequired: 'You need to purchase this product first',
+    verified: 'Verified Purchase',
+    helpful: 'Helpful',
+    sortNewest: 'Newest',
+    sortOldest: 'Oldest',
+    sortHighest: 'Highest Rated',
+    sortLowest: 'Lowest Rated',
+    sortHelpful: 'Most Helpful',
+    stars: 'stars',
+    outOf5: 'out of 5',
+    basedOn: 'based on',
+    reviewsCount: 'reviews',
+    showMore: 'Show More Reviews',
+  },
+
   // Notifications
   notifications: {
     title: 'Notifications',
@@ -494,6 +525,7 @@ const en = {
     unknown: 'Unknown',
     pageNotFound: 'Page Not Found',
     goHome: 'Go Home',
+    more: 'More',
   },
 
   // Admin
@@ -991,7 +1023,7 @@ const en = {
       clickOrDragReplace: 'Click or drag to replace',
       dropHere: 'Drop your screenshot here',
       uploadScreenshot: 'Upload payment screenshot',
-      supportedFormats: 'Kpay, WaveMoney, CBPay, AYA Pay • PNG, JPG, WebP • Max 5MB',
+      supportedFormats: 'Kpay, WaveMoney, UAB Pay, AYA Pay • PNG, JPG, WebP • Max 5MB',
       checking: 'Checking payment screenshot...',
       verified: 'Payment Verified!',
       manualReview: 'Manual review may be needed',

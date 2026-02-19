@@ -25,6 +25,8 @@ export interface IProductDocument extends Document {
   image?: string;
   featured: boolean;
   active: boolean;
+  averageRating: number;
+  reviewCount: number;
   deletedAt?: Date;
   deletedBy?: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -120,6 +122,18 @@ const ProductSchema: Schema = new Schema(
       ref: 'User',
       default: null,
     },
+    // Review/Rating aggregates
+    averageRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    reviewCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   {
     timestamps: true,
@@ -167,6 +181,9 @@ ProductSchema.index({ category: 1, active: 1 });
 ProductSchema.index({ featured: 1, active: 1 });
 ProductSchema.index({ name: 'text', description: 'text' });
 ProductSchema.index({ deletedAt: 1 });
+// Database indexing audit (2026-02-19)
+ProductSchema.index({ active: 1, price: 1 }); // Shop price range filter
+ProductSchema.index({ createdAt: -1 }); // Sort by newest
 
 // Soft-delete: auto-exclude deleted products from normal queries
 ProductSchema.pre('find', function () {

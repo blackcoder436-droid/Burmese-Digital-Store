@@ -13,7 +13,7 @@ import { getSiteSettings } from '@/models/SiteSettings';
 import { validateCoupon, recordCouponUsage } from '@/models/Coupon';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import { saveToQuarantine } from '@/lib/quarantine';
-import { sendPaymentScreenshot, buildScreenshotCaption } from '@/lib/telegram';
+import { sendPaymentScreenshot, buildScreenshotCaption, sendOrderWithApproveButtons } from '@/lib/telegram';
 import path from 'path';
 import User from '@/models/User';
 import { createNotification, notifyAdmins } from '@/models/Notification';
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validMethods = ['kpay', 'wavemoney', 'cbpay', 'ayapay'];
+    const validMethods = ['kpay', 'wavemoney', 'uabpay', 'ayapay'];
     if (!validMethods.includes(paymentMethod)) {
       return NextResponse.json(
         { success: false, error: 'Invalid payment method' },
@@ -317,6 +317,24 @@ export async function POST(request: NextRequest) {
         log.warn('Cart order notification creation failed (non-blocking)', {
           error: notificationError instanceof Error ? notificationError.message : String(notificationError),
         });
+      }
+    }
+
+    // Send Telegram approve/reject buttons for each cart order
+    for (const co of createdOrders) {
+      try {
+        const prod = products.find((p) => p._id.toString() === co.product?.toString());
+        await sendOrderWithApproveButtons({
+          orderId: co._id.toString(),
+          orderNumber: co.orderNumber,
+          userName: authUser.email,
+          productName: prod?.name || 'Product',
+          amount: co.totalAmount,
+          paymentMethod,
+          orderType: 'product',
+        });
+      } catch (e) {
+        log.warn('Telegram approve buttons failed (non-blocking)', { error: e instanceof Error ? e.message : String(e) });
       }
     }
 

@@ -351,7 +351,7 @@ export default function CartPage() {
                 {[
                   { value: 'kpay', label: 'KBZ Pay' },
                   { value: 'wave', label: 'WaveMoney' },
-                  { value: 'cbpay', label: 'CB Pay' },
+                  { value: 'uabpay', label: 'UAB Pay' },
                   { value: 'ayapay', label: 'AYA Pay' },
                 ].map((m) => (
                   <button
@@ -371,7 +371,7 @@ export default function CartPage() {
 
             {/* Payment Account Info */}
             {(() => {
-              const methodMap: Record<string, string> = { kpay: 'kpay', wave: 'wave', cbpay: 'cbpay', ayapay: 'ayapay' };
+              const methodMap: Record<string, string> = { kpay: 'kpay', wave: 'wave', uabpay: 'uabpay', ayapay: 'ayapay' };
               const selectedAccount = paymentAccounts.find((a) => a.method === methodMap[paymentMethod]);
               if (!selectedAccount) return null;
               return (

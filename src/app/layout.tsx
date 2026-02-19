@@ -7,6 +7,7 @@ import TechBackground from '@/components/TechBackground';
 import { LanguageProvider } from '@/lib/language';
 import { CartProvider } from '@/lib/cart';
 import { LayoutShell } from '@/components/layout/LayoutShell';
+import { WebVitalsReporter } from '@/components/WebVitalsReporter';
 import { getOrganizationJsonLd, getWebsiteJsonLd } from '@/lib/jsonld';
 import './globals.css';
 
@@ -72,6 +73,7 @@ export default async function RootLayout({
 
         <LanguageProvider>
           <CartProvider>
+          <WebVitalsReporter />
           <Toaster
             position="top-right"
             toastOptions={{

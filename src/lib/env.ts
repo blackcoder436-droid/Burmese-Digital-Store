@@ -44,7 +44,9 @@ const serverSchema = z.object({
   // Telegram
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_CHANNEL_ID: z.string().optional(),
+  TELEGRAM_CHAT_ID: z.string().optional(),
   TELEGRAM_ERROR_CHANNEL_ID: z.string().optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
 
   // Storage
   STORAGE_PROVIDER: z

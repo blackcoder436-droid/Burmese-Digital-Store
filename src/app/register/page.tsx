@@ -7,8 +7,6 @@ import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
 
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-
 export default function RegisterPage() {
   const { t } = useLanguage();
   const containerRef = useScrollFade();
@@ -16,6 +14,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState('');
 
   // Password strength checks
   const passwordChecks = useMemo(() => {
@@ -48,6 +47,19 @@ export default function RegisterPage() {
         }
       })
       .catch(() => setChecking(false));
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/auth/google/config', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success && data?.data?.enabled && data?.data?.clientId) {
+          setGoogleClientId(String(data.data.clientId));
+        }
+      })
+      .catch(() => {
+        setGoogleClientId('');
+      });
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -110,14 +122,14 @@ export default function RegisterPage() {
 
   // Initialize Google Sign-In
   useEffect(() => {
-    if (checking || !GOOGLE_CLIENT_ID) return;
+    if (checking || !googleClientId) return;
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.onload = () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window as any).google?.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
+        client_id: googleClientId,
         callback: (response: { credential: string }) => {
           handleGoogleLogin(response.credential);
         },
@@ -138,7 +150,7 @@ export default function RegisterPage() {
     document.head.appendChild(script);
     return () => { script.remove(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checking]);
+  }, [checking, googleClientId]);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden" ref={containerRef}>
@@ -261,7 +273,7 @@ export default function RegisterPage() {
               <div className="flex-1 h-px bg-dark-600" />
             </div>
             <div id="google-signup-btn" className="flex justify-center min-h-[40px]" />
-            {!GOOGLE_CLIENT_ID && (
+            {!googleClientId && (
               <p className="text-xs text-amber-400 text-center mt-2">
                 {t('auth.registerPage.googleNotConfigured')}
               </p>

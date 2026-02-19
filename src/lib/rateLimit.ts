@@ -78,12 +78,12 @@ function createUpstashLimiter(
 
 // ---- In-memory fallback (dev / single-instance) ----
 
-interface RateLimitEntry {
+interface InMemoryEntry {
   count: number;
   resetTime: number;
 }
 
-const rateLimitMap = new Map<string, RateLimitEntry>();
+const rateLimitMap = new Map<string, InMemoryEntry>();
 
 // Clean up expired entries every 5 minutes
 if (typeof globalThis !== 'undefined') {
@@ -187,3 +187,75 @@ export const authLimiter = rateLimit({ windowMs: 60000, maxRequests: 5, prefix: 
 export const uploadLimiter = rateLimit({ windowMs: 60000, maxRequests: 10, prefix: 'upload' });
 /** Registration: 3 requests per 3 minutes per IP to prevent mass account creation */
 export const registerLimiter = rateLimit({ windowMs: 3 * 60 * 1000, maxRequests: 3, prefix: 'register' });
+/** Telegram webhook: 60 requests per minute (Telegram sends ~1 per button press) */
+export const webhookLimiter = rateLimit({ windowMs: 60000, maxRequests: 60, prefix: 'webhook' });
+
+// ---- Rate Limit Stats (Admin Dashboard) ----
+
+export interface RateLimitConfig {
+  prefix: string;
+  maxRequests: number;
+  windowMs: number;
+}
+
+export const RATE_LIMIT_CONFIGS: RateLimitConfig[] = [
+  { prefix: 'api', maxRequests: 30, windowMs: 60000 },
+  { prefix: 'auth', maxRequests: 5, windowMs: 60000 },
+  { prefix: 'upload', maxRequests: 10, windowMs: 60000 },
+  { prefix: 'register', maxRequests: 3, windowMs: 180000 },
+  { prefix: 'webhook', maxRequests: 60, windowMs: 60000 },
+];
+
+export interface RateLimitEntry {
+  key: string;
+  ip: string;
+  route: string;
+  count: number;
+  resetTime: number;
+  remaining: number;
+  maxRequests: number;
+}
+
+/**
+ * Get active rate limit entries from in-memory store.
+ * In production with Upstash, returns only in-memory fallback data.
+ */
+export function getInMemoryRateLimitStats(): {
+  activeEntries: RateLimitEntry[];
+  totalTracked: number;
+  backend: 'redis' | 'memory';
+} {
+  const now = Date.now();
+  const entries: RateLimitEntry[] = [];
+
+  rateLimitMap.forEach((value, key) => {
+    if (now <= value.resetTime) {
+      const [ip, ...routeParts] = key.split(':');
+      const route = routeParts.join(':') || 'unknown';
+
+      // Determine which config this belongs to
+      const config = RATE_LIMIT_CONFIGS.find((c) =>
+        route.includes(c.prefix)
+      ) || RATE_LIMIT_CONFIGS[0];
+
+      entries.push({
+        key,
+        ip,
+        route,
+        count: value.count,
+        resetTime: value.resetTime,
+        remaining: Math.max(0, config.maxRequests - value.count),
+        maxRequests: config.maxRequests,
+      });
+    }
+  });
+
+  // Sort by count descending (most active first)
+  entries.sort((a, b) => b.count - a.count);
+
+  return {
+    activeEntries: entries.slice(0, 100),
+    totalTracked: rateLimitMap.size,
+    backend: useRedis ? 'redis' : 'memory',
+  };
+}
