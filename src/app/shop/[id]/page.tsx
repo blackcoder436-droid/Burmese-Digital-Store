@@ -40,6 +40,7 @@ interface Product {
   category: string;
   stock: number;
   image?: string;
+  purchaseDisabled?: boolean;
   averageRating?: number;
   reviewCount?: number;
 }
@@ -142,7 +143,7 @@ export default function ProductDetailPage() {
   }
 
   function handleAddToCart() {
-    if (!product || product.stock <= 0) return;
+    if (!product || product.stock <= 0 || product.purchaseDisabled) return;
     addItem({
       productId: product._id,
       slug: product.slug,
@@ -328,7 +329,7 @@ export default function ProductDetailPage() {
                 <span className="text-sm text-gray-500 ml-1">MMK</span>
               </div>
             </div>
-            {product.stock > 0 && (
+            {product.stock > 0 && !product.purchaseDisabled && (
               <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center justify-center sm:justify-start gap-3">
                   <button
@@ -356,7 +357,7 @@ export default function ProductDetailPage() {
           </div>
 
           {/* Action Buttons */}
-          {product.stock > 0 && !showPayment && (
+          {product.stock > 0 && !showPayment && !product.purchaseDisabled && (
             <div className="mt-6 flex flex-col sm:flex-row gap-3">
               {/* Add to Cart Button (Primary) */}
               <button
@@ -398,7 +399,7 @@ export default function ProductDetailPage() {
           )}
 
           {/* Stock Alert — shown when out of stock */}
-          {product.stock <= 0 && !showPayment && (
+          {product.stock <= 0 && !showPayment && !product.purchaseDisabled && (
             <div className="mt-6">
               <button
                 onClick={toggleStockAlert}
@@ -417,6 +418,15 @@ export default function ProductDetailPage() {
                   <><Bell className="w-5 h-5" /> {tr('Notify me when back in stock', 'Stock ပြန်ရောက်ရင် အကြောင်းကြားပေးပါ')}</>
                 )}
               </button>
+            </div>
+          )}
+
+          {/* Purchase Disabled Banner */}
+          {product.purchaseDisabled && (
+            <div className="mt-6 p-4 rounded-xl bg-orange-500/10 border border-orange-500/20 text-center">
+              <p className="text-orange-400 font-semibold text-sm">
+                🚫 {t('shop.productDetail.purchaseDisabled')}
+              </p>
             </div>
           )}
           </div>

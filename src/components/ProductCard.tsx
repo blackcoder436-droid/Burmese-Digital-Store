@@ -17,6 +17,7 @@ interface Product {
   category: string;
   stock: number;
   image?: string;
+  purchaseDisabled?: boolean;
   averageRating?: number;
   reviewCount?: number;
 }
@@ -137,10 +138,15 @@ export default function ProductCard({ product }: { product: Product }) {
               {categoryLabel[product.category] || product.category}
             </span>
           </div>
-          <div className="absolute top-3 right-3">
+          <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
             <span className={`text-xs font-bold px-2 py-1 rounded-lg border backdrop-blur-md shadow-md ${inStock ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'}`}>
               {inStock ? (lang === 'my' ? `လက်ကျန် ${product.stock}` : `${product.stock} in stock`) : t('shop.outOfStock')}
             </span>
+            {product.purchaseDisabled && (
+              <span className="text-xs font-bold px-2 py-1 rounded-lg border backdrop-blur-md shadow-md bg-orange-500/20 text-orange-400 border-orange-500/30">
+                {t('shop.viewOnly')}
+              </span>
+            )}
           </div>
         </div>
 

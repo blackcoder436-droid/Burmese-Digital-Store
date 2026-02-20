@@ -6,6 +6,52 @@ import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
 import { sanitizeString } from '@/lib/security';
 
+// PATCH /api/admin/products - Bulk update purchaseDisabled for all products
+export async function PATCH(request: NextRequest) {
+  const limited = await apiLimiter(request);
+  if (limited) return limited;
+
+  try {
+    const admin = await requireAdmin();
+    await connectDB();
+
+    const body = await request.json();
+    const { purchaseDisabled } = body;
+
+    if (typeof purchaseDisabled !== 'boolean') {
+      return NextResponse.json(
+        { success: false, error: 'purchaseDisabled must be a boolean' },
+        { status: 400 }
+      );
+    }
+
+    const result = await Product.updateMany(
+      { active: true },
+      { $set: { purchaseDisabled } }
+    );
+
+    try {
+      await logActivity({
+        admin: admin.userId,
+        action: purchaseDisabled ? 'bulk_purchase_disabled' : 'bulk_purchase_enabled',
+        target: `All active products (${result.modifiedCount} updated)`,
+      });
+    } catch { /* ignore */ }
+
+    return NextResponse.json({
+      success: true,
+      data: { modifiedCount: result.modifiedCount },
+      message: `Purchase ${purchaseDisabled ? 'disabled' : 'enabled'} for ${result.modifiedCount} products`,
+    });
+  } catch (error: any) {
+    if (error.message === 'Admin access required' || error.message === 'Authentication required') {
+      return NextResponse.json({ success: false, error: error.message }, { status: 403 });
+    }
+    console.error('Admin products PATCH error:', error);
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+  }
+}
+
 // GET /api/admin/products - List all products (admin)
 export async function GET(request: NextRequest) {
   const limited = await apiLimiter(request);

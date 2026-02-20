@@ -29,7 +29,7 @@ export async function PUT(
     await connectDB();
 
     const body = await request.json();
-    const { name, category, description, price, image, featured, active, details } = body;
+    const { name, category, description, price, image, featured, active, purchaseDisabled, details } = body;
 
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = sanitizeString(name);
@@ -39,6 +39,7 @@ export async function PUT(
     if (image !== undefined) updateData.image = sanitizeString(String(image)).slice(0, 500);
     if (featured !== undefined) updateData.featured = featured;
     if (active !== undefined) updateData.active = active;
+    if (purchaseDisabled !== undefined) updateData.purchaseDisabled = purchaseDisabled;
     if (details !== undefined) {
       updateData.details = details;
       updateData.stock = details.length;

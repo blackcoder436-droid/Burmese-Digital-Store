@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Lock, Loader2, Zap, Package, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react';
+import { Lock, Loader2, Zap, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react';
+import Image from 'next/image';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
@@ -83,9 +84,14 @@ function ResetPasswordForm() {
         {/* Logo */}
         <div className="scroll-fade text-center mb-10">
           <Link href="/" className="inline-flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-cyan-500 rounded-2xl flex items-center justify-center shadow-glow">
-              <Package className="w-6 h-6 text-white" />
-            </div>
+            <Image
+              src="/logo.jpg"
+              alt="Burmese Digital Store"
+              width={48}
+              height={48}
+              priority
+              className="rounded-2xl shadow-glow"
+            />
           </Link>
           <h1 className="heading-md">
             {success

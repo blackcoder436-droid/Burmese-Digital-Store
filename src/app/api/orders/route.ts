@@ -191,6 +191,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Block purchase if admin disabled purchasing
+    if (product.purchaseDisabled) {
+      return NextResponse.json(
+        { success: false, error: 'This product is currently not available for purchase' },
+        { status: 403 }
+      );
+    }
+
     // Check stock
     const availableStock = product.details.filter((d) => !d.sold).length;
     if (availableStock < quantity) {

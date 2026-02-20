@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, Zap, Package } from 'lucide-react';
+import { Loader2, Zap } from 'lucide-react';
+import Image from 'next/image';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
@@ -144,9 +145,14 @@ function LoginForm() {
         {/* Logo */}
         <div className="scroll-fade text-center mb-10">
           <Link href="/" className="inline-flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-cyan-500 rounded-2xl flex items-center justify-center shadow-glow">
-              <Package className="w-6 h-6 text-white" />
-            </div>
+            <Image
+              src="/logo.jpg"
+              alt="Burmese Digital Store"
+              width={48}
+              height={48}
+              priority
+              className="rounded-2xl shadow-glow"
+            />
           </Link>
           <h1 className="heading-md">{t('auth.loginPage.heading')}</h1>
           <p className="text-gray-400 mt-2">

@@ -11,6 +11,8 @@ import {
   Loader2,
   ImagePlus,
   Upload,
+  ShieldOff,
+  ShieldCheck,
 } from 'lucide-react';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
@@ -26,6 +28,7 @@ interface Product {
   image?: string;
   featured: boolean;
   active: boolean;
+  purchaseDisabled: boolean;
   details: any[];
 }
 
@@ -36,6 +39,7 @@ const defaultProduct = {
   price: 0,
   image: '',
   featured: false,
+  purchaseDisabled: false,
   details: [] as { serialKey: string; loginEmail: string; loginPassword: string; additionalInfo: string }[],
 };
 
@@ -50,6 +54,7 @@ export default function AdminProductsPage() {
   const [bulkKeys, setBulkKeys] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [importingCsv, setImportingCsv] = useState(false);
+  const [bulkToggling, setBulkToggling] = useState(false);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     fetchProducts();
@@ -212,10 +217,42 @@ export default function AdminProductsPage() {
       price: product.price,
       image: product.image || '',
       featured: product.featured,
+      purchaseDisabled: product.purchaseDisabled || false,
       details: product.details || [],
     });
     setEditing(product._id);
     setShowForm(true);
+  }
+
+  async function handleBulkPurchaseToggle(disable: boolean) {
+    const msg = disable
+      ? t('admin.productsPage.confirmDisableAll')
+      : t('admin.productsPage.confirmEnableAll');
+    if (!confirm(msg)) return;
+
+    setBulkToggling(true);
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchaseDisabled: disable }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(
+          disable
+            ? t('admin.productsPage.allPurchaseDisabled')
+            : t('admin.productsPage.allPurchaseEnabled')
+        );
+        fetchProducts();
+      } else {
+        toast.error(data.error || t('admin.productsPage.somethingWrong'));
+      }
+    } catch {
+      toast.error(t('admin.productsPage.somethingWrong'));
+    } finally {
+      setBulkToggling(false);
+    }
   }
 
   return (
@@ -223,6 +260,34 @@ export default function AdminProductsPage() {
       <div className="flex items-center justify-between">
         <h1 className="heading-lg">{t('admin.productsPage.title')}</h1>
         <div className="flex items-center gap-2">
+          {/* Bulk Purchase Toggle — single button */}
+          {(() => {
+            const allDisabled = products.length > 0 && products.every((p) => p.purchaseDisabled);
+            return (
+              <button
+                onClick={() => handleBulkPurchaseToggle(!allDisabled)}
+                disabled={bulkToggling || products.length === 0}
+                className={`btn text-sm flex items-center space-x-2 disabled:opacity-70 ${
+                  allDisabled
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
+                    : 'bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20'
+                }`}
+              >
+                {bulkToggling ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : allDisabled ? (
+                  <ShieldCheck className="w-4 h-4" />
+                ) : (
+                  <ShieldOff className="w-4 h-4" />
+                )}
+                <span>
+                  {allDisabled
+                    ? t('admin.productsPage.enableAllPurchase')
+                    : t('admin.productsPage.disableAllPurchase')}
+                </span>
+              </button>
+            );
+          })()}
           <input
             ref={csvInputRef}
             type="file"
@@ -398,6 +463,19 @@ export default function AdminProductsPage() {
                       {t('admin.productsPage.featuredProduct')}
                     </span>
                   </label>
+                  <label className="flex items-center space-x-3 cursor-pointer mt-3">
+                    <input
+                      type="checkbox"
+                      checked={form.purchaseDisabled}
+                      onChange={(e) =>
+                        setForm({ ...form, purchaseDisabled: e.target.checked })
+                      }
+                      className="w-5 h-5 rounded-lg border-amber-500/30 bg-[#12122a] text-amber-500 focus:ring-amber-500"
+                    />
+                    <span className="text-sm text-gray-300">
+                      {t('admin.productsPage.purchaseDisabled')}
+                    </span>
+                  </label>
                 </div>
               </div>
 
@@ -492,6 +570,11 @@ export default function AdminProductsPage() {
                           {product.featured && (
                             <span className="text-xs text-amber-400 font-medium">
                               ⭐ Featured
+                            </span>
+                          )}
+                          {product.purchaseDisabled && (
+                            <span className="text-xs text-orange-400 font-medium">
+                              🚫 {t('admin.productsPage.viewOnly')}
                             </span>
                           )}
                         </div>

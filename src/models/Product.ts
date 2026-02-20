@@ -25,6 +25,7 @@ export interface IProductDocument extends Document {
   image?: string;
   featured: boolean;
   active: boolean;
+  purchaseDisabled: boolean;
   averageRating: number;
   reviewCount: number;
   deletedAt?: Date;
@@ -111,6 +112,10 @@ const ProductSchema: Schema = new Schema(
     active: {
       type: Boolean,
       default: true,
+    },
+    purchaseDisabled: {
+      type: Boolean,
+      default: false,
     },
     // Soft-delete fields
     deletedAt: {

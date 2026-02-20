@@ -145,6 +145,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Block purchase if any product has purchasing disabled
+    const disabledProduct = products.find((p: any) => p.purchaseDisabled);
+    if (disabledProduct) {
+      return NextResponse.json(
+        { success: false, error: `${disabledProduct.name} is currently not available for purchase` },
+        { status: 403 }
+      );
+    }
+
     // Check stock for each item
     for (const item of cartItems) {
       const product = products.find((p) => p._id.toString() === item.productId);
