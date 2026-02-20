@@ -161,3 +161,72 @@ db.orders.createIndex({ user: 1, status: 1 });
 [ ] Nginx configured with proper proxy headers (X-Forwarded-For, X-Real-IP)
 [ ] Rate limiting working (check /admin/rate-limits dashboard)
 ```
+
+---
+
+## 5. Server Egress Firewall Policy (UFW)
+
+Use outbound-allowlist mode so the app server can only reach required services.
+
+### 5.1 Switch UFW outbound policy to deny
+
+```bash
+# Check current defaults
+sudo ufw status verbose
+
+# Keep inbound locked to known ports first (example)
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Enforce outbound deny-by-default
+sudo ufw default deny outgoing
+sudo ufw default deny incoming
+```
+
+### 5.2 Allow required outbound destinations
+
+For each provider, resolve hostname to stable IP/CIDR and allow only required ports.
+
+```bash
+# DNS (Cloudflare resolvers)
+sudo ufw allow out to 1.1.1.1 port 53 proto udp
+sudo ufw allow out to 1.0.0.1 port 53 proto udp
+
+# HTTPS APIs (Telegram, Resend, Cloudflare, Upstash REST, monitoring)
+sudo ufw allow out 443/tcp
+
+# MongoDB Atlas (TLS)
+sudo ufw allow out 27017/tcp
+
+# Optional: NTP time sync
+sudo ufw allow out 123/udp
+```
+
+### 5.3 Restrict VPN panel egress strictly
+
+Only allow outbound traffic to configured VPN panel hosts/ports used by 3xUI.
+
+```bash
+# Example only — replace with your actual panel IPs and ports
+sudo ufw allow out to <PANEL_IP_1> port 443 proto tcp
+sudo ufw allow out to <PANEL_IP_1> port 2053 proto tcp
+sudo ufw allow out to <PANEL_IP_2> port 443 proto tcp
+```
+
+### 5.4 Apply and verify
+
+```bash
+sudo ufw enable
+sudo ufw status numbered
+
+# Validate app dependencies from server shell
+nc -vz <your-atlas-host> 27017
+curl -I https://api.telegram.org
+curl -I https://api.upstash.com
+```
+
+### 5.5 Operational rule
+
+- Any new external integration must update firewall rules before deploy.
+- Keep `VPN_SERVER_ALLOWED_HOSTS` aligned with firewall allowlist (app-level + network-level defense).

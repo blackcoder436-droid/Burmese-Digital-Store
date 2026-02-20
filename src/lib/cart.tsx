@@ -18,6 +18,8 @@ export interface CartItem {
   image?: string;
 }
 
+export type CartEventAction = 'cart_updated' | 'checkout_started' | 'checkout_completed';
+
 interface CartContextType {
   items: CartItem[];
   addItem: (item: Omit<CartItem, 'quantity'>, quantity?: number) => void;
@@ -33,6 +35,55 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 const CART_STORAGE_KEY = 'bds-cart';
+const CART_SESSION_KEY = 'bds-cart-session';
+
+function getOrCreateCartSessionId(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const existing = localStorage.getItem(CART_SESSION_KEY);
+    if (existing && existing.length >= 8) return existing;
+
+    const randomPart =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+    const nextId = `cart-${randomPart}`;
+    localStorage.setItem(CART_SESSION_KEY, nextId);
+    return nextId;
+  } catch {
+    return null;
+  }
+}
+
+export function reportCartAnalytics(action: CartEventAction, items: CartItem[]) {
+  if (typeof window === 'undefined') return;
+
+  const sessionId = getOrCreateCartSessionId();
+  if (!sessionId) return;
+
+  const payload = {
+    sessionId,
+    action,
+    itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+    subtotal: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    items: items.slice(0, 20).map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      price: item.price,
+    })),
+  };
+
+  void fetch('/api/analytics/cart-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    keepalive: action !== 'cart_updated',
+  }).catch(() => {
+    // Analytics reporting is best-effort only.
+  });
+}
 
 function loadCart(): CartItem[] {
   if (typeof window === 'undefined') return [];
@@ -73,6 +124,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (loaded) {
       saveCart(items);
     }
+  }, [items, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+
+    const timeoutId = window.setTimeout(() => {
+      reportCartAnalytics('cart_updated', items);
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
   }, [items, loaded]);
 
   const addItem = useCallback((item: Omit<CartItem, 'quantity'>, quantity: number = 1) => {

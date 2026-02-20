@@ -1,13 +1,10 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
-import { Toaster } from 'react-hot-toast';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import TechBackground from '@/components/TechBackground';
-import { LanguageProvider } from '@/lib/language';
-import { CartProvider } from '@/lib/cart';
 import { LayoutShell } from '@/components/layout/LayoutShell';
-import { WebVitalsReporter } from '@/components/WebVitalsReporter';
+import { Providers } from '@/components/layout/Providers';
 import { getOrganizationJsonLd, getWebsiteJsonLd } from '@/lib/jsonld';
 import './globals.css';
 
@@ -37,6 +34,12 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'BD Store',
+  },
 };
 
 export default async function RootLayout({
@@ -51,6 +54,12 @@ export default async function RootLayout({
   return (
     <html lang="my" className="dark">
       <head>
+        {/* PWA meta tags */}
+        <meta name="theme-color" content="#6c5ce7" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
         {/* JSON-LD Structured Data for SEO */}
         <script
           type="application/ld+json"
@@ -71,28 +80,7 @@ export default async function RootLayout({
           <TechBackground />
         </div>
 
-        <LanguageProvider>
-          <CartProvider>
-          <WebVitalsReporter />
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#12122a',
-                color: '#e2e8f0',
-                border: '1px solid rgba(108,92,231,0.2)',
-                borderRadius: '12px',
-                fontSize: '14px',
-              },
-              success: {
-                iconTheme: { primary: '#10b981', secondary: '#12122a' },
-              },
-              error: {
-                iconTheme: { primary: '#ef4444', secondary: '#12122a' },
-              },
-            }}
-          />
+        <Providers>
           <LayoutShell
             navbar={<Navbar />}
             footer={<Footer />}
@@ -101,8 +89,7 @@ export default async function RootLayout({
               {children}
             </main>
           </LayoutShell>
-          </CartProvider>
-        </LanguageProvider>
+        </Providers>
       </body>
     </html>
   );

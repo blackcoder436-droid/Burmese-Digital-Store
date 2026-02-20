@@ -19,7 +19,7 @@ import {
   Package,
 } from 'lucide-react';
 import PaymentUpload from '@/components/PaymentUpload';
-import { useCart } from '@/lib/cart';
+import { reportCartAnalytics, useCart } from '@/lib/cart';
 import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
 import toast from 'react-hot-toast';
@@ -122,6 +122,7 @@ export default function CartPage() {
 
       const data = await res.json();
       if (data.success) {
+        reportCartAnalytics('checkout_completed', items);
         clearCart();
         toast.success(t('cart.page.ordersPlacedVerifySoon'));
         router.push('/account/orders');
@@ -165,11 +166,16 @@ export default function CartPage() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="scroll-fade flex items-center justify-between mb-8">
-          <div>
-            <Link href="/shop" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-purple-400 transition-colors mb-2">
-              <ArrowLeft className="w-4 h-4" /> {t('cart.continueShopping')}
-            </Link>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
+          <div className="flex items-center gap-2 mb-2">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="w-8 h-8 rounded-lg flex items-center justify-center bg-dark-700/50 border border-dark-600/50 text-gray-400 hover:text-white hover:border-purple-500/40 hover:bg-purple-500/10 transition-all flex-shrink-0"
+              title={t('common.back')}
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3 mb-0">
               <ShoppingCart className="w-7 h-7 text-purple-400" />
               {t('cart.title')}
               <span className="text-sm font-normal text-gray-500">
@@ -252,6 +258,7 @@ export default function CartPage() {
                       <button
                         onClick={() => updateQuantity(item.productId, item.quantity - 1)}
                         className="w-8 h-8 flex items-center justify-center rounded-lg bg-dark-800 border border-dark-600 hover:border-purple-500/50 text-gray-400 hover:text-white transition-all"
+                        aria-label="Decrease quantity"
                       >
                         <Minus className="w-3 h-3" />
                       </button>
@@ -262,6 +269,7 @@ export default function CartPage() {
                         onClick={() => updateQuantity(item.productId, item.quantity + 1)}
                         disabled={item.quantity >= item.stock}
                         className="w-8 h-8 flex items-center justify-center rounded-lg bg-dark-800 border border-dark-600 hover:border-purple-500/50 text-gray-400 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        aria-label="Increase quantity"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
@@ -318,7 +326,10 @@ export default function CartPage() {
               </Link>
             ) : (
               <button
-                onClick={() => setShowCheckout(true)}
+                onClick={() => {
+                  reportCartAnalytics('checkout_started', items);
+                  setShowCheckout(true);
+                }}
                 className="btn-electric w-full"
               >
                 <Zap className="w-5 h-5" />

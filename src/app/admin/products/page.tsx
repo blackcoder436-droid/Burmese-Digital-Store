@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Plus,
   Edit,
@@ -10,6 +10,7 @@ import {
   Package,
   Loader2,
   ImagePlus,
+  Upload,
 } from 'lucide-react';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
@@ -48,6 +49,8 @@ export default function AdminProductsPage() {
   const [saving, setSaving] = useState(false);
   const [bulkKeys, setBulkKeys] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [importingCsv, setImportingCsv] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     fetchProducts();
   }, []);
@@ -163,6 +166,44 @@ export default function AdminProductsPage() {
     }
   }
 
+  async function handleCsvImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      toast.error(t('admin.productsPage.csvOnly'));
+      e.target.value = '';
+      return;
+    }
+
+    setImportingCsv(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/admin/products/import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        toast.success(t('admin.productsPage.importSuccess').replace('{count}', String(data.data.imported || 0)));
+        if ((data.data?.skipped || 0) > 0) {
+          toast.error(t('admin.productsPage.importSkipped').replace('{count}', String(data.data.skipped || 0)));
+        }
+        fetchProducts();
+      } else {
+        toast.error(data.error || t('admin.productsPage.importFailed'));
+      }
+    } catch {
+      toast.error(t('admin.productsPage.importFailed'));
+    } finally {
+      setImportingCsv(false);
+      e.target.value = '';
+    }
+  }
+
   function startEdit(product: Product) {
     setForm({
       name: product.name,
@@ -181,18 +222,35 @@ export default function AdminProductsPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="heading-lg">{t('admin.productsPage.title')}</h1>
-        <button
-          onClick={() => {
-            setShowForm(true);
-            setEditing(null);
-            setForm(defaultProduct);
-            setBulkKeys('');
-          }}
-          className="btn-electric text-sm flex items-center space-x-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{t('admin.productsPage.addProduct')}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleCsvImport}
+            className="hidden"
+          />
+          <button
+            onClick={() => csvInputRef.current?.click()}
+            disabled={importingCsv}
+            className="btn-primary text-sm flex items-center space-x-2 disabled:opacity-70"
+          >
+            {importingCsv ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            <span>{t('admin.productsPage.importCsv')}</span>
+          </button>
+          <button
+            onClick={() => {
+              setShowForm(true);
+              setEditing(null);
+              setForm(defaultProduct);
+              setBulkKeys('');
+            }}
+            className="btn-electric text-sm flex items-center space-x-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{t('admin.productsPage.addProduct')}</span>
+          </button>
+        </div>
       </div>
 
       {/* Product Form Modal */}

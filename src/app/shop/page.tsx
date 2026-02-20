@@ -7,6 +7,7 @@ import MobileCarousel from '@/components/MobileCarousel';
 import { Search, ChevronLeft, ChevronRight, Loader2, Package, X, Filter, ChevronDown, ArrowRight } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
+import { RecentlyViewed } from '@/components/RecentlyViewed';
 
 interface Product {
   _id: string;
@@ -205,6 +206,7 @@ function ShopContent() {
               placeholder={t('shop.page.searchPlaceholder')}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
+              aria-label="Search products"
               className="input-field !pl-9 !pr-28 sm:!pr-32 w-full !bg-dark-800/80 !border-dark-600 focus:!border-purple-500/60 !text-sm !py-2 !rounded-xl"
             />
 
@@ -426,6 +428,9 @@ function ShopContent() {
             )}
           </>
         )}
+
+        {/* Recently Viewed Products */}
+        <RecentlyViewed />
       </div>
     </div>
   );

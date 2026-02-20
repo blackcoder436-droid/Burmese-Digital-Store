@@ -14,6 +14,9 @@ import {
   BarChart3,
   ArrowUpRight,
   ArrowDownRight,
+  Percent,
+  RotateCcw,
+  CheckCircle,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -73,10 +76,28 @@ interface AnalyticsData {
   topProducts: Array<{ _id: string; name: string; category: string; totalSold: number; totalRevenue: number; orderCount: number }>;
   recentOrders: Array<any>;
   categoryBreakdown: Array<{ _id: string; count: number; revenue: number }>;
+  abandonedCart: {
+    activeCarts: number;
+    startedCarts: number;
+    completedCarts: number;
+    abandonedCarts: number;
+    abandonmentRate: number;
+    recoveryRate: number;
+    dailyTrend: Array<{ date: string; abandoned: number; recovered: number }>;
+  };
+  repeatPurchase: {
+    uniqueCustomers: number;
+    repeatCustomers: number;
+    repeatRate: number;
+    previousPeriodCustomers: number;
+    retainedCustomers: number;
+    retentionRate: number;
+    monthlyTrend: Array<{ month: string; customers: number; repeatRate: number }>;
+  };
 }
 
 export default function AnalyticsPage() {
-  const { t } = useLanguage();
+  const { t, tr } = useLanguage();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState('30d');
@@ -150,6 +171,8 @@ export default function AnalyticsPage() {
   if (!data) return null;
 
   const ov = data.overview;
+  const abandoned = data.abandonedCart;
+  const repeat = data.repeatPurchase;
 
   return (
     <div className="space-y-8">
@@ -255,6 +278,133 @@ export default function AnalyticsPage() {
           value={`${formatMMK(Math.round(ov.avgOrderValue || 0))} MMK`}
           subtext={`${ov.activeProducts} ${t('admin.analyticsPage.products')}`}
           color="purple"
+        />
+      </div>
+
+      {/* Growth / Retention Metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          icon={ShoppingCart}
+          label={tr('Abandonment', 'စွန့်ပစ်နှုန်း')}
+          value={`${abandoned.abandonmentRate.toFixed(1)}%`}
+          subtext={`${abandoned.abandonedCarts}/${abandoned.activeCarts} ${tr('carts', 'cart')}`}
+          color="red"
+        />
+        <StatCard
+          icon={CheckCircle}
+          label={tr('Cart Recovery', 'ပြန်ရယူနှုန်း')}
+          value={`${abandoned.recoveryRate.toFixed(1)}%`}
+          subtext={`${abandoned.completedCarts}/${abandoned.startedCarts} ${tr('checkouts', 'checkout')}`}
+          color="emerald"
+        />
+        <StatCard
+          icon={Users}
+          label={tr('Repeat Customers', 'ပြန်ဝယ်ဖောက်သည်')}
+          value={`${repeat.repeatRate.toFixed(1)}%`}
+          subtext={`${repeat.repeatCustomers}/${repeat.uniqueCustomers} ${tr('customers', 'ဖောက်သည်')}`}
+          color="purple"
+        />
+        <StatCard
+          icon={TrendingUp}
+          label={tr('Retention Rate', 'ပြန်လာနှုန်း')}
+          value={`${repeat.retentionRate.toFixed(1)}%`}
+          subtext={`${repeat.retainedCustomers}/${repeat.previousPeriodCustomers} ${tr('retained', 'ပြန်လာ')}`}
+          color="cyan"
+        />
+      </div>
+
+      {!selectedDate && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="game-card p-6">
+            <h3 className="text-sm font-bold text-white mb-1">
+              {tr('Abandoned vs Recovered Carts', 'စွန့်ပစ် / ပြန်ရ cart trend')}
+            </h3>
+            <p className="text-xs text-gray-500 mb-5">
+              {tr('Daily cart abandonment and recovery counts', 'နေ့စဉ် cart စွန့်ပစ်/ပြန်ရ အရေအတွက်')}
+            </p>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={abandoned.dailyTrend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e1e3a" />
+                  <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={formatDate} />
+                  <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#12122a', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 12, fontSize: 12 }}
+                    labelStyle={{ color: '#fff', fontWeight: 700 }}
+                    labelFormatter={(label: any) => new Date(String(label)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="abandoned" fill="#ef4444" name={tr('Abandoned', 'စွန့်ပစ်')} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="recovered" fill="#10b981" name={tr('Recovered', 'ပြန်ရ')} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="game-card p-6">
+            <h3 className="text-sm font-bold text-white mb-1">
+              {tr('Repeat Purchase Trend', 'ပြန်ဝယ်ယူ trend')}
+            </h3>
+            <p className="text-xs text-gray-500 mb-5">
+              {tr('Monthly repeat customer rate', 'လစဉ်ပြန်ဝယ်ဖောက်သည် ရာခိုင်နှုန်း')}
+            </p>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={repeat.monthlyTrend}>
+                  <defs>
+                    <linearGradient id="repeatRateGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e1e3a" />
+                  <XAxis dataKey="month" tick={{ fill: '#6b7280', fontSize: 11 }} />
+                  <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#12122a', border: '1px solid rgba(168,85,247,0.2)', borderRadius: 12, fontSize: 12 }}
+                    labelStyle={{ color: '#fff', fontWeight: 700 }}
+                    formatter={(value: any, name: any) => {
+                      if (name === 'repeatRate') return [`${Number(value).toFixed(1)}%`, tr('Repeat Rate', 'ပြန်ဝယ်နှုန်း')];
+                      return [value, name];
+                    }}
+                  />
+                  <Area type="monotone" dataKey="repeatRate" stroke="#06b6d4" strokeWidth={2} fill="url(#repeatRateGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conversion & Refund Rate Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          icon={Percent}
+          label={tr('Conversion Rate', 'ပြောင်းလဲနှုန်း')}
+          value={`${ov.totalOrders > 0 ? ((ov.completedOrders / ov.totalOrders) * 100).toFixed(1) : '0'}%`}
+          subtext={`${ov.completedOrders}/${ov.totalOrders} ${tr('orders', 'အော်ဒါ')}`}
+          color="amber"
+        />
+        <StatCard
+          icon={RotateCcw}
+          label={tr('Refund Rate', 'ပြန်အမ်းနှုန်း')}
+          value={`${ov.totalOrders > 0 ? (((ov.rejectedOrders || 0) / ov.totalOrders) * 100).toFixed(1) : '0'}%`}
+          subtext={`${ov.rejectedOrders || 0} ${tr('rejected', 'ငြင်းပယ်')}`}
+          color="red"
+        />
+        <StatCard
+          icon={TrendingUp}
+          label={tr('Completion Rate', 'ပြီးးစီးနှုန်း')}
+          value={`${ov.totalOrders > 0 ? ((ov.completedOrders / ov.totalOrders) * 100).toFixed(0) : '0'}%`}
+          subtext={`${ov.pendingOrders} ${tr('pending', 'စောင့်ဆိုင်း')}`}
+          color="emerald"
+        />
+        <StatCard
+          icon={ShoppingCart}
+          label={tr('Revenue/Order', 'ပျမ်းမျှ/အော်ဒါ')}
+          value={`${formatMMK(ov.completedOrders > 0 ? Math.round(ov.totalRevenue / ov.completedOrders) : 0)}`}
+          subtext="MMK"
+          color="cyan"
         />
       </div>
 
@@ -570,13 +720,15 @@ function StatCard({ icon: Icon, label, value, subtext, color }: {
   label: string;
   value: string;
   subtext: string;
-  color: 'emerald' | 'blue' | 'cyan' | 'purple';
+  color: 'emerald' | 'blue' | 'cyan' | 'purple' | 'amber' | 'red';
 }) {
   const colorMap = {
     emerald: { bg: 'bg-emerald-500/20', text: 'text-emerald-400' },
     blue: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
     cyan: { bg: 'bg-cyan-500/20', text: 'text-cyan-400' },
     purple: { bg: 'bg-purple-500/20', text: 'text-purple-400' },
+    amber: { bg: 'bg-amber-500/20', text: 'text-amber-400' },
+    red: { bg: 'bg-red-500/20', text: 'text-red-400' },
   };
   const c = colorMap[color];
 

@@ -11,6 +11,10 @@ import {
   ChevronRight,
   Filter,
   Loader2,
+  Search,
+  Calendar,
+  Download,
+  X,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 
@@ -37,34 +41,86 @@ const actionConfig: Record<string, { icon: any; color: string; label: string; la
 };
 
 export default function ActivityLogPage() {
-  const { t } = useLanguage();
+  const { t, tr } = useLanguage();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [filterAction, setFilterAction] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchLogs();
-  }, [page, filterAction]);
+  }, [page, filterAction, searchText, startDate, endDate]);
 
   async function fetchLogs() {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (filterAction) params.set('action', filterAction);
+      if (searchText) params.set('search', searchText);
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
 
       const res = await fetch(`/api/admin/activity?${params}`);
       const data = await res.json();
       if (data.success) {
         setLogs(data.data.logs);
         setTotalPages(data.data.pagination.pages);
+        setTotalCount(data.data.pagination.total);
       }
     } catch {
       // silent
     } finally {
       setLoading(false);
     }
+  }
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ export: 'csv' });
+      if (filterAction) params.set('action', filterAction);
+      if (searchText) params.set('search', searchText);
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+
+      const res = await fetch(`/api/admin/activity?${params}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `activity-log-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // silent
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    setSearchText(searchInput);
+    setPage(1);
+  }
+
+  function clearFilters() {
+    setFilterAction('');
+    setSearchText('');
+    setSearchInput('');
+    setStartDate('');
+    setEndDate('');
+    setPage(1);
   }
 
   function timeAgo(date: string) {
@@ -101,7 +157,7 @@ export default function ActivityLogPage() {
         </div>
 
         {/* Filter */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Filter className="w-4 h-4 text-gray-500" />
           <select
             value={filterAction}
@@ -112,8 +168,72 @@ export default function ActivityLogPage() {
               <option key={f.value} value={f.value}>{f.label}</option>
             ))}
           </select>
+          <button
+            onClick={exportCsv}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-purple-500/10 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20 transition-all disabled:opacity-50"
+            title={tr('Export CSV', 'CSV ထုတ်မည်')}
+          >
+            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            CSV
+          </button>
         </div>
       </div>
+
+      {/* Search & Date Range */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <form onSubmit={handleSearch} className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder={tr('Search activity...', 'လုပ်ဆောင်ချက်ရှာ...')}
+            className="w-full pl-10 pr-8 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-gray-300 focus:border-purple-500 focus:outline-none"
+          />
+          {searchText && (
+            <button
+              type="button"
+              onClick={() => { setSearchInput(''); setSearchText(''); setPage(1); }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </form>
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-gray-500 shrink-0" />
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+            className="bg-dark-800 border border-dark-600 rounded-lg px-2 py-2 text-xs text-gray-300 focus:border-purple-500 focus:outline-none"
+          />
+          <span className="text-gray-600 text-xs">—</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+            className="bg-dark-800 border border-dark-600 rounded-lg px-2 py-2 text-xs text-gray-300 focus:border-purple-500 focus:outline-none"
+          />
+          {(filterAction || searchText || startDate || endDate) && (
+            <button
+              onClick={clearFilters}
+              className="text-xs text-purple-400 hover:text-purple-300 whitespace-nowrap"
+            >
+              {tr('Clear all', 'အားလုံးဖျက်')}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Results count */}
+      {!loading && (
+        <p className="text-xs text-gray-600">
+          {totalCount} {tr('results', 'ရလဒ်')}
+          {(filterAction || searchText || startDate || endDate) && ` (${tr('filtered', 'စစ်ထုတ်ပြီး')})`}
+        </p>
+      )}
 
       {/* Log List */}
       <div className="game-card overflow-hidden">

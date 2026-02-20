@@ -890,6 +890,129 @@ Reset:    POST {panel_url}{panel_path}/panel/api/inbounds/{inboundId}/resetClien
 
 ---
 
+## 🚀 Phase 10 — UX Polish, PWA & Growth Features (2026-02-20)
+
+> User experience ပိုမိုကောင်းမွန်အောင်၊ mobile install ရနိုင်အောင်၊ engagement features ထပ်ထည့်ခြင်း
+
+### 🔴 High Priority
+
+#### 10.1 — Next.js Streaming / Loading Skeletons
+> Page navigation မှာ blank screen မပြဘဲ skeleton UI ပြသခြင်း
+- ✅ `src/app/shop/loading.tsx` — Shop page skeleton (product grid placeholders)
+- ✅ `src/app/shop/[id]/loading.tsx` — Product detail skeleton
+- ✅ `src/app/cart/loading.tsx` — Cart page skeleton
+- ✅ `src/app/account/loading.tsx` — Account dashboard skeleton
+- ✅ `src/app/admin/loading.tsx` — Admin dashboard skeleton
+- ✅ `src/app/admin/orders/loading.tsx` — Admin orders skeleton
+
+#### 10.2 — PWA (Progressive Web App)
+> Myanmar mobile users အတွက် app-like experience + offline install
+- ✅ `public/manifest.json` — PWA manifest (name, icons, theme, display: standalone)
+- ✅ PWA icons (192x192, 512x512, maskable, apple-touch, favicons) generated from logo
+- ✅ `<link rel="manifest">` + meta tags in root layout
+- ✅ `public/sw.js` — Service Worker (network-first pages, cache-first assets, offline fallback)
+- ✅ `src/components/PwaInstallPrompt.tsx` — Install prompt UI (Add to Home Screen banner)
+
+#### 10.3 — Server Egress Firewall
+> VPN panel domains/ports ကိုပဲ ထွက်ခွင့်ပေးတဲ့ firewall policy
+- ⬜ UFW outbound rules: allow only VPN panel domains + essential services (MongoDB Atlas, Upstash, Resend, Telegram, Cloudflare)
+- ⬜ Document firewall rules in `DEPLOY.md`
+
+### 🟡 Medium Priority
+
+#### 10.4 — Wishlist / Favorites System
+> Users ကြိုက်တဲ့ products save ထားနိုင်ခြင်း
+- ✅ `src/models/Wishlist.ts` — Wishlist model (user, productId, addedAt)
+- ✅ `POST/DELETE /api/wishlist` — add/remove from wishlist
+- ✅ `GET /api/wishlist` — get user's wishlist
+- ✅ `src/app/account/wishlist/page.tsx` — Wishlist page
+- ✅ ProductCard + Product detail page ထဲ heart/bookmark icon
+- ✅ i18n translations for wishlist
+
+#### 10.5 — Order Invoice / Receipt PDF
+> User/Admin အတွက် order receipt PDF download
+- ✅ PDF generation library (`pdfkit`)
+- ✅ `GET /api/orders/[id]/invoice` — generate & return PDF
+- ✅ Invoice template: order details, payment info, product keys, store branding
+- ✅ Download button in order detail page
+
+#### 10.6 — Product Stock Alert / Back-in-Stock Notification
+> Stock ကုန်တဲ့ products ပြန်ရောက်ရင် notify ပေးခြင်း
+- ✅ `StockAlert` model (user, productId, notifiedAt)
+- ✅ `POST/DELETE /api/products/[id]/stock-alert` — subscribe/unsubscribe
+- ✅ Product detail page: "Notify me when back in stock" button (stock 0 ဖြစ်ရင်ပြ)
+- ✅ Admin product stock update → trigger notification to subscribers
+- ✅ In-app notification (SSE real-time)
+
+#### 10.7 — Enhanced Admin Analytics
+> Conversion rate, abandoned carts, customer retention data
+- ✅ Conversion rate widget (completed/total orders)
+- ✅ Refund rate tracking 
+- ✅ Completion rate + revenue per order stats
+- ⬜ Abandoned cart tracking (future: requires cart persistence)
+- ⬜ Repeat purchase / customer retention chart (future: complex aggregation)
+
+#### 10.8 — Route Segment Error Boundaries
+> Route-level error handling (not just root)
+- ✅ `src/app/shop/error.tsx` — Shop error boundary
+- ✅ `src/app/admin/error.tsx` — Admin error boundary
+- ✅ `src/app/account/error.tsx` — Account error boundary
+- ✅ `src/app/cart/error.tsx` — Cart error boundary
+
+### 🟢 Quick Wins (Low Effort, High Impact)
+
+#### 10.9 — Quick UX Improvements
+- ✅ Share product button (Web Share API fallback to clipboard) — `src/components/ShareButton.tsx`
+- ✅ "Recently Viewed" products section (localStorage-based) — `src/components/RecentlyViewed.tsx`
+- ⬜ Admin bulk product import (CSV upload)
+- ⬜ Copy order ID / keys one-click improvements
+
+### 🔵 Long-term / Future Phases
+
+#### 10.10 — Payment Gateway Integration
+> International payment support (Stripe/PayPal/Crypto)
+- ⬜ Stripe integration for international customers
+- ⬜ Crypto payment option (USDT/USDC)
+
+#### 10.11 — Referral / Affiliate System
+> Organic marketing tool (user invite + rewards)
+- ⬜ Referral code generation per user
+- ⬜ Referral tracking + reward system (discount coupons)
+- ⬜ Referral dashboard in account page
+
+#### 10.12 — Live Chat / Support Ticket System
+> In-app customer support
+- ⬜ Support ticket model + API
+- ⬜ `/account/support` — ticket list + create page
+- ⬜ `/admin/support` — admin ticket management
+- ⬜ Telegram bot integration for live chat relay
+
+#### 10.13 — Product Bundles / Subscription Model
+> VPN + Streaming bundle pricing, auto-renewal
+- ⬜ Bundle product type (multiple items, discounted price)
+- ⬜ Subscription auto-renewal flow (monthly)
+- ⬜ Subscription management in account page
+
+#### 10.14 — Admin Audit Trail Enhancements
+> Activity log advanced features
+- ✅ Advanced search + date range filter
+- ✅ Export audit trail to CSV
+- ✅ Filter by admin user, action type
+
+### Suggested Execution Order
+1. ✅ 10.1 — Loading skeletons (UX baseline)
+2. ✅ 10.2 — PWA support (mobile Myanmar users)
+3. ✅ 10.8 — Route error boundaries
+4. ✅ 10.9 — Quick wins (share, recently viewed)
+5. ⬜ 10.3 — Server egress firewall
+6. ✅ 10.4 — Wishlist system
+7. ✅ 10.5 — Invoice PDF
+8. ✅ 10.6 — Stock alerts
+9. ✅ 10.7 — Enhanced analytics
+10. ✅ 10.14 — Audit trail enhancements
+
+---
+
 ## How to use this file
 - Check off (✅) each feature as it's completed
 - ⬜ → ✅ ပြောင်းပြီး deploy progress track လုပ်ပါ

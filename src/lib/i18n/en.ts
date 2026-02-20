@@ -196,7 +196,7 @@ const en = {
 
   // Cart
   cart: {
-    title: 'Shopping Cart',
+    title: 'Cart',
     empty: 'Your cart is empty',
     continueShopping: 'Continue Shopping',
     subtotal: 'Subtotal',
@@ -716,6 +716,11 @@ const en = {
       stock: 'Stock',
       status: 'Status',
       actions: 'Actions',
+      importCsv: 'Import CSV',
+      csvOnly: 'Please select a CSV file',
+      importFailed: 'CSV import failed',
+      importSuccess: 'Imported {count} products',
+      importSkipped: 'Skipped {count} invalid rows',
     },
     analyticsPage: {
       title: 'Analytics',
@@ -913,6 +918,7 @@ const en = {
     serialKey: 'Serial Key',
     emailUsername: 'Email / Username',
     additionalInfo: 'Additional Info',
+    copied: 'Copied!',
     vpnKeysPage: {
       title: 'My VPN Keys',
       emptyTitle: 'No VPN keys yet',
@@ -945,6 +951,8 @@ const en = {
     pending: 'Pending',
     myOrdersKeys: 'My Orders & Keys',
     viewPurchasedItems: 'View your purchased items and delivery keys',
+    wishlist: 'My Wishlist',
+    viewWishlist: 'Products you saved for later',
     profileDetails: 'Profile Details',
     memberSince: 'Member since',
     name: 'Name',

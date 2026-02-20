@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ShoppingBag, Shield, Tv, Gamepad2, MonitorSmartphone, Gift, Box, Star } from 'lucide-react';
+import { ShoppingBag, Shield, Tv, Gamepad2, MonitorSmartphone, Gift, Box, Star, Heart, Share2, MessageSquare } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
+import { useWishlist } from '@/lib/wishlist';
+import { useState, useCallback } from 'react';
+import toast from 'react-hot-toast';
 
 interface Product {
   _id: string;
@@ -19,9 +22,50 @@ interface Product {
 }
 
 export default function ProductCard({ product }: { product: Product }) {
-  const { t, lang } = useLanguage();
+  const { t, lang, tr } = useLanguage();
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const inStock = product.stock > 0;
   const hasImage = !!(product.image && product.image !== '/images/default-product.png');
+  const liked = isWishlisted(product._id);
+  const [showShare, setShowShare] = useState(false);
+
+  const handleLike = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await toggleWishlist(product._id);
+    } catch (err) {
+      if ((err as Error).message === 'AUTH_REQUIRED') {
+        toast.error(tr('Please log in to use wishlist', 'Wishlist သုံးရန် Login ဝင်ပါ'));
+      }
+    }
+  }, [product._id, toggleWishlist, tr]);
+
+  const handleShare = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const url = `${window.location.origin}/shop/${product.slug || product._id}`;
+    if (navigator.share) {
+      navigator.share({ title: product.name, url }).catch(() => {});
+    } else {
+      setShowShare((prev) => !prev);
+    }
+  }, [product]);
+
+  const shareToSocial = useCallback((platform: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const url = encodeURIComponent(`${window.location.origin}/shop/${product.slug || product._id}`);
+    const text = encodeURIComponent(product.name);
+    const links: Record<string, string> = {
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${url}`,
+      twitter: `https://twitter.com/intent/tweet?url=${url}&text=${text}`,
+      telegram: `https://t.me/share/url?url=${url}&text=${text}`,
+      viber: `viber://forward?text=${text}%20${url}`,
+    };
+    window.open(links[platform], '_blank', 'noopener,noreferrer,width=600,height=400');
+    setShowShare(false);
+  }, [product]);
 
   const categoryLabel: Record<string, string> = {
     vpn: t('nav.vpn'),
@@ -101,39 +145,81 @@ export default function ProductCard({ product }: { product: Product }) {
         </div>
 
         <div className="p-5 flex flex-col flex-1">
-        {/* Name */}
-        <h3 className="text-base font-bold text-white mb-1 group-hover:text-purple-300 transition-colors duration-300 line-clamp-1 relative">
-          {product.name}
-        </h3>
+        {/* Name + Price */}
+        <div className="flex items-baseline justify-between gap-2 mb-1">
+          <h3 className="min-w-0 text-base font-bold text-white group-hover:text-purple-300 transition-colors duration-300 truncate relative">
+            {product.name}
+          </h3>
+          <span className="shrink-0 text-lg font-black text-purple-400 whitespace-nowrap">
+            {product.price.toLocaleString()} <span className="text-xs text-gray-500 font-medium">MMK</span>
+          </span>
+        </div>
 
-        {/* Rating (if reviews exist) */}
-        {(product.reviewCount ?? 0) > 0 && (
-          <div className="flex items-center gap-1.5 mb-2">
-            <div className="flex items-center">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <Star
-                  key={s}
-                  className={`w-3 h-3 ${s <= Math.round(product.averageRating || 0) ? 'fill-amber-400 text-amber-400' : 'fill-transparent text-gray-600'}`}
-                />
-              ))}
-            </div>
-            <span className="text-[10px] text-gray-500">({product.reviewCount})</span>
+        {/* Rating — always visible */}
+        <div className="flex items-center gap-1.5 mb-2">
+          <div className="flex items-center">
+            {[1, 2, 3, 4, 5].map((s) => (
+              <Star
+                key={s}
+                className={`w-3 h-3 ${(product.reviewCount ?? 0) > 0 && s <= Math.round(product.averageRating || 0) ? 'fill-amber-400 text-amber-400' : 'fill-transparent text-gray-600'}`}
+              />
+            ))}
           </div>
-        )}
+          <span className="text-[10px] text-gray-500">({product.reviewCount ?? 0})</span>
+        </div>
 
         {/* Description */}
         <p className="text-sm text-gray-500 mb-5 line-clamp-2 flex-1 leading-relaxed relative">
           {product.description}
         </p>
 
-        {/* Price + Action */}
+        {/* Actions: like, comment, share (left) | view details (right) */}
         <div className="flex items-center justify-between pt-4 border-t border-dark-600/50 relative">
-          <div>
-            <span className="text-xl font-black text-purple-400">
-              {product.price.toLocaleString()}
-            </span>
-            <span className="text-xs text-gray-500 ml-1 font-medium">MMK</span>
+          <div className="flex items-center gap-2">
+            {/* Like */}
+            <button
+              onClick={handleLike}
+              className="w-8 h-8 rounded-lg flex items-center justify-center bg-dark-800/60 border border-dark-600/40 hover:border-pink-500/40 hover:bg-pink-500/10 transition-all"
+              aria-label={liked ? 'Unlike' : 'Like'}
+            >
+              <Heart className={`w-3.5 h-3.5 transition-colors ${liked ? 'fill-pink-500 text-pink-500' : 'text-gray-500 hover:text-pink-400'}`} />
+            </button>
+            {/* Comment/Review */}
+            <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-dark-800/60 border border-dark-600/40 text-gray-400 text-xs font-semibold" aria-label={`${product.reviewCount ?? 0} reviews`}>
+              <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
+              {(product.reviewCount ?? 0) > 0 ? product.reviewCount : ''}
+            </div>
+            {/* Share */}
+            <div className="relative z-30">
+              <button
+                onClick={handleShare}
+                className="w-8 h-8 rounded-lg flex items-center justify-center bg-dark-800/60 border border-dark-600/40 hover:border-purple-500/40 hover:bg-purple-500/10 transition-all"
+                aria-label="Share"
+              >
+                <Share2 className="w-3.5 h-3.5 text-gray-500 hover:text-purple-400 transition-colors" />
+              </button>
+              {showShare && (
+                <div className="absolute left-0 top-full mt-2 flex items-center gap-1 p-1.5 bg-dark-900 border border-dark-600/60 rounded-lg shadow-xl z-50 animate-in fade-in slide-in-from-top-2">
+                  {([
+                    { key: 'facebook', label: 'f', color: 'hover:bg-blue-500/20 hover:text-blue-400' },
+                    { key: 'twitter', label: '𝕏', color: 'hover:bg-gray-500/20 hover:text-white' },
+                    { key: 'telegram', label: '✈', color: 'hover:bg-sky-500/20 hover:text-sky-400' },
+                    { key: 'viber', label: 'V', color: 'hover:bg-purple-500/20 hover:text-purple-400' },
+                  ]).map((s) => (
+                    <button
+                      key={s.key}
+                      onClick={(e) => shareToSocial(s.key, e)}
+                      className={`w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold text-gray-400 transition-all ${s.color}`}
+                      aria-label={`Share on ${s.key}`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+          {/* View Details */}
           <div className={`min-w-0 flex items-center gap-1.5 text-xs sm:text-sm font-bold ${inStock ? 'text-white' : 'text-gray-600'}`}>
             {inStock ? (
               <>

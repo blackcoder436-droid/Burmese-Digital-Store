@@ -3,6 +3,7 @@ import connectDB from '@/lib/mongodb';
 import Order from '@/models/Order';
 import Product from '@/models/Product';
 import User from '@/models/User';
+import CartSession from '@/models/CartSession';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { createLogger } from '@/lib/logger';
@@ -56,6 +57,8 @@ export async function GET(request: NextRequest) {
       topProducts,
       recentOrders,
       categoryBreakdown,
+      abandonedCart,
+      repeatPurchase,
     ] = await Promise.all([
       // 1. Overview stats
       getOverviewStats(startDate, endDate),
@@ -75,6 +78,10 @@ export async function GET(request: NextRequest) {
       getRecentOrders(),
       // 9. Category breakdown
       getCategoryBreakdown(startDate, endDate),
+      // 10. Abandoned cart / recovery stats
+      getAbandonedCartStats(startDate, endDate),
+      // 11. Repeat purchase / retention stats
+      getRepeatPurchaseStats(startDate, endDate),
     ]);
 
     // All-time totals for comparison
@@ -96,6 +103,8 @@ export async function GET(request: NextRequest) {
         topProducts,
         recentOrders,
         categoryBreakdown,
+        abandonedCart,
+        repeatPurchase,
       },
     });
   } catch (error: any) {
@@ -353,6 +362,216 @@ async function getRecentOrders() {
     .sort({ createdAt: -1 })
     .limit(10)
     .lean();
+}
+
+async function getAbandonedCartStats(start: Date, end: Date) {
+  const abandonmentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const [
+    startedCarts,
+    completedCarts,
+    activeCarts,
+    abandonedCarts,
+    abandonedTrendRaw,
+    recoveredTrendRaw,
+  ] = await Promise.all([
+    CartSession.countDocuments({
+      checkoutStartedAt: { $gte: start, $lte: end },
+    }),
+    CartSession.countDocuments({
+      checkoutCompletedAt: { $gte: start, $lte: end },
+    }),
+    CartSession.countDocuments({
+      updatedAt: { $gte: start, $lte: end },
+      itemCount: { $gt: 0 },
+    }),
+    CartSession.countDocuments({
+      updatedAt: { $gte: start, $lte: end, $lte: abandonmentCutoff },
+      itemCount: { $gt: 0 },
+      checkoutCompletedAt: null,
+    }),
+    CartSession.aggregate([
+      {
+        $match: {
+          updatedAt: { $gte: start, $lte: end, $lte: abandonmentCutoff },
+          itemCount: { $gt: 0 },
+          checkoutCompletedAt: null,
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$updatedAt' },
+          },
+          abandoned: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    CartSession.aggregate([
+      {
+        $match: {
+          checkoutCompletedAt: { $gte: start, $lte: end },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$checkoutCompletedAt' },
+          },
+          recovered: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+  ]);
+
+  const dayMap = new Map<string, { abandoned: number; recovered: number }>();
+
+  for (const row of abandonedTrendRaw as Array<{ _id: string; abandoned: number }>) {
+    dayMap.set(row._id, { abandoned: row.abandoned, recovered: 0 });
+  }
+
+  for (const row of recoveredTrendRaw as Array<{ _id: string; recovered: number }>) {
+    const existing = dayMap.get(row._id) || { abandoned: 0, recovered: 0 };
+    dayMap.set(row._id, { ...existing, recovered: row.recovered });
+  }
+
+  const dailyTrend = fillMissingDays(
+    start,
+    end,
+    Array.from(dayMap.entries()).map(([date, values]) => ({ _id: date, ...values })),
+    'abandoned'
+  ).map((row) => ({
+    date: row.date,
+    abandoned: Number(row.abandoned || 0),
+    recovered: Number(row.recovered || 0),
+  }));
+
+  const abandonmentRate = activeCarts > 0 ? (abandonedCarts / activeCarts) * 100 : 0;
+  const recoveryRate = startedCarts > 0 ? (completedCarts / startedCarts) * 100 : 0;
+
+  return {
+    activeCarts,
+    startedCarts,
+    completedCarts,
+    abandonedCarts,
+    abandonmentRate,
+    recoveryRate,
+    dailyTrend,
+  };
+}
+
+async function getRepeatPurchaseStats(start: Date, end: Date) {
+  const currentUsersRaw = await Order.distinct('user', {
+    status: 'completed',
+    createdAt: { $gte: start, $lte: end },
+  });
+  const currentUsers = currentUsersRaw.map(String);
+
+  const periodMs = Math.max(24 * 60 * 60 * 1000, end.getTime() - start.getTime() + 1);
+  const previousStart = new Date(start.getTime() - periodMs);
+  const previousEnd = new Date(start.getTime() - 1);
+
+  const previousUsersRaw = await Order.distinct('user', {
+    status: 'completed',
+    createdAt: { $gte: previousStart, $lte: previousEnd },
+  });
+  const previousUsers = previousUsersRaw.map(String);
+
+  let repeatCustomers = 0;
+  if (currentUsers.length > 0) {
+    const repeatResult = await Order.aggregate([
+      {
+        $match: {
+          status: 'completed',
+          createdAt: { $lte: end },
+          user: { $in: currentUsersRaw },
+        },
+      },
+      {
+        $group: {
+          _id: '$user',
+          count: { $sum: 1 },
+        },
+      },
+      { $match: { count: { $gte: 2 } } },
+      { $count: 'total' },
+    ]);
+
+    repeatCustomers = Number(repeatResult[0]?.total || 0);
+  }
+
+  const previousSet = new Set(previousUsers);
+  const retainedCustomers = currentUsers.filter((id) => previousSet.has(id)).length;
+
+  const repeatRate = currentUsers.length > 0 ? (repeatCustomers / currentUsers.length) * 100 : 0;
+  const retentionRate = previousUsers.length > 0 ? (retainedCustomers / previousUsers.length) * 100 : 0;
+
+  const monthlyTrend = await getRepeatMonthlyTrend(end);
+
+  return {
+    uniqueCustomers: currentUsers.length,
+    repeatCustomers,
+    repeatRate,
+    previousPeriodCustomers: previousUsers.length,
+    retainedCustomers,
+    retentionRate,
+    monthlyTrend,
+  };
+}
+
+async function getRepeatMonthlyTrend(endDate: Date) {
+  const months: Array<{ label: string; monthStart: Date; monthEnd: Date }> = [];
+  const endMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+
+  for (let i = 5; i >= 0; i--) {
+    const monthStart = new Date(endMonth.getFullYear(), endMonth.getMonth() - i, 1);
+    const monthEnd = new Date(endMonth.getFullYear(), endMonth.getMonth() - i + 1, 0, 23, 59, 59, 999);
+    months.push({
+      label: monthStart.toLocaleDateString('en-US', { month: 'short' }),
+      monthStart,
+      monthEnd,
+    });
+  }
+
+  return Promise.all(
+    months.map(async ({ label, monthStart, monthEnd }) => {
+      const usersRaw = await Order.distinct('user', {
+        status: 'completed',
+        createdAt: { $gte: monthStart, $lte: monthEnd },
+      });
+
+      if (usersRaw.length === 0) {
+        return { month: label, customers: 0, repeatRate: 0 };
+      }
+
+      const repeatResult = await Order.aggregate([
+        {
+          $match: {
+            status: 'completed',
+            createdAt: { $lte: monthEnd },
+            user: { $in: usersRaw },
+          },
+        },
+        {
+          $group: {
+            _id: '$user',
+            count: { $sum: 1 },
+          },
+        },
+        { $match: { count: { $gte: 2 } } },
+        { $count: 'total' },
+      ]);
+
+      const repeatCustomers = Number(repeatResult[0]?.total || 0);
+      return {
+        month: label,
+        customers: usersRaw.length,
+        repeatRate: usersRaw.length > 0 ? (repeatCustomers / usersRaw.length) * 100 : 0,
+      };
+    })
+  );
 }
 
 /**

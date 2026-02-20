@@ -17,10 +17,60 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = Math.min(parseInt(searchParams.get('limit') || '30'), 100);
     const action = searchParams.get('action');
+    const search = searchParams.get('search');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    const exportCsv = searchParams.get('export') === 'csv';
     const skip = (page - 1) * limit;
 
     const query: Record<string, unknown> = {};
     if (action) query.action = action;
+    if (search) {
+      query.$or = [
+        { target: { $regex: search, $options: 'i' } },
+        { details: { $regex: search, $options: 'i' } },
+        { action: { $regex: search, $options: 'i' } },
+      ];
+    }
+    if (startDate || endDate) {
+      query.createdAt = {} as Record<string, Date>;
+      if (startDate) (query.createdAt as Record<string, Date>).$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        (query.createdAt as Record<string, Date>).$lte = end;
+      }
+    }
+
+    // CSV export — return all matching records
+    if (exportCsv) {
+      const allLogs = await ActivityLog.find(query)
+        .populate('admin', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(5000)
+        .lean();
+
+      const csv = [
+        'Date,Admin,Action,Target,Details',
+        ...allLogs.map((log: any) =>
+          [
+            new Date(log.createdAt).toISOString(),
+            `"${(log.admin?.name || 'Unknown').replace(/"/g, '""')}"`,
+            log.action,
+            `"${(log.target || '').replace(/"/g, '""')}"`,
+            `"${(log.details || '').replace(/"/g, '""')}"`,
+          ].join(',')
+        ),
+      ].join('\n');
+
+      return new NextResponse(csv, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="activity-log-${new Date().toISOString().slice(0, 10)}.csv"`,
+        },
+      });
+    }
 
     const [logs, total] = await Promise.all([
       ActivityLog.find(query)

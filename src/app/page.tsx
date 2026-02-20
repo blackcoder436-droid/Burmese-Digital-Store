@@ -1,5 +1,6 @@
 ﻿'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import MobileCarousel from '@/components/MobileCarousel';
 import {
@@ -102,6 +103,14 @@ function HowItWorksCarousel({ language }: { language: 'en' | 'my' }) {
 export default function HomePage() {
   const { t, lang: language } = useLanguage();
   const containerRef = useScrollFade();
+  const [loggedIn, setLoggedIn] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setLoggedIn(true); })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="min-h-screen" ref={containerRef}>
@@ -236,30 +245,32 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20 sm:py-28 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-purple-600/10 via-cyan-600/10 to-cyan-500/10 pointer-events-none" />
-        
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
-          <div className="scroll-fade-scale scroll-fade glass-panel p-10 sm:p-16 glow-border relative overflow-hidden">
-            {/* Animated background sparkles */}
-            <div className="absolute top-6 left-10 w-2 h-2 bg-purple-400/30 rounded-full animate-float" />
-            <div className="absolute top-12 right-16 w-1.5 h-1.5 bg-cyan-400/30 rounded-full animate-float" style={{ animationDelay: '1s' }} />
-            <div className="absolute bottom-10 left-1/4 w-1 h-1 bg-purple-400/20 rounded-full animate-float" style={{ animationDelay: '2s' }} />
-            
-            <h2 className="heading-lg mb-4 relative">
-              {t('homePage.readyToStartTitle')}
-            </h2>
-            <p className="text-gray-400 mb-8 max-w-lg mx-auto relative">
-              {t('homePage.readyToStartSubtitle')}
-            </p>
-            <Link href="/register" className="btn-electric group relative">
-              {t('homePage.createFreeAccount')}
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </Link>
+      {/* CTA — only for guests */}
+      {!loggedIn && (
+        <section className="py-20 sm:py-28 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-600/10 via-cyan-600/10 to-cyan-500/10 pointer-events-none" />
+          
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
+            <div className="scroll-fade-scale scroll-fade glass-panel p-10 sm:p-16 glow-border relative overflow-hidden">
+              {/* Animated background sparkles */}
+              <div className="absolute top-6 left-10 w-2 h-2 bg-purple-400/30 rounded-full animate-float" />
+              <div className="absolute top-12 right-16 w-1.5 h-1.5 bg-cyan-400/30 rounded-full animate-float" style={{ animationDelay: '1s' }} />
+              <div className="absolute bottom-10 left-1/4 w-1 h-1 bg-purple-400/20 rounded-full animate-float" style={{ animationDelay: '2s' }} />
+              
+              <h2 className="heading-lg mb-4 relative">
+                {t('homePage.readyToStartTitle')}
+              </h2>
+              <p className="text-gray-400 mb-8 max-w-lg mx-auto relative">
+                {t('homePage.readyToStartSubtitle')}
+              </p>
+              <Link href="/register" className="btn-electric group relative">
+                {t('homePage.createFreeAccount')}
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </div>
   );
 }

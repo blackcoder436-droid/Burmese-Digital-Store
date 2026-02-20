@@ -714,6 +714,11 @@ const my: TranslationKeys = {
       stock: 'လက်ကျန်',
       status: 'အခြေအနေ',
       actions: 'လုပ်ဆောင်ရန်',
+      importCsv: 'CSV တင်သွင်းမည်',
+      csvOnly: 'CSV ဖိုင်ကိုသာ ရွေးပါ',
+      importFailed: 'CSV တင်သွင်းမှု မအောင်မြင်ပါ',
+      importSuccess: 'ပစ္စည်း {count} ခု တင်သွင်းပြီး',
+      importSkipped: 'မမှန်ကန်သော row {count} ခု ကျော်ခဲ့သည်',
     },
     analyticsPage: {
       title: 'စိတ်ပိုင်းခွဲခြားခြင်း',
@@ -911,6 +916,7 @@ const my: TranslationKeys = {
     serialKey: 'Serial Key',
     emailUsername: 'Email / Username',
     additionalInfo: 'ထပ်ဆောင်းအချက်အလက်',
+    copied: 'ကူးပြီး!',
     vpnKeysPage: {
       title: 'ကျွန်ုပ်၏ VPN Keys',
       emptyTitle: 'VPN key မရှိသေးပါ',
@@ -943,6 +949,8 @@ const my: TranslationKeys = {
     pending: 'စောင့်ဆိုင်းနေသည်',
     myOrdersKeys: 'ကျွနုပ်၏အော်ဒါများ & Key များ',
     viewPurchasedItems: 'ဝယ်ယူထားသောပစ္စည်းများနှင့်ပို့ပြီးသော key များကိုကြည့်ပါ',
+    wishlist: 'ကျွန်ုပ်၏ Wishlist',
+    viewWishlist: 'နောက်မှဝယ်ဖို့ သိမ်းထားသောပစ္စည်းများ',
     profileDetails: 'ကိုယ်ရေးအချက်အလက်',
     memberSince: 'အသုံးပြုသူဖြစ်သည့်နေ့',
     name: 'နာမည်',

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import PaymentUpload from '@/components/PaymentUpload';
 import { useLanguage } from '@/lib/language';
+import { ArrowLeft } from 'lucide-react';
 import { buildPlanId, getPlan } from '@/lib/vpn-plans';
 
 interface ServerOption {
@@ -162,8 +163,8 @@ function VpnOrderPageContent() {
   return (
     <div className="min-h-screen pt-8 sm:pt-10 pb-8 sm:pb-10 px-4 sm:px-6">
       <div className="max-w-2xl mx-auto">
-        <button onClick={() => router.push('/vpn#pricing')} className="text-sm text-purple-400 hover:text-purple-300 mb-3">
-          ← {t('vpn.orderPage.backToPricing')}
+        <button onClick={() => router.push('/vpn#pricing')} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors mb-3" aria-label="Back to pricing">
+          <ArrowLeft className="w-4 h-4 text-gray-400" />
         </button>
 
         <div className="bg-[#12122a] border border-purple-500/20 rounded-2xl overflow-hidden">

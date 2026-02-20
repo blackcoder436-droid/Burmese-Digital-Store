@@ -6,7 +6,7 @@
 
 ## Tech Stack
 
-- **Frontend:** Next.js 14 (App Router) + React 18
+- **Frontend:** Next.js 15 (App Router) + React 18
 - **Styling:** Tailwind CSS (Dark Cyberpunk Theme)
 - **Backend:** Next.js API Routes
 - **Database:** MongoDB + Mongoose

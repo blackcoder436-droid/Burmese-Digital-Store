@@ -9,6 +9,27 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const handleRecover = async () => {
+    try {
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+      }
+
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+      }
+    } catch {
+      // Recovery best-effort only
+    } finally {
+      reset();
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    }
+  };
+
   return (
     <html lang="my" className="dark">
       <body style={{
@@ -96,7 +117,7 @@ export default function GlobalError({
           )}
 
           <button
-            onClick={reset}
+            onClick={handleRecover}
             style={{
               display: 'inline-flex',
               alignItems: 'center',

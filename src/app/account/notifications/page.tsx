@@ -115,13 +115,6 @@ export default function NotificationsPage() {
         {/* Header */}
         <div className="scroll-fade flex items-center justify-between mb-10">
           <div>
-            <Link
-              href="/account"
-              className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-purple-400 mb-4 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              {t('nav.myAccount')}
-            </Link>
             <h1 className="heading-lg flex items-center gap-3">
               <Bell className="w-7 h-7 text-purple-400" />
               {t('notifications.title')}

@@ -21,6 +21,7 @@ import {
   Phone,
   Save,
   X,
+  Heart,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
@@ -349,7 +350,7 @@ export default function AccountPage() {
               )}
             </div>
             <div className="text-center sm:text-left w-full">
-              <h1 className="text-4xl sm:text-5xl font-black leading-tight text-white">{t('account.myAccount')}</h1>
+              <h1 className="text-2xl sm:text-3xl font-black leading-tight text-white">{t('account.myAccount')}</h1>
               <p className="text-gray-400 mt-2 text-sm sm:text-base leading-relaxed break-words max-w-md mx-auto sm:mx-0">
                 {t('account.welcomeBack')} <span className="text-purple-400 font-semibold">{user.name}</span>!
               </p>
@@ -403,6 +404,18 @@ export default function AccountPage() {
               <div>
                 <h3 className="text-lg font-bold text-white">{t('account.myOrdersKeys')}</h3>
                 <p className="text-sm text-gray-500">{t('account.viewPurchasedItems')}</p>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/account/wishlist" className="scroll-fade game-card p-6 group" data-delay="150">
+            <div className="flex items-center space-x-5">
+              <div className="w-14 h-14 bg-pink-500/20 rounded-2xl flex items-center justify-center group-hover:bg-pink-500/30 group-hover:shadow-glow-sm transition-all">
+                <Heart className="w-7 h-7 text-pink-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">{t('account.wishlist')}</h3>
+                <p className="text-sm text-gray-500">{t('account.viewWishlist')}</p>
               </div>
             </div>
           </Link>

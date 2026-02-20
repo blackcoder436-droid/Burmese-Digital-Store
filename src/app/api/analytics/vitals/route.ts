@@ -21,7 +21,7 @@ const VitalSchema = new mongoose.Schema(
     metricId: String,
     navigationType: String,
     url: { type: String, index: true },
-    timestamp: { type: Date, default: Date.now, index: true },
+    timestamp: { type: Date, default: Date.now },
   },
   { timestamps: false }
 );

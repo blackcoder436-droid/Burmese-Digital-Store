@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Product from '@/models/Product';
+import StockAlert from '@/models/StockAlert';
+import { createNotification } from '@/models/Notification';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
@@ -42,6 +44,8 @@ export async function PUT(
       updateData.stock = details.length;
     }
 
+    const oldProduct = await Product.findById(id).select('stock name').lean() as any;
+
     const product = await Product.findByIdAndUpdate(
       id,
       { $set: updateData },
@@ -53,6 +57,27 @@ export async function PUT(
         { success: false, error: 'Product not found' },
         { status: 404 }
       );
+    }
+
+    // Notify stock alert subscribers if product was out of stock and now has stock
+    if (oldProduct && oldProduct.stock <= 0 && product.stock > 0) {
+      try {
+        const alerts = await StockAlert.find({ product: id, notified: false }).lean();
+        for (const alert of alerts) {
+          await createNotification({
+            user: (alert as any).user,
+            type: 'stock_back_in',
+            title: 'Back in Stock!',
+            message: `${product.name} is now back in stock. Grab it before it sells out!`,
+          });
+        }
+        await StockAlert.updateMany(
+          { product: id, notified: false },
+          { $set: { notified: true, notifiedAt: new Date() } }
+        );
+      } catch {
+        // Stock alert notification is best-effort
+      }
     }
 
     try {

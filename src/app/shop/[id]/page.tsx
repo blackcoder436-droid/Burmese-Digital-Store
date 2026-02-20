@@ -17,12 +17,18 @@ import {
   LogIn,
   Check,
   Package,
+  Heart,
+  Bell,
+  BellOff,
 } from 'lucide-react';
 import PaymentUpload from '@/components/PaymentUpload';
 import ReviewSection from '@/components/ReviewSection';
+import { ShareButton } from '@/components/ShareButton';
+import { RecentlyViewed, trackProductView } from '@/components/RecentlyViewed';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
 import { useCart } from '@/lib/cart';
+import { useWishlist } from '@/lib/wishlist';
 import { useScrollFade } from '@/hooks/useScrollFade';
 
 interface Product {
@@ -45,8 +51,9 @@ const categoryLabel: Record<string, string> = {
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
-  const { t } = useLanguage();
+  const { t, tr } = useLanguage();
   const { addItem, isInCart, getItem } = useCart();
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const containerRef = useScrollFade();
   const router = useRouter();
   const [product, setProduct] = useState<Product | null>(null);
@@ -63,6 +70,8 @@ export default function ProductDetailPage() {
   const [couponValidating, setCouponValidating] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [justAdded, setJustAdded] = useState(false);
+  const [stockAlertSubscribed, setStockAlertSubscribed] = useState(false);
+  const [stockAlertLoading, setStockAlertLoading] = useState(false);
 
   useEffect(() => {
     fetchProduct();
@@ -82,12 +91,53 @@ export default function ProductDetailPage() {
     try {
       const res = await fetch(`/api/products/${params.id}`);
       const data = await res.json();
-      if (data.success) setProduct(data.data.product);
+      if (data.success) {
+        setProduct(data.data.product);
+        trackProductView(data.data.product);
+      }
       else router.push('/shop');
     } catch {
       router.push('/shop');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Check stock alert subscription status
+  useEffect(() => {
+    if (product && product.stock <= 0 && isLoggedIn) {
+      fetch(`/api/products/${params.id}/stock-alert`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) setStockAlertSubscribed(data.data.subscribed);
+        })
+        .catch(() => {});
+    }
+  }, [product, isLoggedIn, params.id]);
+
+  async function toggleStockAlert() {
+    if (!product) return;
+    if (!isLoggedIn) {
+      toast.error(tr('Please login first', 'ကျေးဇူးပြု၍ အရင်လော့အင်ဝင်ပါ'));
+      return;
+    }
+    setStockAlertLoading(true);
+    try {
+      const method = stockAlertSubscribed ? 'DELETE' : 'POST';
+      const res = await fetch(`/api/products/${params.id}/stock-alert`, { method });
+      const data = await res.json();
+      if (data.success) {
+        setStockAlertSubscribed(data.data.subscribed);
+        toast.success(
+          data.data.subscribed
+            ? tr('You\'ll be notified when back in stock', 'stock ပြန်ရောက်ရင် အကြောင်းကြားပေးပါမည်')
+            : tr('Stock alert removed', 'stock alert ဖယ်ရှားပြီး')
+        );
+      }
+    } catch {
+      toast.error(tr('Something went wrong', 'တစ်ခုခု မှားနေပါသည်'));
+    } finally {
+      setStockAlertLoading(false);
     }
   }
 
@@ -197,10 +247,6 @@ export default function ProductDetailPage() {
   return (
     <div className="min-h-screen pt-8 pb-12" ref={containerRef}>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <Link href="/shop" className="scroll-fade inline-flex items-center gap-2 text-base text-gray-400 hover:text-purple-400 mb-5 sm:mb-8 transition-colors whitespace-nowrap">
-          <ArrowLeft className="w-4 h-4" /> {t('shop.productDetail.backToShop')}
-        </Link>
-
         {/* Product Info */}
         <div className="scroll-fade game-card overflow-hidden mb-6" data-delay="100">
           {/* Product Image */}
@@ -220,9 +266,39 @@ export default function ProductDetailPage() {
           <div className="p-4 sm:p-8">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 mb-5 sm:mb-6">
             <div className="min-w-0">
-              <span className={`badge-${product.category} text-xs sm:text-sm`}>
-                {categoryLabel[product.category] || product.category}
-              </span>
+              <div className="flex items-center gap-2 mb-2">
+                <Link
+                  href="/shop"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-dark-700/50 border border-dark-600/50 text-gray-400 hover:text-white hover:border-purple-500/40 hover:bg-purple-500/10 transition-all flex-shrink-0"
+                  title={t('shop.productDetail.backToShop')}
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </Link>
+                <ShareButton title={product.name} compact />
+                <button
+                  onClick={async () => {
+                    try {
+                      await toggleWishlist(product._id);
+                    } catch (err) {
+                      if ((err as Error).message === 'AUTH_REQUIRED') {
+                        toast.error(tr('Please log in to use wishlist', 'Wishlist သုံးရန် Login ဝင်ပါ'));
+                      }
+                    }
+                  }}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center border transition-all flex-shrink-0 ${
+                    isWishlisted(product._id)
+                      ? 'bg-pink-500/15 border-pink-500/40 text-pink-400'
+                      : 'bg-dark-700/50 border-dark-600/50 text-gray-400 hover:text-pink-400 hover:border-pink-500/40 hover:bg-pink-500/10'
+                  }`}
+                  title={isWishlisted(product._id) ? tr('Remove from wishlist', 'Wishlist မှ ဖယ်ရှားမယ်') : tr('Add to wishlist', 'Wishlist ထဲ ထည့်မယ်')}
+                  aria-label={isWishlisted(product._id) ? 'Remove from wishlist' : 'Add to wishlist'}
+                >
+                  <Heart className={`w-4 h-4 ${isWishlisted(product._id) ? 'fill-pink-400' : ''}`} />
+                </button>
+                <span className={`badge-${product.category} text-xs sm:text-sm`}>
+                  {categoryLabel[product.category] || product.category}
+                </span>
+              </div>
               <h1 className="text-2xl sm:text-3xl font-bold text-white mt-3 break-words leading-tight">{product.name}</h1>
             </div>
 
@@ -245,10 +321,12 @@ export default function ProductDetailPage() {
           )}
 
           <div className="flex flex-col gap-5 sm:gap-6 p-4 sm:p-6 bg-dark-900 rounded-2xl border border-dark-600/50">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">{t('shop.productDetail.pricePerUnit')}</p>
-              <span className="text-2xl sm:text-3xl font-black text-purple-400">{product.price.toLocaleString()}</span>
-              <span className="text-sm text-gray-500 ml-2">MMK</span>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-gray-500">{t('shop.productDetail.pricePerUnit')}</p>
+              <div>
+                <span className="text-2xl sm:text-3xl font-black text-purple-400">{product.price.toLocaleString()}</span>
+                <span className="text-sm text-gray-500 ml-1">MMK</span>
+              </div>
             </div>
             {product.stock > 0 && (
               <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -256,6 +334,7 @@ export default function ProductDetailPage() {
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
                     className="w-11 h-11 flex items-center justify-center rounded-xl bg-dark-800 border border-dark-600 hover:border-purple-500/50 text-gray-400 hover:text-white transition-all"
+                    aria-label="Decrease quantity"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
@@ -263,6 +342,7 @@ export default function ProductDetailPage() {
                   <button
                     onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
                     className="w-11 h-11 flex items-center justify-center rounded-xl bg-dark-800 border border-dark-600 hover:border-purple-500/50 text-gray-400 hover:text-white transition-all"
+                    aria-label="Increase quantity"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -314,6 +394,29 @@ export default function ProductDetailPage() {
                   <Zap className="w-5 h-5" /> {t('shop.buyNow')}
                 </button>
               )}
+            </div>
+          )}
+
+          {/* Stock Alert — shown when out of stock */}
+          {product.stock <= 0 && !showPayment && (
+            <div className="mt-6">
+              <button
+                onClick={toggleStockAlert}
+                disabled={stockAlertLoading}
+                className={`w-full btn ${
+                  stockAlertSubscribed
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30'
+                    : 'bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 hover:shadow-glow-sm'
+                }`}
+              >
+                {stockAlertLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : stockAlertSubscribed ? (
+                  <><BellOff className="w-5 h-5" /> {tr('Subscribed — Tap to cancel', 'စောင့်ဆိုင်းနေပြီ — ဖျက်ရန်နှိပ်ပါ')}</>
+                ) : (
+                  <><Bell className="w-5 h-5" /> {tr('Notify me when back in stock', 'Stock ပြန်ရောက်ရင် အကြောင်းကြားပေးပါ')}</>
+                )}
+              </button>
             </div>
           )}
           </div>
@@ -470,16 +573,18 @@ export default function ProductDetailPage() {
             </button>
           </div>
         )}
-      </div>
+        {/* Reviews Section */}
+        {product && (
+          <ReviewSection
+            productId={product._id}
+            averageRating={product.averageRating || 0}
+            reviewCount={product.reviewCount || 0}
+          />
+        )}
 
-      {/* Reviews Section */}
-      {product && (
-        <ReviewSection
-          productId={product._id}
-          averageRating={product.averageRating || 0}
-          reviewCount={product.reviewCount || 0}
-        />
-      )}
+        {/* Recently Viewed Products */}
+        <RecentlyViewed excludeId={product?._id} />
+      </div>
     </div>
   );
 }

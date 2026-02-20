@@ -12,7 +12,8 @@ export type NotificationType =
   | 'order_rejected'
   | 'order_refunded'
   | 'admin_new_order'
-  | 'vpn_expiry_reminder';
+  | 'vpn_expiry_reminder'
+  | 'stock_back_in';
 
 export interface INotificationDocument extends Document {
   user: mongoose.Types.ObjectId;
@@ -43,6 +44,7 @@ const NotificationSchema: Schema = new Schema(
         'order_refunded',
         'admin_new_order',
         'vpn_expiry_reminder',
+        'stock_back_in',
       ],
     },
     title: {
