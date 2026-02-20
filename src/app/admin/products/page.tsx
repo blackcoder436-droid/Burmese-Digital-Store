@@ -504,7 +504,7 @@ export default function AdminProductsPage() {
               {/* Crypto Payment Gateway Selection (Myanmar pay always accepted) */}
               {allGateways.filter(g => g.enabled && g.category === 'crypto').length > 0 && (
                 <div>
-                  <label className="text-sm text-gray-300 block mb-2 flex items-center gap-2">
+                  <label className="text-sm text-gray-300 mb-2 flex items-center gap-2">
                     <CreditCard className="w-4 h-4 text-purple-400" />
                     {t('admin.productsPage.cryptoGateways')}
                   </label>
