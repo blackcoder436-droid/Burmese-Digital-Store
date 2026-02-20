@@ -17,18 +17,35 @@ export const metadata: Metadata = {
     "Myanmar's trusted digital store for VPN accounts, streaming subscriptions, gaming credits, and more. Instant delivery with verified payments.",
   keywords: ['digital store', 'VPN', 'Myanmar', 'Kpay', 'WaveMoney', 'streaming', 'gaming', 'software', 'gift card', 'Netflix', 'Express VPN'],
   metadataBase: new URL('https://burmesedigital.store'),
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '48x48' },
+      { url: '/icons/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icons/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+    ],
+    apple: '/icons/apple-touch-icon.png',
+  },
   openGraph: {
     title: 'Burmese Digital Store',
     description: 'Premium Digital Products — Instant Delivery in Myanmar',
     url: 'https://burmesedigital.store',
     siteName: 'Burmese Digital Store',
+    images: [
+      {
+        url: '/logo.jpg',
+        width: 512,
+        height: 512,
+        alt: 'Burmese Digital Store Logo',
+      },
+    ],
     type: 'website',
     locale: 'my_MM',
   },
   twitter: {
-    card: 'summary_large_image',
+    card: 'summary',
     title: 'Burmese Digital Store',
     description: 'Premium Digital Products — Instant Delivery in Myanmar',
+    images: ['/logo.jpg'],
   },
   robots: {
     index: true,
@@ -65,8 +82,6 @@ export default async function RootLayout({
         <meta name="theme-color" content="#6c5ce7" />
         <meta name="mobile-web-app-capable" content="yes" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
         {/* JSON-LD Structured Data for SEO */}
         <script
           type="application/ld+json"
