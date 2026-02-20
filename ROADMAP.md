@@ -949,8 +949,8 @@ Reset:    POST {panel_url}{panel_path}/panel/api/inbounds/{inboundId}/resetClien
 - ✅ Conversion rate widget (completed/total orders)
 - ✅ Refund rate tracking 
 - ✅ Completion rate + revenue per order stats
-- ⬜ Abandoned cart tracking (future: requires cart persistence)
-- ⬜ Repeat purchase / customer retention chart (future: complex aggregation)
+- ✅ Abandoned cart tracking (chart + recovered stats)
+- ✅ Repeat purchase / customer retention chart (area chart + stat cards)
 
 #### 10.8 — Route Segment Error Boundaries
 > Route-level error handling (not just root)
@@ -964,15 +964,15 @@ Reset:    POST {panel_url}{panel_path}/panel/api/inbounds/{inboundId}/resetClien
 #### 10.9 — Quick UX Improvements
 - ✅ Share product button (Web Share API fallback to clipboard) — `src/components/ShareButton.tsx`
 - ✅ "Recently Viewed" products section (localStorage-based) — `src/components/RecentlyViewed.tsx`
-- ⬜ Admin bulk product import (CSV upload)
-- ⬜ Copy order ID / keys one-click improvements
+- ✅ Admin bulk product import (CSV upload) — `src/app/api/admin/products/import/route.ts`
+- ✅ Copy order ID / keys one-click improvements (MyKeys + order detail)
 
 ### 🔵 Long-term / Future Phases
 
 #### 10.10 — Payment Gateway Integration
 > International payment support (Stripe/PayPal/Crypto)
-- ⬜ Stripe integration for international customers
-- ⬜ Crypto payment option (USDT/USDC)
+- ✅ Stripe integration scaffold (checkout session + webhook + success page)
+- ✅ Crypto payment option (USDT/USDC per-product gateways)
 
 #### 10.11 — Referral / Affiliate System
 > Organic marketing tool (user invite + rewards)
@@ -982,16 +982,23 @@ Reset:    POST {panel_url}{panel_path}/panel/api/inbounds/{inboundId}/resetClien
 
 #### 10.12 — Live Chat / Support Ticket System
 > In-app customer support
-- ⬜ Support ticket model + API
-- ⬜ `/account/support` — ticket list + create page
-- ⬜ `/admin/support` — admin ticket management
-- ⬜ Telegram bot integration for live chat relay
+- ✅ SupportTicket model (ticketNumber, messages, categories, priority)
+- ✅ `/api/support` + `/api/support/[id]` — user ticket CRUD + reply
+- ✅ `/api/admin/support/[id]` — admin ticket management API
+- ✅ `/account/support` — ticket list + create modal
+- ✅ `/account/support/[id]` — ticket chat view
+- ✅ `/admin/support` — admin ticket dashboard with filters
+- ✅ `/admin/support/[id]` — admin ticket detail with status/priority controls
+- ✅ Telegram notification for new support tickets
 
 #### 10.13 — Product Bundles / Subscription Model
 > VPN + Streaming bundle pricing, auto-renewal
-- ⬜ Bundle product type (multiple items, discounted price)
-- ⬜ Subscription auto-renewal flow (monthly)
-- ⬜ Subscription management in account page
+- ✅ Product model extended with productType (single/bundle/subscription)
+- ✅ Bundle fields: bundleItems[], bundleDiscount
+- ✅ Subscription fields: subscriptionDuration, subscriptionPrice
+- ✅ Subscription model (active/expired/cancelled, auto-renew)
+- ✅ `/api/subscriptions` + `/api/subscriptions/[id]` — user subscription APIs
+- ✅ `/account/subscriptions` — subscription management page
 
 #### 10.14 — Admin Audit Trail Enhancements
 > Activity log advanced features

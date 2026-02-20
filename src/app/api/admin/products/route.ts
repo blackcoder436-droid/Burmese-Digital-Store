@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { name, category, description, price, image, featured, details } = body;
+    const { name, category, description, price, image, featured, details, allowedPaymentGateways } = body;
 
     if (!name || !category || !description || price === undefined) {
       return NextResponse.json(
@@ -139,6 +139,7 @@ export async function POST(request: NextRequest) {
       featured: featured || false,
       details: Array.isArray(details) ? details : [],
       stock: Array.isArray(details) ? details.length : 0,
+      allowedPaymentGateways: Array.isArray(allowedPaymentGateways) ? allowedPaymentGateways : [],
     });
 
     try {

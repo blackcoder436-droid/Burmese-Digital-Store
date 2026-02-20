@@ -11,6 +11,7 @@ const log = createLogger({ route: '/api/orders/cart' });
 import { extractPaymentInfo } from '@/lib/ocr';
 import { getSiteSettings } from '@/models/SiteSettings';
 import { validateCoupon, recordCouponUsage } from '@/models/Coupon';
+import PaymentGateway from '@/models/PaymentGateway';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import { saveToQuarantine } from '@/lib/quarantine';
 import { sendPaymentScreenshot, buildScreenshotCaption, sendOrderWithApproveButtons } from '@/lib/telegram';
@@ -95,8 +96,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validMethods = ['kpay', 'wavemoney', 'uabpay', 'ayapay'];
-    if (!validMethods.includes(paymentMethod)) {
+    // Validate payment method against available gateways
+    // Cart checkout only supports Myanmar gateways (crypto is product-specific, handled in single-order)
+    const allGateways = await PaymentGateway.find({ enabled: true }).select('code category').lean();
+    const validMethods = allGateways.filter((g) => g.category !== 'crypto').map((g) => g.code);
+    if (validMethods.length > 0 && !validMethods.includes(paymentMethod)) {
       return NextResponse.json(
         { success: false, error: 'Invalid payment method' },
         { status: 400 }

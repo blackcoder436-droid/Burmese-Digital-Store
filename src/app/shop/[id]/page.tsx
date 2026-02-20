@@ -41,6 +41,7 @@ interface Product {
   stock: number;
   image?: string;
   purchaseDisabled?: boolean;
+  allowedPaymentGateways?: { _id: string; name: string; code: string; type: string; category: string; accountName: string; accountNumber: string; qrImage?: string; instructions?: string; enabled: boolean }[];
   averageRating?: number;
   reviewCount?: number;
 }
@@ -61,10 +62,11 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [showPayment, setShowPayment] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('kpay');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentFile, setPaymentFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [paymentAccounts, setPaymentAccounts] = useState<{ method: string; accountName: string; accountNumber: string }[]>([]);
+  const [availableGateways, setAvailableGateways] = useState<{ _id: string; name: string; code: string; accountName: string; accountNumber: string; qrImage?: string }[]>([]);
   const [couponCode, setCouponCode] = useState('');
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [appliedCoupon, setAppliedCoupon] = useState('');
@@ -95,6 +97,25 @@ export default function ProductDetailPage() {
       if (data.success) {
         setProduct(data.data.product);
         trackProductView(data.data.product);
+        // Set up available payment gateways from product data
+        // Myanmar gateways always show; crypto gateways only if product allows them
+        const prod = data.data.product;
+        try {
+          const gwRes = await fetch('/api/payment-gateways');
+          const gwData = await gwRes.json();
+          if (gwData.success) {
+            // Always include myanmar gateways
+            const myanmarGateways = gwData.data.gateways.filter((g: any) => g.category !== 'crypto');
+            // Crypto gateways: only those allowed by the product
+            const productAllowedIds = (prod.allowedPaymentGateways || []).filter((g: any) => g.enabled).map((g: any) => g._id);
+            const cryptoGateways = gwData.data.gateways
+              .filter((g: any) => g.category === 'crypto')
+              .filter((g: any) => productAllowedIds.includes(g._id));
+            const combined = [...myanmarGateways, ...cryptoGateways];
+            setAvailableGateways(combined);
+            if (combined.length > 0 && !paymentMethod) setPaymentMethod(combined[0].code);
+          }
+        } catch { /* ignore */ }
       }
       else router.push('/shop');
     } catch {
@@ -445,22 +466,17 @@ export default function ProductDetailPage() {
             <div>
               <label className="input-label">{t('order.paymentMethod')}</label>
               <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-                {[
-                  { value: 'kpay', label: 'KBZ Pay' },
-                  { value: 'wave', label: 'WaveMoney' },
-                  { value: 'uabpay', label: 'UAB Pay' },
-                  { value: 'ayapay', label: 'AYA Pay' },
-                ].map((m) => (
+                {availableGateways.map((gw) => (
                   <button
-                    key={m.value}
-                    onClick={() => setPaymentMethod(m.value)}
+                    key={gw.code}
+                    onClick={() => setPaymentMethod(gw.code)}
                     className={`px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold border-2 transition-all duration-200 ${
-                      paymentMethod === m.value
+                      paymentMethod === gw.code
                         ? 'bg-purple-500/10 border-purple-500 text-purple-400 shadow-glow-sm'
                         : 'bg-dark-900 border-dark-600 text-gray-400 hover:border-purple-500/50'
                     }`}
                   >
-                    {m.label}
+                    {gw.name}
                   </button>
                 ))}
               </div>
@@ -468,8 +484,11 @@ export default function ProductDetailPage() {
 
             {/* Payment Account Info */}
             {(() => {
-              const methodMap: Record<string, string> = { kpay: 'kpay', wave: 'wave', uabpay: 'uabpay', ayapay: 'ayapay' };
-              const selectedAccount = paymentAccounts.find((a) => a.method === methodMap[paymentMethod]);
+              const selectedGateway = availableGateways.find((g) => g.code === paymentMethod);
+              // Also check legacy payment accounts for backward compatibility
+              const selectedAccount = selectedGateway?.accountName || selectedGateway?.accountNumber
+                ? selectedGateway
+                : paymentAccounts.find((a) => a.method === paymentMethod);
               if (!selectedAccount) return null;
               return (
                 <div className="p-4 bg-purple-500/5 rounded-xl border border-purple-500/20">

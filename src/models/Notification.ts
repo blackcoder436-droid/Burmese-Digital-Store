@@ -11,6 +11,8 @@ export type NotificationType =
   | 'order_completed'
   | 'order_rejected'
   | 'order_refunded'
+  | 'order_status'
+  | 'system'
   | 'admin_new_order'
   | 'vpn_expiry_reminder'
   | 'stock_back_in';
@@ -42,6 +44,8 @@ const NotificationSchema: Schema = new Schema(
         'order_completed',
         'order_rejected',
         'order_refunded',
+        'order_status',
+        'system',
         'admin_new_order',
         'vpn_expiry_reminder',
         'stock_back_in',

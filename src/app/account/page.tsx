@@ -22,6 +22,11 @@ import {
   Save,
   X,
   Heart,
+  ChevronRight,
+  Shield,
+  Sparkles,
+  Mail,
+  CalendarDays,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
@@ -295,86 +300,145 @@ export default function AccountPage() {
 
   if (!user) return null;
 
+  // Session progress percentage (max 7 days)
+  const sessionProgress = sessionInfo?.remainingSeconds
+    ? Math.min(100, (sessionInfo.remainingSeconds / (7 * 86400)) * 100)
+    : 0;
+
   return (
-    <div className="min-h-screen pt-8 pb-12 relative z-[1]" ref={containerRef}>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="scroll-fade mb-8 sm:mb-12">
-          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-3 sm:gap-5">
-            {/* Avatar */}
-            <div className="relative group shrink-0">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={handleAvatarUpload}
-                className="hidden"
-              />
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-purple-500/30 to-cyan-500/30 border-2 border-purple-500/20">
-                {user.avatar ? (
-                  <Image
-                    src={user.avatar}
-                    alt={user.name}
-                    width={72}
-                    height={72}
-                    className="w-full h-full object-cover"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-3xl font-black text-white uppercase">
-                    {user.name.charAt(0)}
-                  </div>
+    <div className="min-h-screen pb-16 relative z-[1]" ref={containerRef}>
+      {/* ===== Hero Header with Gradient Background ===== */}
+      <div className="relative overflow-hidden">
+        {/* Background decorations */}
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 via-dark-950 to-cyan-900/10" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-[120px]" />
+        <div className="absolute top-10 right-1/4 w-72 h-72 bg-cyan-500/5 rounded-full blur-[100px]" />
+
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 pb-8">
+          <div className="scroll-fade">
+            <div className="flex flex-col sm:flex-row items-center gap-5 sm:gap-7">
+              {/* Avatar - Enhanced */}
+              <div className="relative group shrink-0">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleAvatarUpload}
+                  className="hidden"
+                />
+                {/* Glow ring behind avatar */}
+                <div className="absolute -inset-1 bg-gradient-to-br from-purple-500/40 to-cyan-500/40 rounded-2xl blur-sm opacity-60 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden bg-gradient-to-br from-purple-600/40 to-cyan-600/40 border-2 border-purple-500/30 shadow-lg">
+                  {user.avatar ? (
+                    <Image
+                      src={user.avatar}
+                      alt={user.name}
+                      width={96}
+                      height={96}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-4xl font-black text-white uppercase bg-gradient-to-br from-purple-600/30 to-cyan-600/30">
+                      {user.name.charAt(0)}
+                    </div>
+                  )}
+                </div>
+                {/* Upload overlay */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="absolute inset-0 m-[1px] rounded-2xl bg-black/50 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center justify-center transition-all duration-300 cursor-pointer backdrop-blur-[1px]"
+                >
+                  {uploading ? (
+                    <Loader2 className="w-6 h-6 text-white animate-spin" />
+                  ) : (
+                    <Camera className="w-6 h-6 text-white drop-shadow-lg" />
+                  )}
+                </button>
+                {/* Remove button */}
+                {user.avatar && !uploading && (
+                  <button
+                    onClick={handleAvatarRemove}
+                    className="absolute -top-2 -right-2 w-7 h-7 bg-red-500 rounded-full flex items-center justify-center text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-300 hover:bg-red-400 shadow-lg shadow-red-500/30"
+                    title={t('account.removeAvatar')}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
-              {/* Upload overlay */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="absolute inset-0 rounded-2xl bg-black/50 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
-              >
-                {uploading ? (
-                  <Loader2 className="w-5 h-5 text-white animate-spin" />
-                ) : (
-                  <Camera className="w-5 h-5 text-white" />
-                )}
-              </button>
-              {/* Remove button */}
-              {user.avatar && !uploading && (
-                <button
-                  onClick={handleAvatarRemove}
-                  className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity hover:bg-red-400"
-                  title={t('account.removeAvatar')}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              )}
+
+              <div className="text-center sm:text-left flex-1">
+                <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
+                  <Sparkles className="w-5 h-5 text-purple-400" />
+                  <span className="text-xs font-semibold uppercase tracking-widest text-purple-400/80">{t('account.myAccount')}</span>
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-black leading-tight text-white">
+                  {t('account.welcomeBack')} <span className="bg-gradient-to-r from-purple-400 to-cyan-400 bg-clip-text text-transparent">{user.name}</span>!
+                </h1>
+                <p className="text-gray-400 mt-2 text-sm sm:text-base leading-relaxed break-words max-w-lg mx-auto sm:mx-0">
+                  {user.email}
+                </p>
+              </div>
             </div>
-            <div className="text-center sm:text-left w-full">
-              <h1 className="text-2xl sm:text-3xl font-black leading-tight text-white">{t('account.myAccount')}</h1>
-              <p className="text-gray-400 mt-2 text-sm sm:text-base leading-relaxed break-words max-w-md mx-auto sm:mx-0">
-                {t('account.welcomeBack')} <span className="text-purple-400 font-semibold">{user.name}</span>!
-              </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* ===== Session Info Bar ===== */}
+        <div className="scroll-fade -mt-2 mb-8" data-delay="50">
+          <div className="relative overflow-hidden rounded-2xl bg-dark-800/60 border border-dark-600/40 backdrop-blur-sm p-4 sm:p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/15 flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-300 flex items-center gap-2">
+                    {t('account.session')}: <span className="font-bold text-white text-base">{formatRemainingTime(sessionInfo?.remainingSeconds ?? null)}</span>
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {t('account.sessionExpiresAt')} {sessionInfo?.expiresAt ? new Date(sessionInfo.expiresAt).toLocaleString() : t('account.sessionUnknown')}
+                  </p>
+                </div>
+              </div>
+              {/* Session progress bar */}
+              <div className="w-full sm:w-48">
+                <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: `${sessionProgress}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-5 mb-10">
+        {/* ===== Stats Grid - Enhanced ===== */}
+        <div className="grid grid-cols-3 gap-3 sm:gap-5 mb-10">
           {[
-            { icon: ShoppingBag, label: t('account.totalOrders'), value: stats.totalOrders, color: 'text-purple-400', bg: 'bg-purple-500/20' },
-            { icon: CheckCircle, label: t('account.completed'), value: stats.completed, color: 'text-emerald-400', bg: 'bg-emerald-500/20' },
-            { icon: Clock, label: t('account.pending'), value: stats.pending, color: 'text-amber-400', bg: 'bg-amber-500/20' },
+            { icon: ShoppingBag, label: t('account.totalOrders'), value: stats.totalOrders, gradient: 'from-purple-500 to-violet-600', bg: 'bg-purple-500/15', ring: 'ring-purple-500/20' },
+            { icon: CheckCircle, label: t('account.completed'), value: stats.completed, gradient: 'from-emerald-500 to-teal-600', bg: 'bg-emerald-500/15', ring: 'ring-emerald-500/20' },
+            { icon: Clock, label: t('account.pending'), value: stats.pending, gradient: 'from-amber-500 to-orange-600', bg: 'bg-amber-500/15', ring: 'ring-amber-500/20' },
           ].map((stat, i) => {
             const Icon = stat.icon;
             return (
-              <div key={stat.label} className="scroll-fade game-card p-2.5 sm:p-6" data-delay={`${i * 100}`}>
-                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-2 sm:space-x-4 text-center sm:text-left">
-                  <div className={`w-10 h-10 sm:w-14 sm:h-14 ${stat.bg} rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0`}>
-                    <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${stat.color}`} />
+              <div
+                key={stat.label}
+                className="scroll-fade group relative overflow-hidden rounded-2xl bg-dark-800/70 border border-dark-600/40 p-3.5 sm:p-6 hover:border-dark-500/60 transition-all duration-500"
+                data-delay={`${i * 80}`}
+              >
+                {/* Subtle gradient overlay on hover */}
+                <div className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-0 group-hover:opacity-[0.03] transition-opacity duration-500`} />
+                <div className="relative flex flex-col items-center sm:items-start gap-2.5">
+                  <div className={`w-11 h-11 sm:w-14 sm:h-14 ${stat.bg} ring-1 ${stat.ring} rounded-xl sm:rounded-2xl flex items-center justify-center`}>
+                    <Icon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: stat.gradient.includes('purple') ? '#a78bfa' : stat.gradient.includes('emerald') ? '#34d399' : '#fbbf24' }} />
                   </div>
-                  <div>
-                    <p className="text-lg sm:text-3xl font-black text-white leading-none">{stat.value}</p>
-                    <p className="text-[11px] sm:text-sm text-gray-500 font-medium leading-snug break-words">{stat.label}</p>
+                  <div className="text-center sm:text-left">
+                    <p className="text-2xl sm:text-4xl font-black text-white leading-none tracking-tight">{stat.value}</p>
+                    <p className="text-[10px] sm:text-sm text-gray-500 font-medium mt-1 leading-snug break-words">{stat.label}</p>
                   </div>
                 </div>
               </div>
@@ -382,226 +446,275 @@ export default function AccountPage() {
           })}
         </div>
 
-        <div className="scroll-fade game-card p-4 mb-6 sm:mb-8" data-delay="120">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <p className="text-sm text-gray-300 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-cyan-400" />
-              {t('account.session')}: <span className="font-semibold text-white">{formatRemainingTime(sessionInfo?.remainingSeconds ?? null)}</span>
-            </p>
-            <p className="text-xs text-gray-500">
-              {t('account.sessionExpiresAt')} {sessionInfo?.expiresAt ? new Date(sessionInfo.expiresAt).toLocaleString() : t('account.sessionUnknown')}
-            </p>
-          </div>
+        {/* ===== Quick Action Cards ===== */}
+        <div className="scroll-fade mb-3" data-delay="100">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-4 px-1">{t('account.myOrdersKeys').split('&')[0].trim()}</h2>
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <Link href="/account/orders" className="scroll-fade game-card p-6 group" data-delay="100">
-            <div className="flex items-center space-x-5">
-              <div className="w-14 h-14 bg-purple-500/20 rounded-2xl flex items-center justify-center group-hover:bg-purple-500/30 group-hover:shadow-glow-sm transition-all">
-                <Key className="w-7 h-7 text-purple-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">{t('account.myOrdersKeys')}</h3>
-                <p className="text-sm text-gray-500">{t('account.viewPurchasedItems')}</p>
-              </div>
-            </div>
-          </Link>
-
-          <Link href="/account/wishlist" className="scroll-fade game-card p-6 group" data-delay="150">
-            <div className="flex items-center space-x-5">
-              <div className="w-14 h-14 bg-pink-500/20 rounded-2xl flex items-center justify-center group-hover:bg-pink-500/30 group-hover:shadow-glow-sm transition-all">
-                <Heart className="w-7 h-7 text-pink-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">{t('account.wishlist')}</h3>
-                <p className="text-sm text-gray-500">{t('account.viewWishlist')}</p>
-              </div>
-            </div>
-          </Link>
-
-          <div className="scroll-fade game-card p-6" data-delay="200">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center space-x-5">
-                <div className="w-14 h-14 bg-gray-500/20 rounded-2xl flex items-center justify-center">
-                  <User className="w-7 h-7 text-gray-400" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 mb-10">
+          {/* Orders & Keys Card */}
+          <Link href="/account/orders" className="scroll-fade group relative overflow-hidden rounded-2xl bg-dark-800/70 border border-dark-600/40 hover:border-purple-500/40 p-5 sm:p-6 transition-all duration-500 hover:-translate-y-1" data-delay="100">
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative flex items-center justify-between">
+              <div className="flex items-center gap-4 sm:gap-5">
+                <div className="w-14 h-14 bg-gradient-to-br from-purple-500/20 to-violet-600/20 ring-1 ring-purple-500/20 rounded-2xl flex items-center justify-center group-hover:ring-purple-500/40 group-hover:shadow-[0_0_20px_rgba(147,51,234,0.15)] transition-all duration-500">
+                  <Key className="w-7 h-7 text-purple-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">{t('account.profileDetails')}</h3>
-                  {!editingProfile ? (
-                    <div className="text-sm text-gray-500 space-y-1 mt-1">
-                      <p>{user.name}</p>
-                      <p>{user.email}</p>
-                      {user.phone && <p className="flex items-center gap-1"><Phone className="w-3 h-3" /> {user.phone}</p>}
-                      <p>{t('account.memberSince')} {new Date(user.createdAt).toLocaleDateString()}</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 mt-3">
-                      <div>
-                        <label className="text-xs text-gray-400 block mb-1">{t('account.name')}</label>
-                        <input
-                          type="text"
-                          value={profileForm.name}
-                          onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                          className="input-field text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-400 block mb-1">{t('account.phone')}</label>
-                        <input
-                          type="text"
-                          value={profileForm.phone}
-                          onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                          placeholder="09xxxxxxxxx"
-                          className="input-field text-sm"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={handleSaveProfile} disabled={savingProfile} className="btn-electric text-xs flex items-center gap-1.5">
-                          {savingProfile ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                          {t('account.save')}
-                        </button>
-                        <button onClick={() => setEditingProfile(false)} className="btn-primary text-xs flex items-center gap-1.5">
-                          <X className="w-3 h-3" /> {t('account.cancel')}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <h3 className="text-lg font-bold text-white group-hover:text-purple-200 transition-colors">{t('account.myOrdersKeys')}</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{t('account.viewPurchasedItems')}</p>
                 </div>
               </div>
+              <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300 shrink-0" />
+            </div>
+          </Link>
+
+          {/* Wishlist Card */}
+          <Link href="/account/wishlist" className="scroll-fade group relative overflow-hidden rounded-2xl bg-dark-800/70 border border-dark-600/40 hover:border-pink-500/40 p-5 sm:p-6 transition-all duration-500 hover:-translate-y-1" data-delay="150">
+            <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative flex items-center justify-between">
+              <div className="flex items-center gap-4 sm:gap-5">
+                <div className="w-14 h-14 bg-gradient-to-br from-pink-500/20 to-rose-600/20 ring-1 ring-pink-500/20 rounded-2xl flex items-center justify-center group-hover:ring-pink-500/40 group-hover:shadow-[0_0_20px_rgba(236,72,153,0.15)] transition-all duration-500">
+                  <Heart className="w-7 h-7 text-pink-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white group-hover:text-pink-200 transition-colors">{t('account.wishlist')}</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{t('account.viewWishlist')}</p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-pink-400 group-hover:translate-x-1 transition-all duration-300 shrink-0" />
+            </div>
+          </Link>
+        </div>
+
+        {/* ===== Profile Section - Enhanced ===== */}
+        <div className="scroll-fade mb-3" data-delay="180">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-4 px-1">{t('account.profileDetails')}</h2>
+        </div>
+
+        <div className="scroll-fade relative overflow-hidden rounded-2xl bg-dark-800/70 border border-dark-600/40 mb-10" data-delay="200">
+          {/* Profile header banner */}
+          <div className="h-1 bg-gradient-to-r from-purple-500 via-cyan-500 to-purple-500" />
+
+          <div className="p-5 sm:p-7">
+            <div className="flex items-start justify-between mb-5">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <User className="w-5 h-5 text-gray-400" />
+                {t('account.profileDetails')}
+              </h3>
               {!editingProfile && (
-                <button onClick={startEditProfile} className="p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all" title={t('account.editProfile')}>
-                  <Edit3 className="w-4 h-4" />
+                <button
+                  onClick={startEditProfile}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-400 hover:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 rounded-lg transition-all duration-200"
+                  title={t('account.editProfile')}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  {t('account.editProfile')}
                 </button>
               )}
             </div>
+
+            {!editingProfile ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                {[
+                  { icon: User, label: t('account.name'), value: user.name },
+                  { icon: Mail, label: 'Email', value: user.email },
+                  { icon: Phone, label: t('account.phone'), value: user.phone || '—' },
+                  { icon: CalendarDays, label: t('account.memberSince'), value: new Date(user.createdAt).toLocaleDateString() },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={item.label} className="flex items-center gap-3 p-3 rounded-xl bg-dark-900/50 border border-dark-700/50">
+                      <div className="w-9 h-9 rounded-lg bg-dark-700/80 flex items-center justify-center shrink-0">
+                        <Icon className="w-4 h-4 text-gray-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">{item.label}</p>
+                        <p className="text-sm text-white font-medium truncate">{item.value}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-4 max-w-md">
+                <div>
+                  <label className="text-xs text-gray-400 font-medium block mb-1.5">{t('account.name')}</label>
+                  <input
+                    type="text"
+                    value={profileForm.name}
+                    onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                    className="input-field text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 font-medium block mb-1.5">{t('account.phone')}</label>
+                  <input
+                    type="text"
+                    value={profileForm.phone}
+                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                    placeholder="09xxxxxxxxx"
+                    className="input-field text-sm"
+                  />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button onClick={handleSaveProfile} disabled={savingProfile} className="btn-electric text-sm flex items-center gap-2 px-5 py-2.5">
+                    {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {t('account.save')}
+                  </button>
+                  <button onClick={() => setEditingProfile(false)} className="btn-secondary text-sm flex items-center gap-2 px-5 py-2.5">
+                    <X className="w-4 h-4" /> {t('account.cancel')}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Change Password Section */}
-        <div className="scroll-fade game-card p-6 mt-5" data-delay="300">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-5">
-              <div className="w-14 h-14 bg-amber-500/20 rounded-2xl flex items-center justify-center">
-                <Lock className="w-7 h-7 text-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">{t('account.changePassword')}</h3>
-                <p className="text-sm text-gray-500">{t('account.updateYourPassword')}</p>
-              </div>
-            </div>
-            {!showPasswordForm && (
-              <button onClick={() => setShowPasswordForm(true)} className="btn-primary text-xs flex items-center gap-1.5">
-                <Lock className="w-3 h-3" /> {t('account.change')}
-              </button>
-            )}
-          </div>
-          {showPasswordForm && (
-            <div className="mt-4 space-y-3 pt-4 border-t border-dark-700">
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">{t('account.currentPassword')}</label>
-                <input
-                  type="password"
-                  value={passwordForm.currentPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                  className="input-field text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">{t('account.newPassword')}</label>
-                <input
-                  type="password"
-                  value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                  placeholder={t('account.minChars')}
-                  className="input-field text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">{t('account.confirmNewPassword')}</label>
-                <input
-                  type="password"
-                  value={passwordForm.confirmPassword}
-                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                  className="input-field text-sm"
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button onClick={handleChangePassword} disabled={savingPassword} className="btn-electric text-xs flex items-center gap-1.5">
-                  {savingPassword ? <Loader2 className="w-3 h-3 animate-spin" /> : <Lock className="w-3 h-3" />}
-                  {t('account.updatePassword')}
-                </button>
-                <button onClick={() => { setShowPasswordForm(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} className="btn-primary text-xs flex items-center gap-1.5">
-                  <X className="w-3 h-3" /> {t('account.cancel')}
-                </button>
-              </div>
-            </div>
-          )}
+        {/* ===== Security Section ===== */}
+        <div className="scroll-fade mb-3" data-delay="250">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-4 px-1">Security</h2>
         </div>
 
-        {/* Delete Account Section */}
-        <div className="scroll-fade game-card p-6 mt-5 border border-red-500/10" data-delay="400">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-5">
-              <div className="w-14 h-14 bg-red-500/20 rounded-2xl flex items-center justify-center">
-                <Trash2 className="w-7 h-7 text-red-400" />
+        <div className="space-y-4 mb-10">
+          {/* Change Password Card */}
+          <div className="scroll-fade relative overflow-hidden rounded-2xl bg-dark-800/70 border border-dark-600/40" data-delay="300">
+            <div className="p-5 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4 sm:gap-5">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-amber-500/20 to-orange-600/20 ring-1 ring-amber-500/20 rounded-2xl flex items-center justify-center">
+                    <Lock className="w-6 h-6 sm:w-7 sm:h-7 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-white">{t('account.changePassword')}</h3>
+                    <p className="text-sm text-gray-500 mt-0.5">{t('account.updateYourPassword')}</p>
+                  </div>
+                </div>
+                {!showPasswordForm && (
+                  <button
+                    onClick={() => setShowPasswordForm(true)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-gradient-to-r from-amber-500/15 to-orange-500/15 text-amber-400 hover:from-amber-500/25 hover:to-orange-500/25 ring-1 ring-amber-500/20 hover:ring-amber-500/40 rounded-xl transition-all duration-300"
+                  >
+                    <Lock className="w-4 h-4" /> {t('account.change')}
+                  </button>
+                )}
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-white">{t('account.deleteAccount')}</h3>
-                <p className="text-sm text-gray-500">{t('account.permanentlyDeleteData')}</p>
-              </div>
+              {showPasswordForm && (
+                <div className="mt-5 space-y-4 pt-5 border-t border-dark-700/50 max-w-md">
+                  <div>
+                    <label className="text-xs text-gray-400 font-medium block mb-1.5">{t('account.currentPassword')}</label>
+                    <input
+                      type="password"
+                      value={passwordForm.currentPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                      className="input-field text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 font-medium block mb-1.5">{t('account.newPassword')}</label>
+                    <input
+                      type="password"
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                      placeholder={t('account.minChars')}
+                      className="input-field text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 font-medium block mb-1.5">{t('account.confirmNewPassword')}</label>
+                    <input
+                      type="password"
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                      className="input-field text-sm"
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={handleChangePassword} disabled={savingPassword} className="btn-electric text-sm flex items-center gap-2 px-5 py-2.5">
+                      {savingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                      {t('account.updatePassword')}
+                    </button>
+                    <button onClick={() => { setShowPasswordForm(false); setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); }} className="btn-secondary text-sm flex items-center gap-2 px-5 py-2.5">
+                      <X className="w-4 h-4" /> {t('account.cancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            {!showDeleteConfirm && (
-              <button onClick={() => setShowDeleteConfirm(true)} className="text-xs px-3 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-all flex items-center gap-1.5">
-                <Trash2 className="w-3 h-3" /> {t('account.delete')}
-              </button>
-            )}
           </div>
-          {showDeleteConfirm && (
-            <div className="mt-4 space-y-3 pt-4 border-t border-red-500/10">
-              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                <p className="text-sm text-red-300">
-                  <AlertCircle className="w-4 h-4 inline mr-1.5" />
-                  {t('account.irreversibleWarning')}
-                </p>
+
+          {/* Delete Account Card */}
+          <div className="scroll-fade relative overflow-hidden rounded-2xl bg-dark-800/70 border border-red-500/10 hover:border-red-500/20 transition-colors duration-300" data-delay="400">
+            {/* Subtle red accent */}
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/30 to-transparent" />
+
+            <div className="p-5 sm:p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4 sm:gap-5">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-red-500/15 to-rose-600/15 ring-1 ring-red-500/15 rounded-2xl flex items-center justify-center">
+                    <Trash2 className="w-6 h-6 sm:w-7 sm:h-7 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-white">{t('account.deleteAccount')}</h3>
+                    <p className="text-sm text-gray-500 mt-0.5">{t('account.permanentlyDeleteData')}</p>
+                  </div>
+                </div>
+                {!showDeleteConfirm && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 ring-1 ring-red-500/15 hover:ring-red-500/30 rounded-xl transition-all duration-300"
+                  >
+                    <Trash2 className="w-4 h-4" /> {t('account.delete')}
+                  </button>
+                )}
               </div>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">{t('account.enterPassword')}</label>
-                <input
-                  type="password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  className="input-field text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">{t('account.typeDeleteLabel')}</label>
-                <input
-                  type="text"
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  placeholder="DELETE"
-                  className="input-field text-sm"
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={handleDeleteAccount}
-                  disabled={deleting || deleteConfirmText !== 'DELETE'}
-                  className="text-xs px-4 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-all flex items-center gap-1.5"
-                >
-                  {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                  {t('account.permanentlyDelete')}
-                </button>
-                <button
-                  onClick={() => { setShowDeleteConfirm(false); setDeletePassword(''); setDeleteConfirmText(''); }}
-                  className="btn-primary text-xs flex items-center gap-1.5"
-                >
-                  <X className="w-3 h-3" /> {t('account.cancel')}
-                </button>
-              </div>
+              {showDeleteConfirm && (
+                <div className="mt-5 space-y-4 pt-5 border-t border-red-500/10 max-w-md">
+                  <div className="bg-red-500/10 border border-red-500/15 rounded-xl p-4">
+                    <p className="text-sm text-red-300 flex items-start gap-2">
+                      <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                      <span>{t('account.irreversibleWarning')}</span>
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 font-medium block mb-1.5">{t('account.enterPassword')}</label>
+                    <input
+                      type="password"
+                      value={deletePassword}
+                      onChange={(e) => setDeletePassword(e.target.value)}
+                      className="input-field text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 font-medium block mb-1.5">{t('account.typeDeleteLabel')}</label>
+                    <input
+                      type="text"
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      placeholder="DELETE"
+                      className="input-field text-sm"
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={handleDeleteAccount}
+                      disabled={deleting || deleteConfirmText !== 'DELETE'}
+                      className="flex items-center gap-2 text-sm font-semibold px-5 py-2.5 bg-red-500 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-200 active:scale-95 shadow-lg shadow-red-500/20"
+                    >
+                      {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      {t('account.permanentlyDelete')}
+                    </button>
+                    <button
+                      onClick={() => { setShowDeleteConfirm(false); setDeletePassword(''); setDeleteConfirmText(''); }}
+                      className="btn-secondary text-sm flex items-center gap-2 px-5 py-2.5"
+                    >
+                      <X className="w-4 h-4" /> {t('account.cancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

@@ -279,6 +279,58 @@ export async function answerCallbackQuery(callbackQueryId: string, text: string)
 }
 
 /**
+ * Send support ticket notification to Telegram channel
+ */
+export async function sendSupportTicketNotification(params: {
+  ticketNumber: string;
+  subject: string;
+  category: string;
+  userName: string;
+  message: string;
+}): Promise<boolean> {
+  if (!BOT_TOKEN || !CHANNEL_ID) {
+    log.warn('Telegram not configured — skipping support ticket notification');
+    return false;
+  }
+
+  try {
+    const lines = [
+      `🎫 <b>New Support Ticket: ${params.ticketNumber}</b>`,
+      ``,
+      `👤 ${params.userName}`,
+      `📂 Category: ${params.category}`,
+      `📝 ${params.subject}`,
+      ``,
+      `💬 <i>${params.message.slice(0, 300)}${params.message.length > 300 ? '...' : ''}</i>`,
+    ];
+
+    const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHANNEL_ID,
+        text: lines.join('\n'),
+        parse_mode: 'HTML',
+      }),
+    });
+
+    const data = await res.json();
+    if (!data.ok) {
+      log.error('Telegram support ticket notification failed', { error: data.description });
+      return false;
+    }
+
+    log.info('Support ticket notification sent to Telegram', { ticketNumber: params.ticketNumber });
+    return true;
+  } catch (error) {
+    log.error('Telegram support ticket notification error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+/**
  * Send a document (file) to Telegram channel
  */
 export async function sendDocumentToTelegram(

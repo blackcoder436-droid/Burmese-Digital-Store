@@ -26,6 +26,15 @@ export interface IProductDocument extends Document {
   featured: boolean;
   active: boolean;
   purchaseDisabled: boolean;
+  allowedPaymentGateways: mongoose.Types.ObjectId[];
+  // Product type: single, bundle, or subscription
+  productType: 'single' | 'bundle' | 'subscription';
+  // Bundle fields
+  bundleItems?: { product: mongoose.Types.ObjectId; quantity: number }[];
+  bundleDiscount?: number; // percentage discount for bundle
+  // Subscription fields
+  subscriptionDuration?: number; // in days (30 = monthly, 365 = yearly)
+  subscriptionPrice?: number; // recurring price
   averageRating: number;
   reviewCount: number;
   deletedAt?: Date;
@@ -116,6 +125,37 @@ const ProductSchema: Schema = new Schema(
     purchaseDisabled: {
       type: Boolean,
       default: false,
+    },
+    // Per-product payment gateway selection
+    allowedPaymentGateways: [{
+      type: Schema.Types.ObjectId,
+      ref: 'PaymentGateway',
+    }],
+    // Product type
+    productType: {
+      type: String,
+      enum: ['single', 'bundle', 'subscription'],
+      default: 'single',
+    },
+    // Bundle: references to other products
+    bundleItems: [{
+      product: { type: Schema.Types.ObjectId, ref: 'Product' },
+      quantity: { type: Number, default: 1, min: 1 },
+    }],
+    bundleDiscount: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    // Subscription: duration and recurring price
+    subscriptionDuration: {
+      type: Number, // days
+      default: null,
+    },
+    subscriptionPrice: {
+      type: Number, // recurring price
+      default: null,
     },
     // Soft-delete fields
     deletedAt: {

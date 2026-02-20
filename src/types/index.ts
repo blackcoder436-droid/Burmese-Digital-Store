@@ -26,6 +26,13 @@ export interface IProduct {
   image?: string;
   featured: boolean;
   active: boolean;
+  purchaseDisabled?: boolean;
+  allowedPaymentGateways?: string[];
+  productType?: 'single' | 'bundle' | 'subscription';
+  bundleItems?: { product: string | IProduct; quantity: number }[];
+  bundleDiscount?: number;
+  subscriptionDuration?: number;
+  subscriptionPrice?: number;
   averageRating: number;
   reviewCount: number;
   createdAt: Date;
@@ -44,7 +51,7 @@ export interface IProductDetail {
 }
 
 export type OrderStatus = 'pending' | 'verifying' | 'completed' | 'rejected' | 'refunded';
-export type PaymentMethod = 'kpay' | 'wavemoney' | 'uabpay' | 'ayapay';
+export type PaymentMethod = string;
 export type FraudFlag = 'duplicate_txid' | 'duplicate_screenshot' | 'amount_time_suspicious' | 'first_time_user' | 'high_amount';
 
 export interface IReview {
@@ -130,6 +137,24 @@ export interface OCRResult {
   amount: string | null;
   confidence: number;
   rawText: string;
+}
+
+// ==========================================
+// Payment Gateway Types
+// ==========================================
+
+export interface IPaymentGateway {
+  _id: string;
+  name: string;
+  code: string;
+  type: 'manual' | 'online';
+  category: 'myanmar' | 'crypto';
+  accountName: string;
+  accountNumber: string;
+  qrImage?: string;
+  instructions?: string;
+  enabled: boolean;
+  displayOrder: number;
 }
 
 // ==========================================
@@ -271,4 +296,51 @@ export interface IPagination {
   limit: number;
   total: number;
   pages: number;
+}
+
+// ==========================================
+// Support Ticket Types
+// ==========================================
+
+export interface ISupportTicket {
+  _id: string;
+  ticketNumber: string;
+  user: string | IUser;
+  subject: string;
+  category: 'order' | 'payment' | 'vpn' | 'account' | 'other';
+  status: 'open' | 'in-progress' | 'resolved' | 'closed';
+  priority: 'low' | 'medium' | 'high';
+  messages: ITicketMessage[];
+  relatedOrder?: string | IOrder;
+  assignedTo?: string | IUser;
+  closedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ITicketMessage {
+  _id: string;
+  sender: string | IUser;
+  senderRole: 'user' | 'admin';
+  content: string;
+  createdAt: Date;
+}
+
+// ==========================================
+// Subscription Types
+// ==========================================
+
+export interface ISubscription {
+  _id: string;
+  user: string | IUser;
+  product: string | IProduct;
+  status: 'active' | 'expired' | 'cancelled';
+  startDate: Date;
+  endDate: Date;
+  autoRenew: boolean;
+  lastRenewalDate?: Date;
+  nextRenewalDate?: Date;
+  renewalCount: number;
+  createdAt: Date;
+  updatedAt: Date;
 }

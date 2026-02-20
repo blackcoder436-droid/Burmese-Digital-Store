@@ -119,10 +119,7 @@ const OrderSchema: Schema = new Schema(
     paymentMethod: {
       type: String,
       required: [true, 'Payment method is required'],
-      enum: {
-        values: ['kpay', 'wavemoney', 'uabpay', 'ayapay'],
-        message: '{VALUE} is not a valid payment method',
-      },
+      trim: true,
     },
     paymentScreenshot: {
       type: String,

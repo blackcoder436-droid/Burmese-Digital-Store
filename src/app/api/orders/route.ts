@@ -13,6 +13,7 @@ const log = createLogger({ route: '/api/orders' });
 import { extractPaymentInfo } from '@/lib/ocr';
 import { getSiteSettings } from '@/models/SiteSettings';
 import { validateCoupon, recordCouponUsage } from '@/models/Coupon';
+import PaymentGateway from '@/models/PaymentGateway';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import { saveToQuarantine } from '@/lib/quarantine';
 import { sendPaymentScreenshot, buildScreenshotCaption, sendOrderWithApproveButtons } from '@/lib/telegram';
@@ -152,11 +153,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate payment method
-    const validMethods = ['kpay', 'wavemoney', 'uabpay', 'ayapay'];
-    if (!validMethods.includes(paymentMethod)) {
+    // Validate payment method against product's allowed gateways
+    const productDoc = await Product.findOne({ _id: productId, active: true }).populate('allowedPaymentGateways');
+    if (!productDoc) {
       return NextResponse.json(
-        { success: false, error: 'Invalid payment method' },
+        { success: false, error: 'Product not found' },
+        { status: 404 }
+      );
+    }
+
+    // Block purchase if admin disabled purchasing
+    if (productDoc.purchaseDisabled) {
+      return NextResponse.json(
+        { success: false, error: 'This product is currently not available for purchase' },
+        { status: 403 }
+      );
+    }
+
+    // Determine valid payment methods for this product
+    // Myanmar gateways are always valid; crypto gateways only if product explicitly allows them
+    const allGateways = await PaymentGateway.find({ enabled: true }).select('code category').lean();
+    const myanmarMethods = allGateways.filter((g) => g.category !== 'crypto').map((g) => g.code);
+    let cryptoMethods: string[] = [];
+    if (productDoc.allowedPaymentGateways && productDoc.allowedPaymentGateways.length > 0) {
+      cryptoMethods = (productDoc.allowedPaymentGateways as any[])
+        .filter((g: any) => (g.category || '') === 'crypto')
+        .map((g: any) => g.code || g);
+    }
+    const validMethods = [...myanmarMethods, ...cryptoMethods];
+    if (validMethods.length > 0 && !validMethods.includes(paymentMethod)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid payment method for this product' },
         { status: 400 }
       );
     }
@@ -182,22 +209,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find product
-    const product = await Product.findOne({ _id: productId, active: true });
-    if (!product) {
-      return NextResponse.json(
-        { success: false, error: 'Product not found' },
-        { status: 404 }
-      );
-    }
-
-    // Block purchase if admin disabled purchasing
-    if (product.purchaseDisabled) {
-      return NextResponse.json(
-        { success: false, error: 'This product is currently not available for purchase' },
-        { status: 403 }
-      );
-    }
+    // Find product (already fetched above)
+    const product = productDoc;
 
     // Check stock
     const availableStock = product.details.filter((d) => !d.sold).length;

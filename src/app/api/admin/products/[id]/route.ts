@@ -29,7 +29,7 @@ export async function PUT(
     await connectDB();
 
     const body = await request.json();
-    const { name, category, description, price, image, featured, active, purchaseDisabled, details } = body;
+    const { name, category, description, price, image, featured, active, purchaseDisabled, details, allowedPaymentGateways } = body;
 
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = sanitizeString(name);
@@ -40,6 +40,7 @@ export async function PUT(
     if (featured !== undefined) updateData.featured = featured;
     if (active !== undefined) updateData.active = active;
     if (purchaseDisabled !== undefined) updateData.purchaseDisabled = purchaseDisabled;
+    if (allowedPaymentGateways !== undefined) updateData.allowedPaymentGateways = Array.isArray(allowedPaymentGateways) ? allowedPaymentGateways : [];
     if (details !== undefined) {
       updateData.details = details;
       updateData.stock = details.length;

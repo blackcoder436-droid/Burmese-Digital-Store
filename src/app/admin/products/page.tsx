@@ -13,6 +13,7 @@ import {
   Upload,
   ShieldOff,
   ShieldCheck,
+  CreditCard,
 } from 'lucide-react';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
@@ -29,7 +30,16 @@ interface Product {
   featured: boolean;
   active: boolean;
   purchaseDisabled: boolean;
+  allowedPaymentGateways: string[];
   details: any[];
+}
+
+interface PaymentGateway {
+  _id: string;
+  name: string;
+  code: string;
+  category: string;
+  enabled: boolean;
 }
 
 const defaultProduct = {
@@ -40,6 +50,7 @@ const defaultProduct = {
   image: '',
   featured: false,
   purchaseDisabled: false,
+  allowedPaymentGateways: [] as string[],
   details: [] as { serialKey: string; loginEmail: string; loginPassword: string; additionalInfo: string }[],
 };
 
@@ -55,9 +66,11 @@ export default function AdminProductsPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [importingCsv, setImportingCsv] = useState(false);
   const [bulkToggling, setBulkToggling] = useState(false);
+  const [allGateways, setAllGateways] = useState<PaymentGateway[]>([]);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     fetchProducts();
+    fetchGateways();
   }, []);
 
   async function fetchProducts() {
@@ -70,6 +83,14 @@ export default function AdminProductsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function fetchGateways() {
+    try {
+      const res = await fetch('/api/admin/payment-gateways');
+      const data = await res.json();
+      if (data.success) setAllGateways(data.data.gateways);
+    } catch { /* ignore */ }
   }
 
   async function handleSave() {
@@ -104,7 +125,7 @@ export default function AdminProductsPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, details }),
+        body: JSON.stringify({ ...form, details, allowedPaymentGateways: form.allowedPaymentGateways }),
       });
 
       const data = await res.json();
@@ -218,6 +239,7 @@ export default function AdminProductsPage() {
       image: product.image || '',
       featured: product.featured,
       purchaseDisabled: product.purchaseDisabled || false,
+      allowedPaymentGateways: product.allowedPaymentGateways || [],
       details: product.details || [],
     });
     setEditing(product._id);
@@ -478,6 +500,51 @@ export default function AdminProductsPage() {
                   </label>
                 </div>
               </div>
+
+              {/* Crypto Payment Gateway Selection (Myanmar pay always accepted) */}
+              {allGateways.filter(g => g.enabled && g.category === 'crypto').length > 0 && (
+                <div>
+                  <label className="text-sm text-gray-300 block mb-2 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-purple-400" />
+                    {t('admin.productsPage.cryptoGateways')}
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">{t('admin.productsPage.cryptoGatewaysHint')}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {allGateways.filter(g => g.enabled && g.category === 'crypto').map((gw) => {
+                      const isSelected = form.allowedPaymentGateways.includes(gw._id);
+                      return (
+                        <button
+                          key={gw._id}
+                          type="button"
+                          onClick={() => {
+                            setForm((prev) => ({
+                              ...prev,
+                              allowedPaymentGateways: isSelected
+                                ? prev.allowedPaymentGateways.filter((id) => id !== gw._id)
+                                : [...prev.allowedPaymentGateways, gw._id],
+                            }));
+                          }}
+                          className={`px-3 py-2 rounded-xl text-sm font-semibold border-2 transition-all duration-200 text-left ${
+                            isSelected
+                              ? 'bg-purple-500/10 border-purple-500 text-purple-400'
+                              : 'bg-dark-900 border-dark-600 text-gray-400 hover:border-purple-500/50'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className={`w-4 h-4 rounded border-2 flex items-center justify-center text-xs ${
+                              isSelected ? 'bg-purple-500 border-purple-500 text-white' : 'border-gray-500'
+                            }`}>
+                              {isSelected ? '✓' : ''}
+                            </span>
+                            {gw.name}
+                          </span>
+                          <span className="text-xs text-gray-500 ml-6">{gw.code}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="text-sm text-gray-300 block mb-2">

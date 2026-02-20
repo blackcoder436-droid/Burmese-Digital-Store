@@ -38,11 +38,12 @@ export default function CartPage() {
   const containerRef = useScrollFade();
 
   const [showCheckout, setShowCheckout] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('kpay');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentFile, setPaymentFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [paymentAccounts, setPaymentAccounts] = useState<{ method: string; accountName: string; accountNumber: string }[]>([]);
+  const [availableGateways, setAvailableGateways] = useState<{ _id: string; name: string; code: string; accountName: string; accountNumber: string; qrImage?: string }[]>([]);
   const [couponCode, setCouponCode] = useState('');
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [appliedCoupon, setAppliedCoupon] = useState('');
@@ -57,6 +58,18 @@ export default function CartPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.success) setPaymentAccounts(data.data.accounts);
+      })
+      .catch(() => {});
+    // Fetch all enabled payment gateways (cart only shows Myanmar pay, crypto is per-product only)
+    fetch('/api/payment-gateways')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          // Only show Myanmar gateways for cart checkout (crypto is product-specific)
+          const myanmarGateways = data.data.gateways.filter((g: any) => g.category !== 'crypto');
+          setAvailableGateways(myanmarGateways);
+          if (myanmarGateways.length > 0) setPaymentMethod(myanmarGateways[0].code);
+        }
       })
       .catch(() => {});
   }, []);
@@ -359,22 +372,17 @@ export default function CartPage() {
             <div>
               <label className="input-label">{t('order.paymentMethod')}</label>
               <div className="grid grid-cols-2 gap-3">
-                {[
-                  { value: 'kpay', label: 'KBZ Pay' },
-                  { value: 'wave', label: 'WaveMoney' },
-                  { value: 'uabpay', label: 'UAB Pay' },
-                  { value: 'ayapay', label: 'AYA Pay' },
-                ].map((m) => (
+                {availableGateways.map((gw) => (
                   <button
-                    key={m.value}
-                    onClick={() => setPaymentMethod(m.value)}
+                    key={gw.code}
+                    onClick={() => setPaymentMethod(gw.code)}
                     className={`px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all duration-200 ${
-                      paymentMethod === m.value
+                      paymentMethod === gw.code
                         ? 'bg-purple-500/10 border-purple-500 text-purple-400 shadow-glow-sm'
                         : 'bg-dark-900 border-dark-600 text-gray-400 hover:border-purple-500/50'
                     }`}
                   >
-                    {m.label}
+                    {gw.name}
                   </button>
                 ))}
               </div>
@@ -382,8 +390,10 @@ export default function CartPage() {
 
             {/* Payment Account Info */}
             {(() => {
-              const methodMap: Record<string, string> = { kpay: 'kpay', wave: 'wave', uabpay: 'uabpay', ayapay: 'ayapay' };
-              const selectedAccount = paymentAccounts.find((a) => a.method === methodMap[paymentMethod]);
+              const selectedGateway = availableGateways.find((g) => g.code === paymentMethod);
+              const selectedAccount = selectedGateway?.accountName || selectedGateway?.accountNumber
+                ? selectedGateway
+                : paymentAccounts.find((a) => a.method === paymentMethod);
               if (!selectedAccount) return null;
               return (
                 <div className="p-4 bg-purple-500/5 rounded-xl border border-purple-500/20">

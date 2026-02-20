@@ -19,6 +19,10 @@ import {
   Shield,
   Menu,
   X,
+  CreditCard,
+  ChevronDown,
+  MoreHorizontal,
+  MessageSquare,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 import AdminHeader from '@/components/layout/AdminHeader';
@@ -30,11 +34,13 @@ const allNavItems = [
   { href: '/admin/vpn-keys', labelKey: 'admin.nav.vpnKeys', icon: Key, group: 'main' },
   { href: '/admin/servers', labelKey: 'admin.nav.servers', icon: Server, group: 'main' },
   { href: '/admin/users', labelKey: 'admin.nav.users', icon: Users, group: 'main' },
+  { href: '/admin/payment-gateways', labelKey: 'admin.nav.paymentGateways', icon: CreditCard, group: 'tools' },
   { href: '/admin/analytics', labelKey: 'admin.nav.analytics', icon: BarChart3, group: 'tools' },
   { href: '/admin/performance', labelKey: 'performance', icon: Activity, group: 'tools', raw: true },
   { href: '/admin/rate-limits', labelKey: 'ratelimits', icon: Shield, group: 'tools', raw: true },
   { href: '/admin/activity', labelKey: 'admin.nav.activity', icon: History, group: 'tools' },
   { href: '/admin/coupons', labelKey: 'admin.nav.coupons', icon: Tag, group: 'tools' },
+  { href: '/admin/support', labelKey: 'admin.nav.support', icon: MessageSquare, group: 'tools' },
   { href: '/admin/export', labelKey: 'admin.nav.export', icon: Download, group: 'tools' },
   { href: '/admin/settings', labelKey: 'admin.nav.settings', icon: Settings, group: 'settings' },
 ];
@@ -49,14 +55,16 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [authorized, setAuthorized] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     checkAdmin();
   }, []);
 
   // Close drawer on route change
-  useEffect(() => { setDrawerOpen(false); }, [pathname]);
+  useEffect(() => { setDrawerOpen(false); setMoreOpen(false); }, [pathname]);
 
   // Close drawer on outside click
   useEffect(() => {
@@ -69,6 +77,18 @@ export default function AdminLayout({
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [drawerOpen]);
+
+  // Close more dropdown on outside click
+  useEffect(() => {
+    if (!moreOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [moreOpen]);
 
   // Lock body scroll when drawer is open on mobile
   useEffect(() => {
@@ -112,9 +132,6 @@ export default function AdminLayout({
     return t(item.labelKey);
   }
 
-  // Desktop: top bar shows first 7 primary items; "More" opens a dropdown for the rest
-  // Mobile: hamburger opens a full-screen drawer with all items grouped
-
   const primaryItems = allNavItems.filter((i) => i.group === 'main');
   const secondaryItems = allNavItems.filter((i) => i.group !== 'main');
   const isSecondaryActive = secondaryItems.some((i) => pathname === i.href);
@@ -142,7 +159,7 @@ export default function AdminLayout({
               </span>
             </div>
 
-            {/* Desktop: horizontal nav links */}
+            {/* Desktop: horizontal nav links (primary) + More dropdown (secondary) */}
             <div className="hidden lg:flex items-center gap-0.5 flex-1">
               {primaryItems.map((item) => {
                 const Icon = item.icon;
@@ -164,27 +181,51 @@ export default function AdminLayout({
               })}
 
               {/* Separator */}
-              <div className="w-px h-5 bg-purple-500/10 mx-1.5 shrink-0" />
+              <div className="w-px h-5 bg-purple-500/10 mx-1 shrink-0" />
 
-              {/* Secondary items inline on desktop */}
-              {secondaryItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                      isActive
-                        ? 'bg-purple-500/20 text-purple-300'
-                        : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5 shrink-0" />
-                    {getLabel(item)}
-                  </Link>
-                );
-              })}
+              {/* More dropdown for secondary items */}
+              <div className="relative" ref={moreRef}>
+                <button
+                  onClick={() => setMoreOpen(!moreOpen)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    isSecondaryActive
+                      ? 'bg-purple-500/20 text-purple-300'
+                      : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <MoreHorizontal className="w-4 h-4 shrink-0" />
+                  {isSecondaryActive
+                    ? getLabel(secondaryItems.find((i) => pathname === i.href) || secondaryItems[0])
+                    : t('admin.nav.more')}
+                  <ChevronDown className={`w-3 h-3 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {moreOpen && (
+                  <div className="absolute top-full left-0 mt-1.5 w-56 bg-[#0c0c20] border border-purple-500/15 rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50">
+                    <div className="p-1.5">
+                      {secondaryItems.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = pathname === item.href;
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                              isActive
+                                ? 'bg-purple-500/15 text-purple-300'
+                                : 'text-gray-400 hover:text-white hover:bg-white/[0.04]'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4 shrink-0" />
+                            {getLabel(item)}
+                            {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-400" />}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

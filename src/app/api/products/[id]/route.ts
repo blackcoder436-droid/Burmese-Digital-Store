@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import connectDB from '@/lib/mongodb';
 import Product from '@/models/Product';
+import '@/models/PaymentGateway'; // Ensure PaymentGateway model is registered for populate
 import { apiLimiter } from '@/lib/rateLimit';
 import { createLogger } from '@/lib/logger';
 
@@ -27,6 +28,7 @@ export async function GET(
 
     const product = await Product.findOne(query)
       .select('-details.loginPassword -details.serialKey') // Hide sensitive info
+      .populate('allowedPaymentGateways', 'name code type category accountName accountNumber qrImage instructions enabled')
       .lean();
 
     if (!product) {
