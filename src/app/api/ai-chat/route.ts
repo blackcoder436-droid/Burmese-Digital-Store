@@ -7,6 +7,36 @@ import { callAiApiStream, callAiApi, getCustomerSystemPrompt } from '@/lib/ai-ch
 import AiChatSession from '@/models/AiChatSession';
 import type { AiMessage } from '@/lib/ai-chat';
 
+function mapAiError(error: unknown): { status: number; message: string } {
+  const message = error instanceof Error ? error.message : String(error || 'Unknown error');
+
+  if (message.includes('AI_API_KEY is not configured')) {
+    return {
+      status: 503,
+      message: 'AI assistant is not configured. Please contact support.',
+    };
+  }
+
+  if (message.includes('AI API error (429)')) {
+    return {
+      status: 429,
+      message: 'AI service quota reached. Please try again in a minute.',
+    };
+  }
+
+  if (message.includes('AI API error (401)') || message.includes('AI API error (403)')) {
+    return {
+      status: 503,
+      message: 'AI assistant authentication failed. Please contact support.',
+    };
+  }
+
+  return {
+    status: 500,
+    message: 'AI assistant is temporarily unavailable. Please try again later.',
+  };
+}
+
 // Rate limit: 20 messages per minute per IP
 const chatLimiter = rateLimit({ windowMs: 60000, maxRequests: 20, prefix: 'ai-chat' });
 
@@ -189,12 +219,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[AI Chat] Error:', error);
+    const mapped = mapAiError(error);
     return NextResponse.json(
       {
         success: false,
-        error: 'AI assistant is temporarily unavailable. Please try again later.',
+        error: mapped.message,
       },
-      { status: 500 }
+      { status: mapped.status }
     );
   }
 }

@@ -19,6 +19,30 @@ function generateSessionId(): string {
   return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function getFriendlyErrorMessage(error: unknown, tr: (en: string, mm: string) => string): string {
+  const raw = error instanceof Error ? error.message : '';
+  const lower = raw.toLowerCase();
+
+  if (lower.includes('quota') || lower.includes('429')) {
+    return tr(
+      'AI usage limit reached. Please try again in a minute.',
+      'AI အသုံးပြုမှုကန့်သတ်ချက်ပြည့်သွားပါပြီ။ ၁ မိနစ်လောက်စောင့်ပြီး ထပ်ကြိုးစားပါ။'
+    );
+  }
+
+  if (lower.includes('not configured') || lower.includes('authentication failed')) {
+    return tr(
+      'AI assistant is not configured right now. Please contact support.',
+      'AI assistant ကိုလက်ရှိ မသတ်မှတ်ရသေးပါ။ Support ကိုဆက်သွယ်ပါ။'
+    );
+  }
+
+  return tr(
+    'Sorry, I encountered an error. Please try again.',
+    'တောင်းပန်ပါတယ်။ ပြဿနာတစ်ခုရှိပါတယ်။ ထပ်ကြိုးစားပါ။'
+  );
+}
+
 export default function AiChatWidget() {
   const { tr } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
@@ -183,16 +207,14 @@ export default function AiChatWidget() {
         }
       }
     } catch (error) {
+      const friendlyMessage = getFriendlyErrorMessage(error, tr);
       setMessages((prev) => {
         const updated = [...prev];
         const lastIdx = updated.length - 1;
         if (updated[lastIdx]?.role === 'assistant') {
           updated[lastIdx] = {
             ...updated[lastIdx],
-            content: tr(
-              'Sorry, I encountered an error. Please try again.',
-              'တောင်းပန်ပါတယ်။ ပြဿနာတစ်ခုရှိပါတယ်။ ထပ်ကြိုးစားပါ။'
-            ),
+            content: friendlyMessage,
           };
         }
         return updated;
@@ -280,14 +302,15 @@ export default function AiChatWidget() {
           });
         }
       }
-    } catch {
+    } catch (error) {
+      const friendlyMessage = getFriendlyErrorMessage(error, tr);
       setMessages((prev) => {
         const updated = [...prev];
         const lastIdx = updated.length - 1;
         if (updated[lastIdx]?.role === 'assistant') {
           updated[lastIdx] = {
             ...updated[lastIdx],
-            content: tr('Sorry, I encountered an error. Please try again.', 'တောင်းပန်ပါတယ်။ ပြဿနာတစ်ခုရှိပါတယ်။ ထပ်ကြိုးစားပါ။'),
+            content: friendlyMessage,
           };
         }
         return updated;
