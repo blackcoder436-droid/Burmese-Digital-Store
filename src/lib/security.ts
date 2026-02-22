@@ -254,6 +254,19 @@ export function validatePanelPath(panelPath: string): boolean {
   return p.length <= 100;
 }
 
+/**
+ * Sanitize a URL or path string: trim, remove null bytes and control chars,
+ * but preserve URL-safe characters like / : @ . that escapeHtml would mangle.
+ */
+export function sanitizeUrlString(str: string): string {
+  if (typeof str !== 'string') return '';
+  return str
+    .trim()
+    .replace(/\0/g, '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/<[^>]*>/g, ''); // strip HTML tags
+}
+
 // --- Upload-specific constants ---
 export const ALLOWED_IMAGE_TYPES = [
   'image/jpeg',

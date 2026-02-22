@@ -4,6 +4,9 @@ import { apiLimiter } from '@/lib/rateLimit';
 import { getAuthUser } from '@/lib/auth';
 import { validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
 
+// Force dynamic — health status changes frequently
+export const dynamic = 'force-dynamic';
+
 // ==========================================
 // GET /api/vpn/health
 // Pings each 3xUI panel to check real online/offline status
@@ -16,11 +19,13 @@ interface ServerHealth {
   name: string;
   flag: string;
   online: boolean;
+  latencyMs: number | null;
   checkedAt: string;
 }
 
 // Simple in-memory cache
 let cachedHealth: ServerHealth[] | null = null;
+let cachedServerCount = 0; // track server count to invalidate when servers change
 let cacheTime = 0;
 const CACHE_TTL_MS = 60_000; // 60 seconds
 
@@ -34,6 +39,7 @@ async function pingPanel(server: VpnServer): Promise<ServerHealth> {
         name: server.name,
         flag: server.flag,
         online: false,
+        latencyMs: null,
         checkedAt: new Date().toISOString(),
       };
     }
@@ -57,6 +63,7 @@ async function pingPanel(server: VpnServer): Promise<ServerHealth> {
       name: server.name,
       flag: server.flag,
       online: res !== null && res.status < 500,
+      latencyMs: res !== null && res.status < 500 ? latency : null,
       checkedAt: new Date().toISOString(),
     };
   } catch {
@@ -65,6 +72,7 @@ async function pingPanel(server: VpnServer): Promise<ServerHealth> {
       name: server.name,
       flag: server.flag,
       online: false,
+      latencyMs: null,
       checkedAt: new Date().toISOString(),
     };
   }
@@ -74,33 +82,41 @@ export async function GET(request: NextRequest) {
   const limited = await apiLimiter(request);
   if (limited) return limited;
 
-  // Require authentication to prevent infrastructure reconnaissance
+  // Auth is optional — unauthenticated users get basic online/offline status
+  // Authenticated users additionally get latency data
   const user = await getAuthUser();
-  if (!user) {
-    return NextResponse.json(
-      { success: false, error: 'Authentication required' },
-      { status: 401 }
-    );
-  }
 
-  // Return cached result if still fresh
-  if (cachedHealth && Date.now() - cacheTime < CACHE_TTL_MS) {
+  // Ping all enabled panels in parallel
+  const enabledServers = await getEnabledServers();
+
+  // Return cached result if still fresh AND server count hasn't changed
+  const cacheValid = cachedHealth
+    && Date.now() - cacheTime < CACHE_TTL_MS
+    && cachedServerCount === enabledServers.length;
+
+  if (cacheValid) {
+    const servers = user
+      ? cachedHealth!
+      : cachedHealth!.map(({ latencyMs, ...rest }) => ({ ...rest, latencyMs: null }));
     return NextResponse.json({
       success: true,
-      data: { servers: cachedHealth, cached: true },
+      data: { servers, cached: true },
     });
   }
 
-  // Ping all enabled panels in parallel
-  const servers = await getEnabledServers();
-  const healthChecks = await Promise.all(servers.map(pingPanel));
+  const healthChecks = await Promise.all(enabledServers.map(pingPanel));
 
   // Update cache
   cachedHealth = healthChecks;
+  cachedServerCount = enabledServers.length;
   cacheTime = Date.now();
+
+  const result = user
+    ? healthChecks
+    : healthChecks.map(({ latencyMs, ...rest }) => ({ ...rest, latencyMs: null }));
 
   return NextResponse.json({
     success: true,
-    data: { servers: healthChecks, cached: false },
+    data: { servers: result, cached: false },
   });
 }

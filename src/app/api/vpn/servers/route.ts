@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getOnlineServers } from '@/lib/vpn-servers';
+import { getEnabledServers } from '@/lib/vpn-servers';
 
-// GET /api/vpn/servers - Public list of online VPN servers
+// Force dynamic — server list changes when admin adds/removes servers
+export const dynamic = 'force-dynamic';
+
+// GET /api/vpn/servers - Public list of enabled VPN servers
+// Online/offline status is determined by health checks on the client side
 export async function GET() {
-  const onlineServers = await getOnlineServers();
-  const servers = onlineServers.map((s) => ({
+  const enabledServers = await getEnabledServers();
+  const servers = enabledServers.map((s) => ({
     id: s.id,
     name: s.name,
     flag: s.flag,

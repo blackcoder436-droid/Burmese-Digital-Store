@@ -13,7 +13,8 @@ export interface IVpnServerDocument extends Document {
   panelPath: string; // panel path: /mka
   domain: string; // connection domain: jan.burmesedigital.store
   subPort: number; // subscription port: 2096
-  trojanPort?: number; // custom trojan port (if different from inbound)
+  trojanPort?: number; // @deprecated — use protocolPorts.trojan instead
+  protocolPorts?: { trojan?: number; vless?: number; vmess?: number; shadowsocks?: number };
   protocol: string; // default protocol: trojan, vless, vmess
   enabledProtocols: string[]; // available protocols: ['trojan', 'vless', 'vmess', 'shadowsocks']
   enabled: boolean; // admin toggle (disabled = hidden from users, no provisioning)
@@ -69,6 +70,15 @@ const VpnServerSchema: Schema = new Schema(
     trojanPort: {
       type: Number,
       default: null,
+    },
+    protocolPorts: {
+      type: {
+        trojan: { type: Number, default: null },
+        vless: { type: Number, default: null },
+        vmess: { type: Number, default: null },
+        shadowsocks: { type: Number, default: null },
+      },
+      default: {},
     },
     protocol: {
       type: String,

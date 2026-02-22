@@ -907,6 +907,8 @@ const my: TranslationKeys = {
       domain: 'Domain',
       subPort: 'Sub Port',
       trojanPort: 'Trojan Port',
+      protocolPorts: 'Protocol Ports',
+      protocolPortsHint: '3xUI panel ရှိ inbound port များနဲ့ တူညီအောင် ထည့်ပါ',
       protocol: 'Protocol',
       created: 'ဖန်တီးချိန်',
       updated: 'ပြင်ဆင်ချိန်',

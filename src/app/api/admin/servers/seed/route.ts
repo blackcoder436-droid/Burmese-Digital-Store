@@ -25,6 +25,7 @@ export async function POST() {
         domain: 'jan.burmesedigital.store',
         subPort: 2096,
         trojanPort: 22716,
+        protocolPorts: { trojan: 22716 },
         protocol: 'trojan',
         enabled: true,
         online: true,

@@ -70,6 +70,12 @@ const serverSchema = z.object({
   // OCR
   OCR_LANGUAGE: z.string().optional().default('eng'),
 
+  // AI Chat Assistant
+  AI_API_KEY: z.string().optional(),
+  AI_API_URL: z.string().url().optional().default('https://generativelanguage.googleapis.com/v1beta/openai'),
+  AI_MODEL: z.string().optional().default('gemini-2.0-flash'),
+  AI_CHAT_ENABLED: z.enum(['true', 'false']).optional().default('false'),
+
   // Admin
   ENABLE_ADMIN_SEED: z.enum(['true', 'false']).optional().default('false'),
   ADMIN_SECRET: z.string().optional(),
@@ -87,6 +93,7 @@ const clientSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
   NEXT_PUBLIC_APP_NAME: z.string().default('Burmese Digital Store'),
   NEXT_PUBLIC_GOOGLE_CLIENT_ID: z.string().optional(),
+  NEXT_PUBLIC_AI_CHAT_ENABLED: z.enum(['true', 'false']).optional().default('false'),
 });
 
 export type ServerEnv = z.infer<typeof serverSchema>;

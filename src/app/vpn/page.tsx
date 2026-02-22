@@ -62,7 +62,9 @@ const defaultServers = [
   { id: 'sg1', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 1', online: true },
   { id: 'sg2', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 2', online: true },
   { id: 'sg3', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 3', online: true },
+  { id: 'sg4', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 4', online: true },
   { id: 'us1', flag: '\uD83C\uDDFA\uD83C\uDDF8', name: 'United States', online: true },
+  { id: 'ny', flag: '\uD83C\uDDFA\uD83C\uDDF8', name: 'New York', online: true },
 ];
 
 const stepsData = [
@@ -170,48 +172,100 @@ export default function VPNPage() {
     defaultServers.map((s) => ({ id: s.id, name: s.name, flag: s.flag, online: s.online, latencyMs: null }))
   );
 
+  // Canonical server list ref — NEVER shrinks, only grows.
+  // This prevents servers from "disappearing" due to stale health cache or race conditions.
+  const serverListRef = useRef<LiveServerHealth[]>(
+    defaultServers.map((s) => ({ id: s.id, name: s.name, flag: s.flag, online: s.online, latencyMs: null }))
+  );
+
   const wrapRef = useFadeIn();
   const onlineServers = liveServers.filter((server) => server.online);
 
-  // Fetch dynamic server list from DB on mount
+  // Fetch dynamic server list from DB, then overlay health data.
+  // Key invariant: servers NEVER disappear from the list once loaded.
+  // Admin-enabled servers are always shown; health only updates online/latency status.
   useEffect(() => {
-    async function fetchServers() {
+    let cancelled = false;
+
+    // Helper: merge health data ON TOP of the canonical server list ref.
+    // This guarantees we NEVER lose servers — health can only add or update, never remove.
+    function mergeHealthIntoRef(healthServers: Array<{ id: string; name: string; flag: string; online: boolean; latencyMs?: number | null }>) {
+      const healthMap = new Map<string, { name: string; flag: string; online: boolean; latencyMs: number | null }>();
+      for (const h of healthServers) {
+        healthMap.set(h.id, { name: h.name, flag: h.flag, online: h.online, latencyMs: h.latencyMs ?? null });
+      }
+      const base = serverListRef.current;
+      const existingIds = new Set(base.map((s) => s.id));
+      const merged = base.map((s) => {
+        const h = healthMap.get(s.id);
+        return h ? { ...s, online: h.online, latencyMs: h.latencyMs } : s;
+      });
+      // Add any servers from health that aren't already in the canonical list
+      for (const h of healthServers) {
+        if (!existingIds.has(h.id)) {
+          const hd = healthMap.get(h.id)!;
+          merged.push({ id: h.id, name: hd.name, flag: hd.flag, online: hd.online, latencyMs: hd.latencyMs });
+        }
+      }
+      serverListRef.current = merged;
+      return merged;
+    }
+
+    async function fetchServerList() {
       try {
         const res = await fetch('/api/vpn/servers');
         const data = await res.json();
         if (data.success && data.data?.servers?.length > 0) {
-          setLiveServers(data.data.servers.map((s: any) => ({
+          const fetched: LiveServerHealth[] = data.data.servers.map((s: any) => ({
             id: s.id,
             name: s.name,
             flag: s.flag,
             online: s.online,
             latencyMs: null,
-          })));
+          }));
+          // Merge fetched into ref (never shrink — keep any extra servers already there)
+          const fetchedIds = new Set(fetched.map((s) => s.id));
+          const existing = serverListRef.current.filter((s) => !fetchedIds.has(s.id));
+          serverListRef.current = [...fetched, ...existing];
         }
       } catch {
-        // Keep fallback servers
+        // Keep existing ref (fallback servers)
       }
     }
-    fetchServers();
-  }, []);
 
-  // Fetch live server health (requires auth, graceful fallback)
-  useEffect(() => {
     async function fetchHealth() {
       try {
         const res = await fetch('/api/vpn/health');
         const data = await res.json();
-        if (data.success && data.data?.servers) {
-          setLiveServers(data.data.servers);
+        if (data.success && data.data?.servers?.length > 0) {
+          return mergeHealthIntoRef(data.data.servers);
         }
       } catch {
-        // Keep static data on failure
+        // Keep existing data
+      }
+      return serverListRef.current;
+    }
+
+    async function refresh() {
+      await fetchServerList();
+      if (cancelled) return;
+      // Show server list immediately (all enabled, default "online")
+      setLiveServers([...serverListRef.current]);
+      // Then overlay health status
+      const merged = await fetchHealth();
+      if (!cancelled) {
+        setLiveServers([...merged]);
       }
     }
-    fetchHealth();
-    // Refresh every 60 seconds
-    const interval = setInterval(fetchHealth, 60_000);
-    return () => clearInterval(interval);
+
+    refresh();
+
+    // Periodically refresh BOTH server list AND health (not just health)
+    const interval = setInterval(() => {
+      if (!cancelled) refresh();
+    }, 60_000);
+
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   const monthLabel = (m: number) => {
@@ -393,7 +447,7 @@ export default function VPNPage() {
                   <div className="text-xs sm:text-sm text-gray-500 mt-1">Active Users</div>
                 </div>
                 <div>
-                  <AnimCounter target={5} />
+                  <AnimCounter target={liveServers.length} />
                   <div className="text-xs sm:text-sm text-gray-500 mt-1">Server Locations</div>
                 </div>
                 <div>
@@ -468,7 +522,7 @@ export default function VPNPage() {
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">Global Server Locations</h2>
             <p className="text-gray-400 max-w-xl mx-auto">{t('vpn.landing.selectFastStableServers')}</p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
             {liveServers.map((s, i) => (
               <button key={i}
                 disabled={!s.online}

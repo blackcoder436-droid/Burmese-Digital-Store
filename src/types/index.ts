@@ -278,6 +278,7 @@ export interface IVpnServer {
   domain: string;
   subPort: number;
   trojanPort?: number;
+  protocolPorts?: { trojan?: number; vless?: number; vmess?: number; shadowsocks?: number };
   protocols: string[];
   enabled: boolean;
   online: boolean;
@@ -324,6 +325,33 @@ export interface ITicketMessage {
   senderRole: 'user' | 'admin';
   content: string;
   createdAt: Date;
+}
+
+// ==========================================
+// AI Chat Types
+// ==========================================
+
+export type AiChatRole = 'user' | 'assistant' | 'system';
+
+export interface IAiChatMessage {
+  role: AiChatRole;
+  content: string;
+  timestamp: Date;
+}
+
+export interface IAiChatSession {
+  _id: string;
+  user?: string | IUser;
+  sessionId: string;
+  messages: IAiChatMessage[];
+  context: 'customer' | 'admin';
+  metadata?: {
+    userAgent?: string;
+    page?: string;
+  };
+  closedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // ==========================================

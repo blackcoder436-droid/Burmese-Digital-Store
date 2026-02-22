@@ -909,6 +909,8 @@ const en = {
       domain: 'Domain',
       subPort: 'Sub Port',
       trojanPort: 'Trojan Port',
+      protocolPorts: 'Protocol Ports',
+      protocolPortsHint: 'Set ports to match your 3xUI panel inbound ports',
       protocol: 'Protocol',
       created: 'Created',
       updated: 'Updated',

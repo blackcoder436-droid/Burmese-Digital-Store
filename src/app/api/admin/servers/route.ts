@@ -6,7 +6,7 @@ import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
 import { invalidateServerCache } from '@/lib/vpn-servers';
 import { createLogger } from '@/lib/logger';
-import { sanitizeString, validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
+import { sanitizeString, sanitizeUrlString, validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
 import { trackVpnServerChange } from '@/lib/monitoring';
 
 const log = createLogger({ route: '/api/admin/servers' });
@@ -64,13 +64,23 @@ export async function POST(request: NextRequest) {
     const serverId = sanitizeString(body.serverId || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
     const name = sanitizeString(body.name || '');
     const flag = (body.flag || '').trim();
-    const url = sanitizeString(body.url || '').replace(/\/$/, ''); // strip trailing slash
-    const panelPath = sanitizeString(body.panelPath || '/mka');
-    const domain = sanitizeString(body.domain || '');
+    const url = sanitizeUrlString(body.url || '').replace(/\/$/, ''); // strip trailing slash
+    const panelPath = sanitizeUrlString(body.panelPath || '/mka');
+    const domain = sanitizeUrlString(body.domain || '');
     const subPort = parseInt(body.subPort) || 2096;
     const trojanPort = body.trojanPort ? parseInt(body.trojanPort) : null;
-    const protocol = sanitizeString(body.protocol || 'trojan').toLowerCase();
     const validProtocols = ['trojan', 'vless', 'vmess', 'shadowsocks'];
+
+    // Parse protocolPorts — per-protocol port mapping from 3xUI inbounds
+    const protocolPorts: Record<string, number | null> = {};
+    if (body.protocolPorts && typeof body.protocolPorts === 'object') {
+      for (const proto of validProtocols) {
+        const val = body.protocolPorts[proto];
+        protocolPorts[proto] = val ? parseInt(val) || null : null;
+      }
+    }
+
+    const protocol = sanitizeString(body.protocol || 'trojan').toLowerCase();
     const enabledProtocols = Array.isArray(body.enabledProtocols)
       ? body.enabledProtocols.filter((p: string) => validProtocols.includes(p))
       : validProtocols;
@@ -129,6 +139,7 @@ export async function POST(request: NextRequest) {
       domain,
       subPort,
       trojanPort,
+      protocolPorts,
       protocol,
       enabledProtocols,
       enabled,
@@ -196,7 +207,7 @@ export async function PATCH(request: NextRequest) {
     if (body.name !== undefined) { server.name = sanitizeString(body.name); updates.push('name'); }
     if (body.flag !== undefined) { server.flag = (body.flag || '').trim(); updates.push('flag'); }
     if (body.url !== undefined) {
-      const newUrl = sanitizeString(body.url).replace(/\/$/, '');
+      const newUrl = sanitizeUrlString(body.url).replace(/\/$/, '');
       const check = validateExternalHttpUrl(newUrl, { requiredAllowlistEnv: 'VPN_SERVER_ALLOWED_HOSTS' });
       if (!check.ok) {
         return NextResponse.json({ success: false, error: check.error }, { status: 400 });
@@ -205,16 +216,26 @@ export async function PATCH(request: NextRequest) {
       updates.push('url');
     }
     if (body.panelPath !== undefined) {
-      const newPanelPath = sanitizeString(body.panelPath);
+      const newPanelPath = sanitizeUrlString(body.panelPath);
       if (!validatePanelPath(newPanelPath)) {
         return NextResponse.json({ success: false, error: 'Invalid panelPath' }, { status: 400 });
       }
       server.panelPath = newPanelPath;
       updates.push('panelPath');
     }
-    if (body.domain !== undefined) { server.domain = sanitizeString(body.domain); updates.push('domain'); }
+    if (body.domain !== undefined) { server.domain = sanitizeUrlString(body.domain); updates.push('domain'); }
     if (body.subPort !== undefined) { server.subPort = parseInt(body.subPort) || 2096; updates.push('subPort'); }
     if (body.trojanPort !== undefined) { server.trojanPort = body.trojanPort ? parseInt(body.trojanPort) : undefined; updates.push('trojanPort'); }
+    if (body.protocolPorts !== undefined && typeof body.protocolPorts === 'object') {
+      const validProtos = ['trojan', 'vless', 'vmess', 'shadowsocks'];
+      const pp: Record<string, number | null> = {};
+      for (const proto of validProtos) {
+        const val = body.protocolPorts[proto];
+        pp[proto] = val ? parseInt(val) || null : null;
+      }
+      server.protocolPorts = pp;
+      updates.push('protocolPorts');
+    }
     if (body.protocol !== undefined) {
       const p = sanitizeString(body.protocol).toLowerCase();
       if (['trojan', 'vless', 'vmess'].includes(p)) {

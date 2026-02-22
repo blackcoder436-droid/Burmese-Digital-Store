@@ -14,7 +14,8 @@ export interface VpnServer {
   panelPath: string; // e.g. /mka
   domain: string;
   subPort: number;
-  trojanPort?: number; // custom trojan port (if different from inbound port)
+  trojanPort?: number; // @deprecated — use protocolPorts
+  protocolPorts: { trojan?: number; vless?: number; vmess?: number; shadowsocks?: number };
   protocol: string;
   enabledProtocols: string[]; // available protocols for this server
   online: boolean;
@@ -32,6 +33,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     domain: 'jan.burmesedigital.store',
     subPort: 2096,
     trojanPort: 22716,
+    protocolPorts: { trojan: 22716 },
     protocol: 'trojan',
     enabledProtocols: ['trojan', 'vless', 'vmess', 'shadowsocks'],
     online: true,
@@ -45,6 +47,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     panelPath: '/mka',
     domain: 'sg2.burmesedigital.store',
     subPort: 2096,
+    protocolPorts: {},
     protocol: 'trojan',
     enabledProtocols: ['trojan', 'vless', 'vmess', 'shadowsocks'],
     online: true,
@@ -58,6 +61,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     panelPath: '/mka',
     domain: 'sg3.burmesedigital.store',
     subPort: 2096,
+    protocolPorts: {},
     protocol: 'trojan',
     enabledProtocols: ['trojan', 'vless', 'vmess', 'shadowsocks'],
     online: true,
@@ -71,8 +75,37 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     panelPath: '/mka',
     domain: 'us.burmesedigital.store',
     subPort: 2096,
+    protocolPorts: {},
     protocol: 'trojan',
     enabledProtocols: ['trojan', 'vless', 'vmess', 'shadowsocks'],
+    online: true,
+    enabled: true,
+  },
+  sg4: {
+    id: 'sg4',
+    name: 'Singapore 4',
+    flag: '🇸🇬',
+    url: 'https://sg4.burmesedigital.store:8080',
+    panelPath: '/mka',
+    domain: 'sg4.burmesedigital.store',
+    subPort: 2096,
+    protocolPorts: { trojan: 24439, vless: 29338, vmess: 19266 },
+    protocol: 'trojan',
+    enabledProtocols: ['trojan', 'vless', 'vmess'],
+    online: true,
+    enabled: true,
+  },
+  ny: {
+    id: 'ny',
+    name: 'New York',
+    flag: '🇺🇸',
+    url: 'https://ny.burmesedigital.store:8080',
+    panelPath: '/mka',
+    domain: 'ny.burmesedigital.store',
+    subPort: 2096,
+    protocolPorts: { trojan: 25491, vless: 27314, vmess: 21784 },
+    protocol: 'trojan',
+    enabledProtocols: ['trojan', 'vless', 'vmess'],
     online: true,
     enabled: true,
   },
@@ -84,6 +117,17 @@ let cacheTime = 0;
 const CACHE_TTL = 60_000; // 60 seconds
 
 function docToServer(doc: IVpnServerDocument): VpnServer {
+  // Backward compat: migrate trojanPort → protocolPorts.trojan
+  const rawPorts = (doc as unknown as Record<string, unknown>).protocolPorts as
+    | Record<string, number | null | undefined>
+    | undefined;
+  const protocolPorts: VpnServer['protocolPorts'] = {
+    trojan: rawPorts?.trojan ?? doc.trojanPort ?? undefined,
+    vless: rawPorts?.vless ?? undefined,
+    vmess: rawPorts?.vmess ?? undefined,
+    shadowsocks: rawPorts?.shadowsocks ?? undefined,
+  };
+
   return {
     id: doc.serverId,
     name: doc.name,
@@ -93,6 +137,7 @@ function docToServer(doc: IVpnServerDocument): VpnServer {
     domain: doc.domain,
     subPort: doc.subPort,
     trojanPort: doc.trojanPort ?? undefined,
+    protocolPorts,
     protocol: doc.protocol,
     enabledProtocols: doc.enabledProtocols ?? ['trojan', 'vless', 'vmess', 'shadowsocks'],
     online: doc.online,

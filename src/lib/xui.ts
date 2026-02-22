@@ -236,6 +236,18 @@ class XuiSession {
 
       const inboundId = inbound.id;
       const inboundProtocol = inbound.protocol;
+      const inboundPort = inbound.port;
+
+      // Verify protocol port matches the configured protocolPorts (warn on mismatch)
+      const configuredPort = this.server.protocolPorts?.[inboundProtocol as keyof typeof this.server.protocolPorts];
+      if (configuredPort && configuredPort !== inboundPort) {
+        log.warn('Protocol port mismatch: configured port differs from 3xUI inbound port', {
+          server: this.server.id,
+          protocol: inboundProtocol,
+          configuredPort,
+          inboundPort,
+        });
+      }
 
       // Protocol codes
       const protoCodes: Record<string, string> = {
@@ -570,4 +582,43 @@ export async function getVpnClientStats(serverId: string, clientEmail: string) {
   const session = await getSession(serverId);
   if (!session) return null;
   return session.getClientStats(clientEmail);
+}
+
+/**
+ * Verify protocol ports configured in DB match actual 3xUI inbound ports.
+ * Returns mismatches or null if all ports match / no inbounds found.
+ */
+export async function verifyProtocolPorts(serverId: string): Promise<{
+  matches: { protocol: string; port: number }[];
+  mismatches: { protocol: string; configuredPort: number; actualPort: number }[];
+  unconfigured: { protocol: string; actualPort: number }[];
+} | null> {
+  const session = await getSession(serverId);
+  if (!session) return null;
+
+  const server = await getServer(serverId);
+  if (!server) return null;
+
+  const inbounds = await session.getInbounds();
+  if (inbounds.length === 0) return null;
+
+  const matches: { protocol: string; port: number }[] = [];
+  const mismatches: { protocol: string; configuredPort: number; actualPort: number }[] = [];
+  const unconfigured: { protocol: string; actualPort: number }[] = [];
+
+  for (const ib of inbounds) {
+    const proto = ib.protocol;
+    const actualPort = ib.port;
+    const configuredPort = server.protocolPorts?.[proto as keyof typeof server.protocolPorts];
+
+    if (!configuredPort) {
+      unconfigured.push({ protocol: proto, actualPort });
+    } else if (configuredPort === actualPort) {
+      matches.push({ protocol: proto, port: actualPort });
+    } else {
+      mismatches.push({ protocol: proto, configuredPort, actualPort });
+    }
+  }
+
+  return { matches, mismatches, unconfigured };
 }

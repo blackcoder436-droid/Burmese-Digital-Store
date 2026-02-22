@@ -1020,6 +1020,235 @@ Reset:    POST {panel_url}{panel_path}/panel/api/inbounds/{inboundId}/resetClien
 
 ---
 
+## 📱 Phase 11 — Mobile App (React Native + Expo) (2026 Q2–Q3)
+
+> Burmese Digital Store ကို Android/iOS app အဖြစ် React Native (Expo) နဲ့ တည်ဆောက်ခြင်း
+> Web app ၏ core features တွေကို mobile-native experience အဖြစ် ပြောင်းလဲခြင်း
+
+### 🔴 P0 — Foundation & Project Setup
+
+#### 11.1 — Expo Project Initialization
+- ⬜ Expo SDK 52+ project scaffold (`apps/mobile` monorepo or separate repo)
+- ⬜ TypeScript config + ESLint + Prettier setup
+- ⬜ Folder structure: `src/screens`, `src/components`, `src/navigation`, `src/services`, `src/hooks`, `src/stores`, `src/utils`
+- ⬜ Environment config (`.env.development`, `.env.staging`, `.env.production`) — `expo-constants` / `react-native-config`
+- ⬜ `app.config.ts` dynamic Expo config (app name, bundle ID, version, splash, icons)
+
+#### 11.2 — Shared Types & API Client
+- ⬜ Shared TypeScript types package ခွဲထုတ်ရန် (`packages/shared-types`) — IUser, IProduct, IOrder, IVpnServer, etc.
+- ⬜ API client service class (`src/services/api.ts`) — base URL, auth headers, error handling, retry logic
+- ⬜ API response types standardize (`{ success: boolean, data?: T, error?: string }`)
+- ⬜ React Query (TanStack Query) setup for data fetching + caching + optimistic updates
+- ⬜ Offline-first queue for failed requests (retry on reconnect)
+
+#### 11.3 — Authentication (Mobile-Native)
+- ⬜ Token-based auth flow (access token + refresh token) — cookie-based မသုံး
+- ⬜ `POST /api/auth/mobile/login` — return JWT access + refresh tokens
+- ⬜ `POST /api/auth/mobile/register` — mobile registration endpoint
+- ⬜ `POST /api/auth/mobile/refresh` — refresh token rotation
+- ⬜ `POST /api/auth/mobile/google` — Google Sign-In (Expo AuthSession / `@react-native-google-signin`)
+- ⬜ Secure token storage (`expo-secure-store`)
+- ⬜ Auth context + protected route wrapper
+- ⬜ Biometric login option (fingerprint/Face ID) — `expo-local-authentication`
+- ⬜ Auto-logout on token expiry + session expired screen
+
+#### 11.4 — Navigation Structure
+- ⬜ React Navigation v7 setup (`@react-navigation/native`)
+- ⬜ Bottom Tab Navigator: 🏠 Home, 🛒 Shop, 🛍️ Cart, 👤 Account
+- ⬜ Stack Navigator per tab (nested navigation)
+- ⬜ Auth stack: Login → Register → Forgot Password → Reset Password
+- ⬜ Deep linking config (`expo-linking`) — product URLs, order status links
+- ⬜ Navigation state persistence (resume where user left off)
+
+### 🟡 P1 — Core Screens & Features
+
+#### 11.5 — Home Screen
+- ⬜ Featured products carousel (horizontal scroll)
+- ⬜ Category quick links (Software, VPN, etc.)
+- ⬜ Recent products grid
+- ⬜ Promotion banners (admin-configurable)
+- ⬜ Pull-to-refresh
+
+#### 11.6 — Shop / Browse Screen
+- ⬜ Product grid (2-column) with infinite scroll pagination
+- ⬜ Search bar with debounce + suggestions
+- ⬜ Category filter chips (horizontal scroll)
+- ⬜ Sort options (Newest, Price Low→High, Price High→Low, Popular)
+- ⬜ Price range filter (slider)
+- ⬜ Product card: image, name, price, rating stars, wishlist heart icon
+
+#### 11.7 — Product Detail Screen
+- ⬜ Image gallery with pinch-to-zoom (`react-native-image-zoom-viewer`)
+- ⬜ Product info (name, price, description, stock status, duration)
+- ⬜ "Add to Cart" + "Buy Now" buttons (sticky bottom bar)
+- ⬜ Review/Rating section (list reviews, submit review with star rating)
+- ⬜ Related products horizontal scroll
+- ⬜ Share button (native share sheet)
+- ⬜ Wishlist toggle (heart icon)
+- ⬜ Stock alert subscription ("Notify Me" button when out of stock)
+
+#### 11.8 — Cart Screen
+- ⬜ Cart items list with quantity stepper
+- ⬜ Swipe-to-delete item
+- ⬜ Coupon code input + apply
+- ⬜ Price summary (subtotal, discount, total)
+- ⬜ "Proceed to Checkout" button
+- ⬜ Empty cart state with "Browse Products" CTA
+- ⬜ Cart persistence (AsyncStorage / SecureStore)
+
+#### 11.9 — Checkout & Payment Screen
+- ⬜ Order summary review
+- ⬜ Payment method selection (KBZPay, WavePay, UAB Pay, AYA Pay, Bank Transfer)
+- ⬜ Payment QR code display + account info (copy-to-clipboard)
+- ⬜ Payment screenshot upload (camera capture + gallery pick — `expo-image-picker`)
+- ⬜ Payment countdown timer (30 min window)
+- ⬜ Order confirmation screen with order number
+
+#### 11.10 — VPN Screens
+- ⬜ VPN server list with health status badges (online/offline + latency)
+- ⬜ Plan selector: devices × duration matrix (interactive table)
+- ⬜ Free test key button (1 per user)
+- ⬜ VPN key display: subscription link + config link + QR code
+- ⬜ One-tap VPN config import (open in V2Ray/Clash client via deep link)
+- ⬜ VPN usage stats (traffic used, expiry countdown)
+
+#### 11.11 — Account Screens
+- ⬜ Profile screen (avatar, name, email, phone) — edit + save
+- ⬜ Avatar upload (camera/gallery — `expo-image-picker` + crop)
+- ⬜ Orders list (tabs: All, Pending, Completed, Rejected) with pull-to-refresh
+- ⬜ Order detail screen (status stepper, product keys, VPN keys, invoice download)
+- ⬜ My Keys screen (license keys + VPN keys with copy buttons)
+- ⬜ Wishlist screen
+- ⬜ Notifications screen (read/unread, mark all read)
+- ⬜ Support tickets screen (list + create + chat view)
+- ⬜ Subscriptions management screen
+- ⬜ Change password screen
+- ⬜ Delete account (GDPR compliance)
+- ⬜ Language toggle (Myanmar / English)
+- ⬜ App settings (notification preferences, theme)
+
+### 🟢 P2 — Push Notifications & Real-time
+
+#### 11.12 — Push Notifications (Expo Notifications)
+- ⬜ `expo-notifications` setup + permission request
+- ⬜ FCM (Android) + APNs (iOS) config in `app.config.ts`
+- ⬜ `POST /api/auth/mobile/push-token` — register device push token
+- ⬜ User model: `pushTokens[]` field (multi-device support)
+- ⬜ Push notification triggers:
+  - ⬜ Order status change (pending → verifying → completed/rejected)
+  - ⬜ VPN key provisioned / expiry reminders (7d, 3d, 1d)
+  - ⬜ Stock back-in-stock alerts
+  - ⬜ New promotions / announcements
+  - ⬜ Support ticket reply
+- ⬜ Notification tap → deep link to relevant screen
+- ⬜ Badge count management (unread count on app icon)
+
+#### 11.13 — Real-time Updates
+- ⬜ SSE (Server-Sent Events) client for React Native
+- ⬜ Real-time order status updates on order detail screen
+- ⬜ Real-time notification bell count update
+- ⬜ WebSocket fallback if SSE not stable on mobile
+
+### 🔵 P3 — Native Features & Polish
+
+#### 11.14 — Offline Support & Caching
+- ⬜ React Query persistence (`@tanstack/query-async-storage-persister`)
+- ⬜ Offline product browsing (cached product list + images)
+- ⬜ Offline cart management (sync on reconnect)
+- ⬜ Network status banner ("No internet connection" bar)
+- ⬜ Retry queue for failed API calls
+
+#### 11.15 — Native UX Enhancements
+- ⬜ Haptic feedback on button press / order actions (`expo-haptics`)
+- ⬜ Pull-to-refresh on all list screens
+- ⬜ Skeleton loading screens (shimmer placeholders)
+- ⬜ Image caching (`expo-image` or `react-native-fast-image`)
+- ⬜ Smooth animations (React Native Reanimated + Gesture Handler)
+- ⬜ Dark mode support (system preference auto-detect + manual toggle)
+- ⬜ Myanmar font rendering optimization (Noto Sans Myanmar / Padauk bundled)
+- ⬜ Adaptive icons (Android) + app icon (iOS)
+- ⬜ Splash screen with animated logo (`expo-splash-screen`)
+
+#### 11.16 — Performance Optimization
+- ⬜ FlatList / FlashList optimization for product grids (virtualization)
+- ⬜ Image lazy loading + progressive JPEG/WebP
+- ⬜ Bundle size analysis + tree shaking
+- ⬜ Hermes engine enabled (Android)
+- ⬜ Memory leak detection + profiling
+- ⬜ App startup time optimization (< 2 seconds target)
+
+#### 11.17 — Security (Mobile-Specific)
+- ⬜ Certificate pinning (`expo-certificate-pinning` or custom)
+- ⬜ Root/jailbreak detection (optional warning)
+- ⬜ Screenshot prevention on sensitive screens (payment, keys)
+- ⬜ ProGuard/R8 obfuscation (Android release build)
+- ⬜ App Transport Security compliance (iOS)
+- ⬜ Secure clipboard handling for keys/passwords
+
+### 🟣 P4 — Backend API Adjustments
+
+#### 11.18 — API Versioning & Mobile Endpoints
+- ⬜ Versioned API prefix (`/api/v1/...`) — backward compatibility
+- ⬜ Mobile-specific rate limit rules (higher limits for authenticated mobile clients)
+- ⬜ `X-Client-Platform: mobile` header based request routing
+- ⬜ Image upload optimization: client-side resize before upload (reduce bandwidth)
+- ⬜ Paginated API responses with cursor-based pagination (for infinite scroll)
+- ⬜ Compressed API responses (gzip/brotli)
+
+#### 11.19 — Analytics & Crash Reporting
+- ⬜ Sentry React Native SDK integration (crash reporting + performance)
+- ⬜ App analytics events (screen views, button taps, conversion funnel)
+- ⬜ `POST /api/analytics/mobile` — mobile-specific analytics endpoint
+- ⬜ App version tracking + force update mechanism (`/api/app/version`)
+
+### 🔶 P5 — Build, Release & Store Submission
+
+#### 11.20 — EAS Build Pipeline
+- ⬜ Expo EAS project setup (`eas.json` — development, preview, production profiles)
+- ⬜ Android: Keystore generation + signing config
+- ⬜ iOS: Apple Developer account + provisioning profiles + certificates
+- ⬜ CI/CD: GitHub Actions → EAS Build → auto-distribute
+- ⬜ OTA updates setup (`expo-updates`) for quick patches without store review
+
+#### 11.21 — Play Store Submission (Android)
+- ⬜ App listing metadata (title, description, screenshots, feature graphic)
+- ⬜ Privacy policy URL (existing `/privacy` page)
+- ⬜ Content rating questionnaire
+- ⬜ Target API level compliance (Android 14+)
+- ⬜ AAB (Android App Bundle) build
+- ⬜ Internal testing → Closed beta → Open beta → Production release
+
+#### 11.22 — App Store Submission (iOS)
+- ⬜ App Store Connect setup (app record, metadata, screenshots per device)
+- ⬜ App Review Guidelines compliance check
+- ⬜ In-App Purchase policy review (digital goods — may need IAP or exemption)
+- ⬜ Privacy nutrition labels (data collection disclosure)
+- ⬜ TestFlight beta → App Store review → Public release
+
+#### 11.23 — Post-Launch
+- ⬜ App Store Optimization (ASO) — keywords, screenshots, A/B test listings
+- ⬜ User feedback collection + ratings prompt (after 3rd successful order)
+- ⬜ Crash-free rate monitoring (target > 99.5%)
+- ⬜ Weekly OTA update cycle for bug fixes
+- ⬜ Monthly store update for new features
+
+### Suggested Execution Order
+1. ⬜ **11.1 + 11.2** — Project setup + shared types + API client
+2. ⬜ **11.3 + 11.4** — Auth flow + navigation structure
+3. ⬜ **11.5 + 11.6 + 11.7** — Home, Shop, Product screens
+4. ⬜ **11.8 + 11.9** — Cart + Checkout + Payment
+5. ⬜ **11.10 + 11.11** — VPN + Account screens
+6. ⬜ **11.12 + 11.13** — Push notifications + real-time
+7. ⬜ **11.18** — Backend API adjustments
+8. ⬜ **11.14 + 11.15 + 11.16** — Offline, UX polish, performance
+9. ⬜ **11.17** — Mobile security hardening
+10. ⬜ **11.19** — Analytics + crash reporting
+11. ⬜ **11.20** — EAS build pipeline
+12. ⬜ **11.21 + 11.22** — Store submissions
+13. ⬜ **11.23** — Post-launch monitoring
+
+---
+
 ## How to use this file
 - Check off (✅) each feature as it's completed
 - ⬜ → ✅ ပြောင်းပြီး deploy progress track လုပ်ပါ

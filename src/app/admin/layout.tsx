@@ -23,6 +23,7 @@ import {
   ChevronDown,
   MoreHorizontal,
   MessageSquare,
+  Bot,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 import AdminHeader from '@/components/layout/AdminHeader';
@@ -41,6 +42,7 @@ const allNavItems = [
   { href: '/admin/activity', labelKey: 'admin.nav.activity', icon: History, group: 'tools' },
   { href: '/admin/coupons', labelKey: 'admin.nav.coupons', icon: Tag, group: 'tools' },
   { href: '/admin/support', labelKey: 'admin.nav.support', icon: MessageSquare, group: 'tools' },
+  { href: '/admin/ai-chat', labelKey: 'AI Control', icon: Bot, group: 'tools', raw: true },
   { href: '/admin/export', labelKey: 'admin.nav.export', icon: Download, group: 'tools' },
   { href: '/admin/settings', labelKey: 'admin.nav.settings', icon: Settings, group: 'settings' },
 ];

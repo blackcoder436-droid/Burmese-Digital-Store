@@ -32,6 +32,7 @@ interface VpnServerData {
   domain: string;
   subPort: number;
   trojanPort?: number | null;
+  protocolPorts?: { trojan?: number | null; vless?: number | null; vmess?: number | null; shadowsocks?: number | null };
   protocol: string;
   enabledProtocols?: string[];
   enabled: boolean;
@@ -42,13 +43,15 @@ interface VpnServerData {
 }
 
 const PROTOCOLS = [
-  { value: 'trojan', label: 'Trojan' },
-  { value: 'vless', label: 'VLESS' },
-  { value: 'vmess', label: 'VMess' },
-  { value: 'shadowsocks', label: 'Shadowsocks' },
+  { value: 'trojan', label: 'Trojan', defaultPort: 443 },
+  { value: 'vless', label: 'VLESS', defaultPort: 443 },
+  { value: 'vmess', label: 'VMess', defaultPort: 443 },
+  { value: 'shadowsocks', label: 'Shadowsocks', defaultPort: 443 },
 ];
 
 const FLAG_OPTIONS = ['🇸🇬', '🇺🇸', '🇯🇵', '🇰🇷', '🇩🇪', '🇬🇧', '🇫🇷', '🇳🇱', '🇦🇺', '🇨🇦', '🇮🇳', '🇭🇰', '🇹🇼', '🇹🇭', '🇲🇲', '🇻🇳'];
+
+type ProtocolPortsForm = { trojan: string; vless: string; vmess: string; shadowsocks: string };
 
 const emptyForm = {
   serverId: '',
@@ -59,6 +62,7 @@ const emptyForm = {
   domain: '',
   subPort: 2096,
   trojanPort: '' as string | number,
+  protocolPorts: { trojan: '', vless: '', vmess: '', shadowsocks: '' } as ProtocolPortsForm,
   protocol: 'trojan',
   enabledProtocols: ['trojan', 'vless', 'vmess', 'shadowsocks'] as string[],
   enabled: true,
@@ -127,6 +131,7 @@ export default function AdminServersPage() {
   }
 
   function openEditForm(server: VpnServerData) {
+    const pp = server.protocolPorts || {};
     setForm({
       serverId: server.serverId,
       name: server.name,
@@ -136,6 +141,12 @@ export default function AdminServersPage() {
       domain: server.domain,
       subPort: server.subPort,
       trojanPort: server.trojanPort || '',
+      protocolPorts: {
+        trojan: pp.trojan ? String(pp.trojan) : (server.trojanPort ? String(server.trojanPort) : ''),
+        vless: pp.vless ? String(pp.vless) : '',
+        vmess: pp.vmess ? String(pp.vmess) : '',
+        shadowsocks: pp.shadowsocks ? String(pp.shadowsocks) : '',
+      },
       protocol: server.protocol,
       enabledProtocols: server.enabledProtocols ?? ['trojan', 'vless', 'vmess', 'shadowsocks'],
       enabled: server.enabled,
@@ -156,10 +167,16 @@ export default function AdminServersPage() {
     setSaving(true);
 
     try {
+      const protocolPorts: Record<string, number | null> = {};
+      for (const [proto, val] of Object.entries(form.protocolPorts)) {
+        protocolPorts[proto] = val ? Number(val) : null;
+      }
+
       const payload = {
         ...form,
         trojanPort: form.trojanPort ? Number(form.trojanPort) : null,
         subPort: Number(form.subPort),
+        protocolPorts,
       };
 
       if (editingId) {
@@ -449,20 +466,6 @@ export default function AdminServersPage() {
                 />
               </div>
 
-              {/* Trojan Port */}
-              <div>
-                <label className="text-xs font-semibold text-gray-400 block mb-1">
-                  Trojan Port <span className="text-gray-600">(optional)</span>
-                </label>
-                <input
-                  type="number"
-                  value={form.trojanPort}
-                  onChange={(e) => setForm({ ...form, trojanPort: e.target.value })}
-                  placeholder="e.g. 22716"
-                  className="input-dark w-full"
-                />
-              </div>
-
               {/* Protocol */}
               <div>
                 <label className="text-xs font-semibold text-gray-400 block mb-1">
@@ -480,35 +483,60 @@ export default function AdminServersPage() {
               </div>
             </div>
 
-            {/* Enabled Protocols */}
+            {/* Enabled Protocols with Ports */}
             <div>
               <label className="text-xs font-semibold text-gray-400 block mb-2">
                 {t('admin.serversPage.availableProtocols')}
               </label>
-              <div className="flex flex-wrap gap-3">
-                {PROTOCOLS.map((p) => (
-                  <label key={p.value} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.enabledProtocols.includes(p.value)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setForm({ ...form, enabledProtocols: [...form.enabledProtocols, p.value] });
-                        } else {
-                          // Don't allow unchecking all
-                          if (form.enabledProtocols.length > 1) {
-                            setForm({ ...form, enabledProtocols: form.enabledProtocols.filter((x) => x !== p.value) });
-                          }
-                        }
-                      }}
-                      className="w-4 h-4 rounded border-gray-600 bg-dark-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
-                    />
-                    <span className="text-sm text-gray-300">{p.label}</span>
-                  </label>
-                ))}
-              </div>
-              <p className="text-xs text-gray-600 mt-1">
+              <p className="text-xs text-gray-600 mb-3">
                 {t('admin.serversPage.protocolHint')}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {PROTOCOLS.map((p) => {
+                  const isEnabled = form.enabledProtocols.includes(p.value);
+                  return (
+                    <div
+                      key={p.value}
+                      className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                        isEnabled
+                          ? 'border-purple-500/30 bg-purple-500/5'
+                          : 'border-dark-600 bg-dark-800/50 opacity-60'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isEnabled}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setForm({ ...form, enabledProtocols: [...form.enabledProtocols, p.value] });
+                          } else {
+                            if (form.enabledProtocols.length > 1) {
+                              setForm({ ...form, enabledProtocols: form.enabledProtocols.filter((x) => x !== p.value) });
+                            }
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-gray-600 bg-dark-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0 shrink-0"
+                      />
+                      <span className="text-sm text-gray-300 font-semibold w-28 shrink-0">{p.label}</span>
+                      <input
+                        type="number"
+                        value={form.protocolPorts[p.value as keyof ProtocolPortsForm] || ''}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            protocolPorts: { ...form.protocolPorts, [p.value]: e.target.value },
+                          })
+                        }
+                        placeholder={`Port (e.g. ${p.defaultPort})`}
+                        disabled={!isEnabled}
+                        className="input-dark flex-1 text-sm disabled:opacity-40"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                3xUI panel ရှိ inbound port များနှင့် တူညီအောင် ထည့်ပါ
               </p>
             </div>
 
@@ -729,6 +757,20 @@ export default function AdminServersPage() {
                       <div>
                         <span className="text-gray-600 block">{t('admin.serversPage.trojanPort')}</span>
                         <span className="text-gray-300 font-mono">{server.trojanPort}</span>
+                      </div>
+                    )}
+                    {server.protocolPorts && Object.entries(server.protocolPorts).some(([, v]) => v) && (
+                      <div className="col-span-2">
+                        <span className="text-gray-600 block mb-1">Protocol Ports</span>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(server.protocolPorts)
+                            .filter(([, port]) => port)
+                            .map(([proto, port]) => (
+                              <span key={proto} className="text-xs bg-dark-700 px-2 py-1 rounded-lg text-gray-300 font-mono">
+                                {proto.toUpperCase()}: {port}
+                              </span>
+                            ))}
+                        </div>
                       </div>
                     )}
                     <div>
