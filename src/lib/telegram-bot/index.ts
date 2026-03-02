@@ -357,14 +357,24 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
       );
       await answerCallback(ctx.callbackQueryId!, '✅ Order approved');
 
-      // Update the admin message
+      // Update the admin message (photo messages need editMessageCaption)
       if (ctx.messageId) {
-        const { editMessageText } = await import('./api');
-        await editMessageText(
-          ctx.chatId,
-          ctx.messageId,
-          (callback.message?.text || '') + `\n\n✅ <b>APPROVED</b> by ${ctx.firstName}`
-        );
+        const { editMessageText, editMessageCaption } = await import('./api');
+        const isPhoto = !!callback.message?.photo;
+        const statusLine = `\n\n✅ <b>APPROVED</b> by ${ctx.firstName}`;
+        if (isPhoto) {
+          await editMessageCaption(
+            ctx.chatId,
+            ctx.messageId,
+            (callback.message?.caption || '') + statusLine
+          );
+        } else {
+          await editMessageText(
+            ctx.chatId,
+            ctx.messageId,
+            (callback.message?.text || '') + statusLine
+          );
+        }
       }
     } else if (data.startsWith('bot_reject_')) {
       if (!ctx.isAdmin) {
@@ -382,13 +392,24 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
       );
       await answerCallback(ctx.callbackQueryId!, '❌ Order rejected');
 
+      // Update the admin message (photo messages need editMessageCaption)
       if (ctx.messageId) {
-        const { editMessageText } = await import('./api');
-        await editMessageText(
-          ctx.chatId,
-          ctx.messageId,
-          (callback.message?.text || '') + `\n\n❌ <b>REJECTED</b> by ${ctx.firstName}`
-        );
+        const { editMessageText, editMessageCaption } = await import('./api');
+        const isPhoto = !!callback.message?.photo;
+        const statusLine = `\n\n❌ <b>REJECTED</b> by ${ctx.firstName}`;
+        if (isPhoto) {
+          await editMessageCaption(
+            ctx.chatId,
+            ctx.messageId,
+            (callback.message?.caption || '') + statusLine
+          );
+        } else {
+          await editMessageText(
+            ctx.chatId,
+            ctx.messageId,
+            (callback.message?.text || '') + statusLine
+          );
+        }
       }
     }
     // ---- Admin Panel ----

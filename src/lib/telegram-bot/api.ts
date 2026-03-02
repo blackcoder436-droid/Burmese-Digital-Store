@@ -111,6 +111,48 @@ export async function editMessageText(
 }
 
 /**
+ * Edit the caption of an existing photo/document message
+ */
+export async function editMessageCaption(
+  chatId: number | string,
+  messageId: number,
+  caption: string,
+  options?: {
+    parseMode?: 'HTML' | 'Markdown';
+    replyMarkup?: InlineKeyboardMarkup;
+  }
+): Promise<boolean> {
+  if (!BOT_TOKEN) return false;
+
+  try {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      message_id: messageId,
+      caption,
+      parse_mode: options?.parseMode || 'HTML',
+    };
+
+    if (options?.replyMarkup) {
+      body.reply_markup = options.replyMarkup;
+    } else {
+      // Remove inline keyboard
+      body.reply_markup = JSON.stringify({ inline_keyboard: [] });
+    }
+
+    const res = await fetch(`${TELEGRAM_API}/editMessageCaption`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+    return data.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Answer a callback query (dismiss loading spinner)
  */
 export async function answerCallback(

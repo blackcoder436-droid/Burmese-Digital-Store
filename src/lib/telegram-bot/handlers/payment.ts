@@ -5,7 +5,7 @@
 
 import connectDB from '@/lib/mongodb';
 import Order from '@/models/Order';
-import { sendMessage, sendPhoto, downloadFile, editMessageText } from '../api';
+import { sendMessage, sendPhoto, downloadFile, editMessageText, editMessageCaption } from '../api';
 import { MSG } from '../messages';
 import { approveRejectKeyboard, mainMenuKeyboard } from '../keyboards';
 import { getSession, clearSession } from '../session';
@@ -138,10 +138,16 @@ export async function handlePaymentScreenshot(
     const targetChat = CHANNEL_ID || ADMIN_CHAT_ID;
     if (targetChat) {
       // Send screenshot photo with admin buttons
-      await sendPhoto(targetChat, largest.file_id, {
+      const photoResult = await sendPhoto(targetChat, largest.file_id, {
         caption: adminMessage,
         replyMarkup: approveRejectKeyboard(order._id.toString(), telegramId),
       });
+
+      // Save message ID so auto-approve/reject can edit the message later
+      if (photoResult.messageId) {
+        order.telegramMessageId = photoResult.messageId;
+        await order.save();
+      }
     }
 
     // Tell user order is under review
@@ -226,11 +232,21 @@ async function executeAutoApprove(orderId: string, userId: number): Promise<void
 
     const order = result.order;
     if (targetChat && order?.telegramMessageId) {
-      await editMessageText(
+      // Admin message is a photo (sendPhoto with caption) — use editMessageCaption
+      const autoApproveText = `🤖 <b>AUTO-APPROVED</b>\n\nOrder ${order.orderNumber} auto-approved (OCR match)`;
+      const captionOk = await editMessageCaption(
         targetChat,
         order.telegramMessageId,
-        `🤖 <b>AUTO-APPROVED</b>\n\nOrder ${order.orderNumber} auto-approved (OCR match)`
+        autoApproveText
       );
+      // Fallback to editMessageText in case it was a text message
+      if (!captionOk) {
+        await editMessageText(
+          targetChat,
+          order.telegramMessageId,
+          autoApproveText
+        );
+      }
     }
 
     log.info('Order auto-approved', { orderId, userId });
