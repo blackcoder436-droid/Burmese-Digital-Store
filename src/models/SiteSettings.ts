@@ -13,6 +13,12 @@ export interface IPaymentAccount {
   enabled: boolean;
 }
 
+export interface IFeatureFlag {
+  name: string;
+  enabled: boolean;
+  updatedBy?: string;
+}
+
 export interface ISiteSettingsDocument extends Document {
   ocrEnabled: boolean;
   paymentAccounts: IPaymentAccount[];
@@ -21,6 +27,11 @@ export interface ISiteSettingsDocument extends Document {
   highAmountThreshold: number;
   requireManualReviewForNewUsers: boolean;
   autoExpireEnabled: boolean;
+  // Bot feature flags
+  featureFlags: IFeatureFlag[];
+  // Auto-approve settings
+  autoApproveEnabled: boolean;
+  autoApproveDelaySeconds: number;
   updatedAt: Date;
 }
 
@@ -85,6 +96,33 @@ const SiteSettingsSchema: Schema = new Schema(
       type: Boolean,
       default: true, // Auto-expire orders past payment window
     },
+    // Bot feature flags
+    featureFlags: {
+      type: [
+        {
+          name: { type: String, required: true },
+          enabled: { type: Boolean, default: true },
+          updatedBy: { type: String, default: null },
+        },
+      ],
+      default: [
+        { name: 'referral_system', enabled: true },
+        { name: 'free_test_key', enabled: true },
+        { name: 'protocol_change', enabled: true },
+        { name: 'auto_approve', enabled: true },
+      ],
+    },
+    // Auto-approve settings
+    autoApproveEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    autoApproveDelaySeconds: {
+      type: Number,
+      default: 100,
+      min: 30,
+      max: 600,
+    },
   },
   {
     timestamps: true,
@@ -106,4 +144,40 @@ export async function getSiteSettings(): Promise<ISiteSettingsDocument> {
     settings = await SiteSettings.create({ ocrEnabled: true });
   }
   return settings;
+}
+
+/**
+ * Get a specific feature flag value.
+ */
+export async function getFeatureFlag(name: string): Promise<boolean> {
+  const settings = await getSiteSettings();
+  const flag = settings.featureFlags?.find((f) => f.name === name);
+  return flag?.enabled ?? true; // default to enabled if not found
+}
+
+/**
+ * Set a feature flag value.
+ */
+export async function setFeatureFlag(
+  name: string,
+  enabled: boolean,
+  updatedBy?: string
+): Promise<void> {
+  const settings = await getSiteSettings();
+  const flag = settings.featureFlags?.find((f) => f.name === name);
+  if (flag) {
+    flag.enabled = enabled;
+    flag.updatedBy = updatedBy;
+  } else {
+    settings.featureFlags.push({ name, enabled, updatedBy });
+  }
+  await settings.save();
+}
+
+/**
+ * Get all feature flags.
+ */
+export async function getAllFeatureFlags(): Promise<IFeatureFlag[]> {
+  const settings = await getSiteSettings();
+  return settings.featureFlags || [];
 }

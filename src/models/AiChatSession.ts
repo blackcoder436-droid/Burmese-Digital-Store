@@ -32,7 +32,7 @@ const AiChatMessageSchema = new Schema<IAiChatMessageDoc>(
       enum: ['user', 'assistant', 'system'],
       required: true,
     },
-    content: { type: String, required: true, maxlength: 4000 },
+    content: { type: String, required: true, maxlength: 16000 },
     timestamp: { type: Date, default: Date.now },
   },
   { _id: false }

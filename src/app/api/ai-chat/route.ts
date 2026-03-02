@@ -3,7 +3,7 @@ import connectDB from '@/lib/mongodb';
 import { getAuthUser } from '@/lib/auth';
 import { rateLimit } from '@/lib/rateLimit';
 import { sanitizeString } from '@/lib/security';
-import { callAiApiStream, callAiApi, getCustomerSystemPrompt } from '@/lib/ai-chat';
+import { callAiApiStream, callAiApi, getCustomerSystemPrompt, matchFaqReply, detectPromptInjection } from '@/lib/ai-chat';
 import AiChatSession from '@/models/AiChatSession';
 import type { AiMessage } from '@/lib/ai-chat';
 
@@ -115,8 +115,38 @@ export async function POST(request: NextRequest) {
       timestamp: new Date(),
     });
 
+    // ---- Prompt Injection Protection ----
+    const injectionRefusal = detectPromptInjection(message);
+    if (injectionRefusal) {
+      session.messages.push({
+        role: 'assistant',
+        content: injectionRefusal,
+        timestamp: new Date(),
+      });
+      await session.save();
+      return NextResponse.json({
+        success: true,
+        data: { message: injectionRefusal, sessionId: session.sessionId },
+      });
+    }
+
+    // ---- FAQ Auto-Reply (instant, no AI API call needed) ----
+    const faqMatch = matchFaqReply(message);
+    if (faqMatch && !faqMatch.passthrough) {
+      session.messages.push({
+        role: 'assistant',
+        content: faqMatch.reply,
+        timestamp: new Date(),
+      });
+      await session.save();
+      return NextResponse.json({
+        success: true,
+        data: { message: faqMatch.reply, sessionId: session.sessionId },
+      });
+    }
+
     // Build conversation for AI
-    const systemPrompt = getCustomerSystemPrompt();
+    const systemPrompt = await getCustomerSystemPrompt();
     const aiMessages: AiMessage[] = [
       { role: 'system', content: systemPrompt },
     ];

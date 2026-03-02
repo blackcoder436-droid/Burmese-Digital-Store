@@ -1,9 +1,12 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { ReactNode, lazy, Suspense } from 'react';
+import dynamic from 'next/dynamic';
+import { ReactNode } from 'react';
 
-const AiChatWidget = lazy(() => import('@/components/AiChatWidget'));
+const AiChatWidget = dynamic(() => import('@/components/AiChatWidget'), {
+  ssr: false,
+});
 
 interface LayoutShellProps {
   navbar: ReactNode;
@@ -22,12 +25,10 @@ export function LayoutShell({ navbar, footer, children }: LayoutShellProps) {
         {children}
       </main>
       {!isAdmin && footer}
-      {/* AI Chat Widget - only on customer-facing pages */}
-      {!isAdmin && (
-        <Suspense fallback={null}>
-          <AiChatWidget />
-        </Suspense>
-      )}
+      {/* AI Chat Widget - temporarily hidden from users */}
+      {/* {!isAdmin && (
+        <AiChatWidget />
+      )} */}
     </>
   );
 }

@@ -2,16 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+Myanmar:wght@400;500;600;700;800;900&display=swap');
+/* Google Fonts moved to next/font in layout.tsx for zero render-blocking */
 
 @layer base {
   body {
     @apply bg-dark-950 text-gray-200 antialiased;
-    font-family: 'Inter', 'Noto Sans Myanmar', 'Padauk', system-ui, -apple-system, sans-serif;
+    /* Font family set via CSS variables from next/font in layout.tsx */
+    font-family: var(--font-inter), var(--font-noto-myanmar), 'Padauk', system-ui, -apple-system, sans-serif;
   }
 
   html[lang='my'] body {
-    font-family: 'Noto Sans Myanmar', 'Pyidaungsu', 'Myanmar Text', 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-noto-myanmar), 'Pyidaungsu', 'Myanmar Text', var(--font-inter), system-ui, -apple-system, sans-serif;
     line-height: 1.7;
   }
 

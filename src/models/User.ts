@@ -13,6 +13,17 @@ export interface IUserDocument extends Document {
   balance: number;
   avatar?: string;
   googleId?: string;
+  // Telegram bot integration
+  telegramId?: number;
+  telegramUsername?: string;
+  // Ban management
+  isBanned: boolean;
+  banReason?: string;
+  bannedUntil?: Date;
+  bannedBy?: string;
+  // Referral system
+  referralCode?: string;
+  referralBonusDays: number;
   tokenVersion: number;
   freeVpnTestUsedAt?: Date;
   emailVerified: boolean;
@@ -74,6 +85,48 @@ const UserSchema: Schema = new Schema(
       default: null,
       sparse: true,
     },
+    // Telegram bot integration
+    telegramId: {
+      type: Number,
+      default: null,
+      sparse: true,
+      unique: true,
+    },
+    telegramUsername: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    // Ban management
+    isBanned: {
+      type: Boolean,
+      default: false,
+    },
+    banReason: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    bannedUntil: {
+      type: Date,
+      default: null,
+    },
+    bannedBy: {
+      type: String,
+      default: null,
+    },
+    // Referral system
+    referralCode: {
+      type: String,
+      default: null,
+      sparse: true,
+      unique: true,
+    },
+    referralBonusDays: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     tokenVersion: {
       type: Number,
       default: 0,
@@ -126,6 +179,7 @@ const UserSchema: Schema = new Schema(
 // Index for faster queries (email index already created by unique: true)
 UserSchema.index({ role: 1 });
 UserSchema.index({ deletedAt: 1 });
+UserSchema.index({ isBanned: 1 }); // Ban management
 // Database indexing audit (2026-02-19)
 UserSchema.index({ name: 'text', email: 'text' }); // Admin user search
 UserSchema.index({ createdAt: -1 }); // Analytics user growth sorting

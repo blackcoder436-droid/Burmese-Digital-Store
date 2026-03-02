@@ -118,12 +118,15 @@ ${serverStatus}
       }
     }
 
+    const adminModel = process.env.AI_ADMIN_MODEL || 'gpt-4o';
+
     if (stream) {
       try {
         const aiStream = await callAiApiStream({
           messages: aiMessages,
           temperature: 0.5,
           maxTokens: 2048,
+          model: adminModel,
         });
 
         let fullContent = '';
@@ -187,6 +190,7 @@ ${serverStatus}
       messages: aiMessages,
       temperature: 0.5,
       maxTokens: 2048,
+      model: adminModel,
     });
 
     // Parse commands from response
@@ -309,6 +313,206 @@ async function executeServerCommand(cmd: {
           action: cmd.action,
           success: true,
           result: `Today: ${todayOrders} orders | This Week: ${weekOrders} orders | Pending: ${pendingOrders} | Total Revenue: ${revenue.toLocaleString()} MMK | Users: ${totalUsers}`,
+        };
+      }
+
+      // ==========================================
+      // Order Management Commands
+      // ==========================================
+
+      case 'order_list_pending': {
+        await connectDB();
+        const orders = await Order.find({ status: 'pending' })
+          .sort({ createdAt: -1 })
+          .limit(20)
+          .populate('user', 'name email')
+          .lean();
+
+        if (orders.length === 0) {
+          return { action: cmd.action, success: true, result: 'No pending orders found.' };
+        }
+
+        const list = orders.map((o: Record<string, unknown>, i: number) => {
+          const user = o.user as Record<string, unknown> | null;
+          const userName = user?.name || user?.email || 'Unknown';
+          const total = typeof o.totalAmount === 'number' ? o.totalAmount.toLocaleString() : '0';
+          const date = o.createdAt instanceof Date ? o.createdAt.toLocaleDateString() : '';
+          return `${i + 1}. Order #${String(o.orderNumber || o._id).slice(-8)} | ${userName} | ${total} MMK | ${date}`;
+        }).join('\n');
+
+        return { action: cmd.action, success: true, result: `Pending Orders (${orders.length}):\n${list}` };
+      }
+
+      case 'order_list_recent': {
+        await connectDB();
+        const limit = typeof cmd.params.limit === 'number' ? Math.min(cmd.params.limit, 50) : 10;
+        const orders = await Order.find()
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .populate('user', 'name email')
+          .lean();
+
+        if (orders.length === 0) {
+          return { action: cmd.action, success: true, result: 'No orders found.' };
+        }
+
+        const list = orders.map((o: Record<string, unknown>, i: number) => {
+          const user = o.user as Record<string, unknown> | null;
+          const userName = user?.name || user?.email || 'Unknown';
+          const total = typeof o.totalAmount === 'number' ? o.totalAmount.toLocaleString() : '0';
+          return `${i + 1}. #${String(o.orderNumber || o._id).slice(-8)} | ${userName} | ${total} MMK | ${o.status}`;
+        }).join('\n');
+
+        return { action: cmd.action, success: true, result: `Recent Orders (${orders.length}):\n${list}` };
+      }
+
+      case 'order_approve': {
+        await connectDB();
+        const order = await Order.findById(cmd.target);
+        if (!order) return { action: cmd.action, success: false, result: `Order ${cmd.target} not found` };
+        if (order.status !== 'pending') {
+          return { action: cmd.action, success: false, result: `Order is already ${order.status}` };
+        }
+        order.status = 'completed';
+        await order.save();
+        return { action: cmd.action, success: true, result: `Order #${String(order.orderNumber || order._id).slice(-8)} approved successfully` };
+      }
+
+      case 'order_reject': {
+        await connectDB();
+        const order = await Order.findById(cmd.target);
+        if (!order) return { action: cmd.action, success: false, result: `Order ${cmd.target} not found` };
+        if (order.status !== 'pending') {
+          return { action: cmd.action, success: false, result: `Order is already ${order.status}` };
+        }
+        const reason = typeof cmd.params.reason === 'string' ? cmd.params.reason : 'Rejected by admin';
+        order.status = 'rejected';
+        order.adminNote = reason;
+        await order.save();
+        return { action: cmd.action, success: true, result: `Order #${String(order.orderNumber || order._id).slice(-8)} rejected. Reason: ${reason}` };
+      }
+
+      case 'order_search': {
+        await connectDB();
+        const query = typeof cmd.params.query === 'string' ? cmd.params.query : '';
+        if (!query) return { action: cmd.action, success: false, result: 'Search query is required' };
+
+        const orders = await Order.find({
+          $or: [
+            { orderNumber: { $regex: query, $options: 'i' } },
+            { _id: query.length === 24 ? query : undefined },
+          ].filter(Boolean),
+        })
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .populate('user', 'name email')
+          .lean();
+
+        if (orders.length === 0) {
+          return { action: cmd.action, success: true, result: `No orders matching "${query}"` };
+        }
+
+        const list = orders.map((o: Record<string, unknown>, i: number) => {
+          const user = o.user as Record<string, unknown> | null;
+          const userName = user?.name || user?.email || 'Unknown';
+          const total = typeof o.totalAmount === 'number' ? o.totalAmount.toLocaleString() : '0';
+          return `${i + 1}. #${String(o.orderNumber || o._id).slice(-8)} | ${userName} | ${total} MMK | ${o.status}`;
+        }).join('\n');
+
+        return { action: cmd.action, success: true, result: `Search results for "${query}" (${orders.length}):\n${list}` };
+      }
+
+      // ==========================================
+      // User Management Commands
+      // ==========================================
+
+      case 'user_search': {
+        await connectDB();
+        const query = typeof cmd.params.query === 'string' ? cmd.params.query : '';
+        if (!query) return { action: cmd.action, success: false, result: 'Search query is required' };
+
+        const users = await User.find({
+          $or: [
+            { name: { $regex: query, $options: 'i' } },
+            { email: { $regex: query, $options: 'i' } },
+          ],
+        })
+          .select('name email role createdAt')
+          .limit(10)
+          .lean();
+
+        if (users.length === 0) {
+          return { action: cmd.action, success: true, result: `No users matching "${query}"` };
+        }
+
+        const list = users.map((u: Record<string, unknown>, i: number) => {
+          const date = u.createdAt instanceof Date ? u.createdAt.toLocaleDateString() : '';
+          return `${i + 1}. ${u.name} | ${u.email} | ${u.role} | Joined: ${date} | ID: ${u._id}`;
+        }).join('\n');
+
+        return { action: cmd.action, success: true, result: `Users matching "${query}" (${users.length}):\n${list}` };
+      }
+
+      case 'user_details': {
+        await connectDB();
+        const user = await User.findById(cmd.target).lean() as Record<string, unknown> | null;
+        if (!user) return { action: cmd.action, success: false, result: `User ${cmd.target} not found` };
+
+        const orderCount = await Order.countDocuments({ user: cmd.target });
+        const recentOrders = await Order.find({ user: cmd.target })
+          .sort({ createdAt: -1 })
+          .limit(5)
+          .lean();
+
+        const orderList = recentOrders.map((o: Record<string, unknown>) => {
+          const total = typeof o.totalAmount === 'number' ? o.totalAmount.toLocaleString() : '0';
+          return `  - #${String(o.orderNumber || o._id).slice(-8)} | ${total} MMK | ${o.status}`;
+        }).join('\n');
+
+        return {
+          action: cmd.action,
+          success: true,
+          result: `User: ${user.name}\nEmail: ${user.email}\nRole: ${user.role}\nJoined: ${user.createdAt instanceof Date ? user.createdAt.toLocaleDateString() : ''}\nTotal Orders: ${orderCount}\nRecent Orders:\n${orderList || '  (none)'}`,
+        };
+      }
+
+      // ==========================================
+      // Analytics Commands
+      // ==========================================
+
+      case 'analytics_revenue': {
+        await connectDB();
+        const period = typeof cmd.params.period === 'string' ? cmd.params.period : 'month';
+        let startDate: Date;
+        const now = new Date();
+
+        switch (period) {
+          case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            break;
+          case 'week':
+            startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case 'month':
+          default:
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+        }
+
+        const [revenueData, orderCount, completedCount] = await Promise.all([
+          Order.aggregate([
+            { $match: { status: 'completed', createdAt: { $gte: startDate } } },
+            { $group: { _id: null, total: { $sum: '$totalAmount' }, avg: { $avg: '$totalAmount' } } },
+          ]),
+          Order.countDocuments({ createdAt: { $gte: startDate } }),
+          Order.countDocuments({ status: 'completed', createdAt: { $gte: startDate } }),
+        ]);
+
+        const data = revenueData[0] || { total: 0, avg: 0 };
+        return {
+          action: cmd.action,
+          success: true,
+          result: `Revenue Report (${period}):\n- Total Revenue: ${data.total.toLocaleString()} MMK\n- Total Orders: ${orderCount}\n- Completed: ${completedCount}\n- Avg Order Value: ${Math.round(data.avg).toLocaleString()} MMK`,
         };
       }
 

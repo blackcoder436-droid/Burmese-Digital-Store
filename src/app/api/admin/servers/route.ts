@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       : validProtocols;
     const enabled = body.enabled !== false;
     const notes = sanitizeString(body.notes || '');
+    const badge = sanitizeString(body.badge || '').slice(0, 30);
 
     // Validation
     if (!serverId || !name || !flag || !url || !domain) {
@@ -143,6 +144,7 @@ export async function POST(request: NextRequest) {
       protocol,
       enabledProtocols,
       enabled,
+      badge,
       notes,
     });
 
@@ -204,6 +206,38 @@ export async function PATCH(request: NextRequest) {
 
     // Update allowed fields
     const updates: string[] = [];
+
+    // Server ID rename
+    if (body.newServerId !== undefined && body.newServerId !== serverId) {
+      const newId = sanitizeString(body.newServerId).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      if (!newId) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid new Server ID' },
+          { status: 400 }
+        );
+      }
+      // Check uniqueness
+      const existing = await VpnServer.findOne({ serverId: newId });
+      if (existing) {
+        return NextResponse.json(
+          { success: false, error: `Server ID "${newId}" already exists` },
+          { status: 409 }
+        );
+      }
+      // Update serverId in related orders (vpnPlan.serverId + vpnKey.serverId)
+      const { default: Order } = await import('@/models/Order');
+      await Order.updateMany(
+        { 'vpnPlan.serverId': serverId },
+        { $set: { 'vpnPlan.serverId': newId } }
+      );
+      await Order.updateMany(
+        { 'vpnKey.serverId': serverId },
+        { $set: { 'vpnKey.serverId': newId } }
+      );
+      server.serverId = newId;
+      updates.push(`serverId: ${serverId} → ${newId}`);
+    }
+
     if (body.name !== undefined) { server.name = sanitizeString(body.name); updates.push('name'); }
     if (body.flag !== undefined) { server.flag = (body.flag || '').trim(); updates.push('flag'); }
     if (body.url !== undefined) {
@@ -252,6 +286,7 @@ export async function PATCH(request: NextRequest) {
       }
     }
     if (body.enabled !== undefined) { server.enabled = !!body.enabled; updates.push('enabled'); }
+    if (body.badge !== undefined) { server.badge = sanitizeString(body.badge).slice(0, 30); updates.push('badge'); }
     if (body.notes !== undefined) { server.notes = sanitizeString(body.notes); updates.push('notes'); }
 
     await server.save();

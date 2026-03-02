@@ -41,12 +41,17 @@ const serverSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   NEXT_PUBLIC_GOOGLE_CLIENT_ID: z.string().optional(),
 
-  // Telegram
+  // Telegram (Noti bot — order notifications to channel)
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_CHANNEL_ID: z.string().optional(),
   TELEGRAM_CHAT_ID: z.string().optional(),
   TELEGRAM_ERROR_CHANNEL_ID: z.string().optional(),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+
+  // Telegram (VPN bot — user-facing bot for purchases)
+  TELEGRAM_VPN_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_VPN_WEBHOOK_SECRET: z.string().optional(),
+  ADMIN_CHAT_ID: z.string().optional(),
 
   // Storage
   STORAGE_PROVIDER: z
@@ -70,10 +75,11 @@ const serverSchema = z.object({
   // OCR
   OCR_LANGUAGE: z.string().optional().default('eng'),
 
-  // AI Chat Assistant
+  // AI Chat Assistant (GitHub Models / OpenAI-compatible)
   AI_API_KEY: z.string().optional(),
-  AI_API_URL: z.string().url().optional().default('https://generativelanguage.googleapis.com/v1beta/openai'),
-  AI_MODEL: z.string().optional().default('gemini-2.0-flash'),
+  AI_API_URL: z.string().url().optional().default('https://models.inference.ai.azure.com'),
+  AI_MODEL: z.string().optional().default('gpt-4o-mini'),
+  AI_ADMIN_MODEL: z.string().optional().default('gpt-4o'),
   AI_CHAT_ENABLED: z.enum(['true', 'false']).optional().default('false'),
 
   // Admin

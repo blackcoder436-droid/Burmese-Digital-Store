@@ -1,12 +1,28 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
+import { Inter, Noto_Sans_Myanmar } from 'next/font/google';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
-import TechBackground from '@/components/TechBackground';
+import LazyTechBackground from '@/components/LazyTechBackground';
 import { LayoutShell } from '@/components/layout/LayoutShell';
 import { Providers } from '@/components/layout/Providers';
 import { getOrganizationJsonLd, getWebsiteJsonLd } from '@/lib/jsonld';
 import './globals.css';
+
+// ── Optimized font loading via next/font (self-hosted, zero render-blocking) ──
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700', '800', '900'],
+  display: 'swap',
+  variable: '--font-inter',
+});
+
+const notoSansMyanmar = Noto_Sans_Myanmar({
+  subsets: ['myanmar'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  display: 'swap',
+  variable: '--font-noto-myanmar',
+});
 
 export const metadata: Metadata = {
   title: {
@@ -76,7 +92,7 @@ export default async function RootLayout({
   const nonce = headersList.get('x-nonce') ?? '';
 
   return (
-    <html lang="my" className="dark">
+    <html lang="my" className={`dark ${inter.variable} ${notoSansMyanmar.variable}`}>
       <head>
         {/* PWA meta tags */}
         <meta name="theme-color" content="#6c5ce7" />
@@ -97,10 +113,8 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col bg-[#0a0a1a]" suppressHydrationWarning>
-        {/* ── Global animated tech network background ── */}
-        <div className="fixed inset-0 pointer-events-none z-0" aria-hidden="true">
-          <TechBackground />
-        </div>
+        {/* ── Global animated tech network background (lazy loaded) ── */}
+        <LazyTechBackground />
 
         <Providers>
           <LayoutShell

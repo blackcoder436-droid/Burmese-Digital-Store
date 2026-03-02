@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { MessageCircle, X, Send, Loader2, Bot, User, Trash2, Minimize2 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 
@@ -19,6 +19,125 @@ function generateSessionId(): string {
   return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+// ---- Lightweight Markdown renderer for chat messages ----
+function ChatMarkdown({ content }: { content: string }) {
+  const rendered = useMemo(() => {
+    if (!content) return null;
+    const lines = content.split('\n');
+    const elements: React.ReactNode[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i];
+
+      // Headers (### / ## / #)
+      const headerMatch = line.match(/^(#{1,3})\s+(.+)/);
+      if (headerMatch) {
+        const level = headerMatch[1].length;
+        const text = headerMatch[2];
+        const cls = level === 1 ? 'font-bold text-base' : level === 2 ? 'font-bold text-sm' : 'font-semibold text-sm';
+        elements.push(<div key={i} className={`${cls} text-white mt-2 mb-1`}>{renderInline(text)}</div>);
+        i++;
+        continue;
+      }
+
+      // List items (- or *)
+      if (/^[-*]\s+/.test(line)) {
+        const listItems: React.ReactNode[] = [];
+        while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
+          const itemText = lines[i].replace(/^[-*]\s+/, '');
+          listItems.push(<li key={i} className="ml-3 text-sm">{renderInline(itemText)}</li>);
+          i++;
+        }
+        elements.push(<ul key={`ul-${i}`} className="list-disc list-inside my-1 space-y-0.5">{listItems}</ul>);
+        continue;
+      }
+
+      // Numbered list items
+      if (/^\d+[.)]\s+/.test(line)) {
+        const listItems: React.ReactNode[] = [];
+        while (i < lines.length && /^\d+[.)]\s+/.test(lines[i])) {
+          const itemText = lines[i].replace(/^\d+[.)]\s+/, '');
+          listItems.push(<li key={i} className="ml-3 text-sm">{renderInline(itemText)}</li>);
+          i++;
+        }
+        elements.push(<ol key={`ol-${i}`} className="list-decimal list-inside my-1 space-y-0.5">{listItems}</ol>);
+        continue;
+      }
+
+      // Empty line = spacer
+      if (line.trim() === '') {
+        elements.push(<div key={i} className="h-1.5" />);
+        i++;
+        continue;
+      }
+
+      // Regular paragraph
+      elements.push(<p key={i} className="text-sm my-0.5">{renderInline(line)}</p>);
+      i++;
+    }
+
+    return elements;
+  }, [content]);
+
+  return <div className="break-words">{rendered}</div>;
+}
+
+/** Render inline markdown: **bold**, [link](url), `code`, *italic* */
+function renderInline(text: string): React.ReactNode {
+  // Split by markdown patterns and render inline elements
+  const parts: React.ReactNode[] = [];
+  let remaining = text;
+  let keyIdx = 0;
+
+  while (remaining.length > 0) {
+    // Bold: **text** or __text__
+    const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*/s);
+    // Link: [text](url)
+    const linkMatch = remaining.match(/^(.*?)\[([^\]]+)\]\(([^)]+)\)/);
+    // Code: `text`
+    const codeMatch = remaining.match(/^(.*?)`([^`]+)`/);
+
+    // Find the earliest match
+    const matches = [
+      boldMatch && { type: 'bold', idx: boldMatch[1].length, match: boldMatch },
+      linkMatch && { type: 'link', idx: linkMatch[1].length, match: linkMatch },
+      codeMatch && { type: 'code', idx: codeMatch[1].length, match: codeMatch },
+    ].filter(Boolean).sort((a, b) => a!.idx - b!.idx);
+
+    if (matches.length === 0) {
+      parts.push(remaining);
+      break;
+    }
+
+    const first = matches[0]!;
+
+    if (first.type === 'bold' && first.match) {
+      const m = first.match as RegExpMatchArray;
+      if (m[1]) parts.push(m[1]);
+      parts.push(<strong key={keyIdx++} className="font-semibold text-white">{m[2]}</strong>);
+      remaining = remaining.slice(m[0].length);
+    } else if (first.type === 'link' && first.match) {
+      const m = first.match as RegExpMatchArray;
+      if (m[1]) parts.push(m[1]);
+      parts.push(
+        <a key={keyIdx++} href={m[3]} target="_blank" rel="noopener noreferrer"
+          className="text-purple-400 hover:text-purple-300 underline underline-offset-2">{m[2]}</a>
+      );
+      remaining = remaining.slice(m[0].length);
+    } else if (first.type === 'code' && first.match) {
+      const m = first.match as RegExpMatchArray;
+      if (m[1]) parts.push(m[1]);
+      parts.push(
+        <code key={keyIdx++} className="bg-white/10 px-1 py-0.5 rounded text-xs text-purple-300">{m[2]}</code>
+      );
+      remaining = remaining.slice(m[0].length);
+    }
+  }
+
+  return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : <>{parts}</>;
+}
+
 function getFriendlyErrorMessage(error: unknown, tr: (en: string, mm: string) => string): string {
   const raw = error instanceof Error ? error.message : '';
   const lower = raw.toLowerCase();
@@ -32,14 +151,21 @@ function getFriendlyErrorMessage(error: unknown, tr: (en: string, mm: string) =>
 
   if (lower.includes('not configured') || lower.includes('authentication failed')) {
     return tr(
-      'AI assistant is not configured right now. Please contact support.',
-      'AI assistant ကိုလက်ရှိ မသတ်မှတ်ရသေးပါ။ Support ကိုဆက်သွယ်ပါ။'
+      'Chat is temporarily unavailable. You can reach me directly:\n\n- **Telegram Bot:** [@BurmeseDigitalStore_bot](https://t.me/BurmeseDigitalStore_bot)\n- **WhatsApp:** [+1 (857) 334-2772](https://wa.me/18573342772)\n- **Email:** support@burmesedigital.store',
+      'Chat ကို လောလောဆယ် မသုံးနိုင်ပါ။ ကျွန်တော့်ဆီ တိုက်ရိုက်ဆက်သွယ်နိုင်ပါတယ်:\n\n- **Telegram Bot:** [@BurmeseDigitalStore_bot](https://t.me/BurmeseDigitalStore_bot)\n- **WhatsApp:** [+1 (857) 334-2772](https://wa.me/18573342772)\n- **Email:** support@burmesedigital.store'
+    );
+  }
+
+  if (lower.includes('not enabled')) {
+    return tr(
+      'Chat is currently offline. Please reach me directly:\n\n- **Telegram Bot:** [@BurmeseDigitalStore_bot](https://t.me/BurmeseDigitalStore_bot)\n- **WhatsApp:** [+1 (857) 334-2772](https://wa.me/18573342772)',
+      'Chat ကို လောလောဆယ် ပိတ်ထားပါတယ်။ ကျွန်တော့်ဆီ တိုက်ရိုက်ဆက်သွယ်ပါ:\n\n- **Telegram Bot:** [@BurmeseDigitalStore_bot](https://t.me/BurmeseDigitalStore_bot)\n- **WhatsApp:** [+1 (857) 334-2772](https://wa.me/18573342772)'
     );
   }
 
   return tr(
-    'Sorry, I encountered an error. Please try again.',
-    'တောင်းပန်ပါတယ်။ ပြဿနာတစ်ခုရှိပါတယ်။ ထပ်ကြိုးစားပါ။'
+    'Sorry, something went wrong. Please try again, or reach me directly:\n\n- **Telegram Bot:** [@BurmeseDigitalStore_bot](https://t.me/BurmeseDigitalStore_bot)\n- **WhatsApp:** [+1 (857) 334-2772](https://wa.me/18573342772)',
+    'တောင်းပန်ပါတယ်၊ ခဏလေး ပြဿနာရှိနေပါတယ်။ ထပ်ကြိုးစားပါ (သို့) ကျွန်တော့်ဆီ တိုက်ရိုက်ဆက်သွယ်ပါ:\n\n- **Telegram Bot:** [@BurmeseDigitalStore_bot](https://t.me/BurmeseDigitalStore_bot)\n- **WhatsApp:** [+1 (857) 334-2772](https://wa.me/18573342772)'
   );
 }
 
@@ -258,7 +384,10 @@ export default function AiChatWidget() {
         }),
       });
 
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.error || `Failed (${res.status})`);
+      }
 
       const contentType = res.headers.get('content-type');
       if (contentType?.includes('text/event-stream') && res.body) {
@@ -355,7 +484,7 @@ export default function AiChatWidget() {
         >
           <MessageCircle className="w-5 h-5" />
           <span className="text-sm font-medium hidden sm:inline">
-            {tr('AI Assistant', 'AI အကူအညီ')}
+            {tr('Chat with Admin', 'Admin နဲ့ စကားပြောမယ်')}
           </span>
           {/* Pulse animation */}
           <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse" />
@@ -376,10 +505,10 @@ export default function AiChatWidget() {
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-white">
-                  {tr('AI Assistant', 'AI အကူအညီ')}
+                  {tr('Blackcoder (Admin)', 'Blackcoder (Admin)')}
                 </h3>
                 <p className="text-[10px] text-green-400">
-                  {isStreaming ? tr('Typing...', 'ရေးနေပါသည်...') : tr('Online', 'အွန်လိုင်း')}
+                  {isStreaming ? tr('Typing...', 'ရေးနေပါသည်...') : tr('Online', 'အွန်လိုင်းရှိနေသည်')}
                 </p>
               </div>
             </div>
@@ -420,8 +549,8 @@ export default function AiChatWidget() {
                   <div className="bg-white/5 border border-white/10 rounded-2xl rounded-tl-md px-3.5 py-2.5 max-w-[85%]">
                     <p className="text-sm text-white/90 leading-relaxed">
                       {tr(
-                        "Hi! 👋 I'm the Burmese Digital Store AI Assistant. I can help you with VPN plans, pricing, setup instructions, and more. How can I help you today?",
-                        'မင်္ဂလာပါ! 👋 ကျွန်တော်က Burmese Digital Store ရဲ့ AI အကူအညီပါ။ VPN အစီအစဉ်တွေ၊ ဈေးနှုန်းတွေ၊ တပ်ဆင်နည်းတွေနဲ့ အခြားအရာတွေကို ကူညီပေးနိုင်ပါတယ်။ ဘာကူညီပေးရမလဲခင်ဗျ?'
+                        "Hi! 👋 I'm Blackcoder, the Admin of Burmese Digital Store. I personally manage everything here — VPN plans, pricing, setup, and more. How can I help you today?",
+                        'မင်္ဂလာပါ! 👋 ကျွန်တော်က Blackcoder ပါ — Burmese Digital Store ရဲ့ Admin ပါ။ VPN အစီအစဉ်တွေ၊ ဈေးနှုန်းတွေ၊ တပ်ဆင်နည်းတွေ အကုန်လုံးကို ကိုယ်တိုင် စီမံခန့်ခွဲပေးနေပါတယ်။ ဘာလိုချင်ရင် ပြောပါနော်!'
                       )}
                     </p>
                   </div>
@@ -472,12 +601,16 @@ export default function AiChatWidget() {
                   }`}
                 >
                   {msg.content ? (
-                    <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                    msg.role === 'assistant' ? (
+                      <ChatMarkdown content={msg.content} />
+                    ) : (
+                      <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                    )
                   ) : (
                     <div className="flex items-center gap-1.5">
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
                       <span className="text-xs text-white/50">
-                        {tr('Thinking...', 'စဉ်းစားနေပါသည်...')}
+                        {tr('Typing...', 'စာရိုက်နေပါသည်...')}
                       </span>
                     </div>
                   )}
@@ -524,7 +657,7 @@ export default function AiChatWidget() {
               </button>
             </div>
             <p className="text-[10px] text-white/20 text-center mt-1.5">
-              {tr('Powered by AI • Responses may not always be accurate', 'AI ဖြင့်မောင်းနှင်သည် • အဖြေများ မှန်ကန်မှုမရှိနိုင်ပါ')}
+              {tr('Managed by Admin • Responses may not always be accurate', 'Admin ကိုယ်တိုင်စီမံသည် • အဖြေများ မှန်ကန်မှုမရှိနိုင်ပါ')}
             </p>
           </div>
         </div>

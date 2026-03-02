@@ -19,6 +19,7 @@ export interface IVpnServerDocument extends Document {
   enabledProtocols: string[]; // available protocols: ['trojan', 'vless', 'vmess', 'shadowsocks']
   enabled: boolean; // admin toggle (disabled = hidden from users, no provisioning)
   online: boolean; // runtime status (health check result)
+  badge?: string; // user-facing badge text (e.g. "New", "Popular", "Updated")
   notes?: string; // admin-only notes
   createdAt: Date;
   updatedAt: Date;
@@ -104,6 +105,12 @@ const VpnServerSchema: Schema = new Schema(
     online: {
       type: Boolean,
       default: true,
+    },
+    badge: {
+      type: String,
+      trim: true,
+      maxlength: 30,
+      default: '',
     },
     notes: {
       type: String,

@@ -106,10 +106,14 @@ export default function HomePage() {
   const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then((r) => r.json())
-      .then((d) => { if (d.success) setLoggedIn(true); })
-      .catch(() => {});
+    // Defer auth check — don't block initial render/paint
+    const timer = setTimeout(() => {
+      fetch('/api/auth/me')
+        .then((r) => r.json())
+        .then((d) => { if (d.success) setLoggedIn(true); })
+        .catch(() => {});
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   return (

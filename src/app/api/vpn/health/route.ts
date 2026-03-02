@@ -30,6 +30,18 @@ let cacheTime = 0;
 const CACHE_TTL_MS = 60_000; // 60 seconds
 
 async function pingPanel(server: VpnServer): Promise<ServerHealth> {
+  // Respect admin's online setting — if admin marked server offline, don't ping
+  if (!server.online) {
+    return {
+      id: server.id,
+      name: server.name,
+      flag: server.flag,
+      online: false,
+      latencyMs: null,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
   const start = Date.now();
   try {
     const urlCheck = validateExternalHttpUrl(server.url, { requiredAllowlistEnv: 'VPN_SERVER_ALLOWED_HOSTS' });

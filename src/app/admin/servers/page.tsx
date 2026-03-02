@@ -37,6 +37,7 @@ interface VpnServerData {
   enabledProtocols?: string[];
   enabled: boolean;
   online: boolean;
+  badge?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -66,6 +67,7 @@ const emptyForm = {
   protocol: 'trojan',
   enabledProtocols: ['trojan', 'vless', 'vmess', 'shadowsocks'] as string[],
   enabled: true,
+  badge: '',
   notes: '',
 };
 
@@ -150,6 +152,7 @@ export default function AdminServersPage() {
       protocol: server.protocol,
       enabledProtocols: server.enabledProtocols ?? ['trojan', 'vless', 'vmess', 'shadowsocks'],
       enabled: server.enabled,
+      badge: server.badge || '',
       notes: server.notes || '',
     });
     setEditingId(server.serverId);
@@ -180,11 +183,16 @@ export default function AdminServersPage() {
       };
 
       if (editingId) {
-        // Update
+        // Update — include newServerId if changed
+        const patchPayload = {
+          ...payload,
+          serverId: editingId, // always use original ID to find the server
+          ...(form.serverId !== editingId ? { newServerId: form.serverId } : {}),
+        };
         const res = await fetch('/api/admin/servers', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(patchPayload),
         });
         const data = await res.json();
         if (data.success) {
@@ -369,10 +377,12 @@ export default function AdminServersPage() {
                   value={form.serverId}
                   onChange={(e) => setForm({ ...form, serverId: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
                   placeholder="e.g. sg1, us2, jp1"
-                  disabled={!!editingId}
-                  className="input-dark w-full disabled:opacity-50"
+                  className="input-dark w-full"
                   required
                 />
+                {editingId && form.serverId !== editingId && (
+                  <p className="text-xs text-yellow-400 mt-1">⚠️ Server ID ကို {editingId} → {form.serverId} သို့ ပြောင်းလဲပါမည်</p>
+                )}
               </div>
 
               {/* Name */}
@@ -538,6 +548,22 @@ export default function AdminServersPage() {
               <p className="text-xs text-gray-500 mt-2">
                 3xUI panel ရှိ inbound port များနှင့် တူညီအောင် ထည့်ပါ
               </p>
+            </div>
+
+            {/* Badge (user-facing) */}
+            <div>
+              <label className="text-xs font-semibold text-gray-400 block mb-1">
+                Badge <span className="text-gray-500">(user များမြင်ရမည်)</span>
+              </label>
+              <input
+                type="text"
+                value={form.badge}
+                onChange={(e) => setForm({ ...form, badge: e.target.value.slice(0, 30) })}
+                placeholder="e.g. New, Popular, Updated"
+                className="input-dark w-full"
+                maxLength={30}
+              />
+              <p className="text-xs text-gray-500 mt-1">VPN page server card ပေါ်မှာ badge အဖြစ်ပြသမည်</p>
             </div>
 
             {/* Notes */}

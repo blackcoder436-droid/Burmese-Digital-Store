@@ -15,6 +15,7 @@ export async function GET() {
     online: s.online,
     protocol: s.protocol,
     enabledProtocols: s.enabledProtocols,
+    badge: s.badge || '',
   }));
 
   return NextResponse.json({ success: true, data: { servers } });

@@ -58,14 +58,7 @@ const features = [
   { icon: '\uD83C\uDF81', titleEn: 'Free Test Key', titleMy: 'Free Test Key \u1021\u1001\u103C\u1031\u1038', descEn: 'Get a free VPN test key via Telegram Bot (@BurmeseDigitalStore_bot). Join the channel and press "🎁 Free Test Key" to try before you buy!', descMy: 'Telegram Bot (@BurmeseDigitalStore_bot) \u1019\u103E\u102C "🎁 Free Test Key" \u1000\u102D\u102F \u1014\u103E\u102D\u1015\u103A\u1015\u103C\u102E\u1038 Channel Join \u101C\u102F\u1015\u103A\u101B\u102F\u1036\u1016\u103C\u1004\u103A\u1037 Free VPN Key \u1000\u102D\u102F \u1021\u1001\u103C\u1031\u1038\u101B\u101A\u1030\u1014\u102D\u102F\u1004\u103A\u1015\u102B\u101E\u100A\u103A\u104B \u101D\u101A\u103A\u1019\u101A\u1030\u1001\u1004\u103A \u1021\u101B\u1004\u103A\u1005\u1019\u103A\u1038\u1000\u103C\u100A\u103A\u1037\u1015\u102B!' },
 ];
 
-const defaultServers = [
-  { id: 'sg1', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 1', online: true },
-  { id: 'sg2', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 2', online: true },
-  { id: 'sg3', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 3', online: true },
-  { id: 'sg4', flag: '\uD83C\uDDF8\uD83C\uDDEC', name: 'Singapore 4', online: true },
-  { id: 'us1', flag: '\uD83C\uDDFA\uD83C\uDDF8', name: 'United States', online: true },
-  { id: 'ny', flag: '\uD83C\uDDFA\uD83C\uDDF8', name: 'New York', online: true },
-];
+// No hardcoded defaults — server list is fetched from API (admin-controlled)
 
 const stepsData = [
   { titleEn: 'Open Telegram Bot', titleMy: 'Telegram Bot \u1016\u103D\u1004\u103A\u1037\u1015\u102B', descEn: 'Open @BurmeseDigitalStore_bot on Telegram and press /start', descMy: '@BurmeseDigitalStore_bot \u1000\u102D\u102F Telegram \u1019\u103E\u102C \u1016\u103D\u1004\u103A\u1037\u1015\u103C\u102E\u1038 /start \u1014\u103E\u102D\u1015\u103A\u1015\u102B' },
@@ -158,6 +151,7 @@ interface LiveServerHealth {
   flag: string;
   online: boolean;
   latencyMs: number | null;
+  badge?: string;
 }
 
 export default function VPNPage() {
@@ -168,15 +162,12 @@ export default function VPNPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [appStore, setAppStore] = useState<'playstore' | 'appstore'>('playstore');
   const deviceTabsRef = useRef<HTMLDivElement>(null);
-  const [liveServers, setLiveServers] = useState<LiveServerHealth[]>(
-    defaultServers.map((s) => ({ id: s.id, name: s.name, flag: s.flag, online: s.online, latencyMs: null }))
-  );
+  const [liveServers, setLiveServers] = useState<LiveServerHealth[]>([]);
+  const [serversLoading, setServersLoading] = useState(true);
 
-  // Canonical server list ref — NEVER shrinks, only grows.
-  // This prevents servers from "disappearing" due to stale health cache or race conditions.
-  const serverListRef = useRef<LiveServerHealth[]>(
-    defaultServers.map((s) => ({ id: s.id, name: s.name, flag: s.flag, online: s.online, latencyMs: null }))
-  );
+  // Canonical server list ref — populated by API (enabled servers only).
+  // After API load, NEVER shrinks, only grows via health-check additions.
+  const serverListRef = useRef<LiveServerHealth[]>([]);
 
   const wrapRef = useFadeIn();
   const onlineServers = liveServers.filter((server) => server.online);
@@ -222,14 +213,14 @@ export default function VPNPage() {
             flag: s.flag,
             online: s.online,
             latencyMs: null,
+            badge: s.badge || '',
           }));
-          // Merge fetched into ref (never shrink — keep any extra servers already there)
-          const fetchedIds = new Set(fetched.map((s) => s.id));
-          const existing = serverListRef.current.filter((s) => !fetchedIds.has(s.id));
-          serverListRef.current = [...fetched, ...existing];
+          // Replace server list entirely with API response (only enabled servers)
+          serverListRef.current = fetched;
         }
+        // If API returned empty, serverListRef stays empty — that's correct (admin disabled all)
       } catch {
-        // Keep existing ref (fallback servers)
+        // API failed — keep existing data (empty on first load is fine)
       }
     }
 
@@ -249,9 +240,10 @@ export default function VPNPage() {
     async function refresh() {
       await fetchServerList();
       if (cancelled) return;
-      // Show server list immediately (all enabled, default "online")
+      // Show server list immediately (only admin-enabled servers)
       setLiveServers([...serverListRef.current]);
-      // Then overlay health status
+      setServersLoading(false);
+      // Then overlay health status (respects admin online setting)
       const merged = await fetchHealth();
       if (!cancelled) {
         setLiveServers([...merged]);
@@ -523,8 +515,20 @@ export default function VPNPage() {
             <p className="text-gray-400 max-w-xl mx-auto">{t('vpn.landing.selectFastStableServers')}</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
-            {liveServers.map((s, i) => (
-              <button key={i}
+            {serversLoading ? (
+              <div className="col-span-full text-center text-gray-400 py-8">
+                <div className="inline-flex items-center gap-2">
+                  <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  {language === 'en' ? 'Loading servers...' : 'Server များ ရယူနေပါသည်...'}
+                </div>
+              </div>
+            ) : liveServers.length === 0 ? (
+              <div className="col-span-full text-center text-gray-400 py-8">
+                {language === 'en' ? 'No servers available at the moment. Please check back later.' : 'လောလောဆယ် server မရှိပါ။ နောက်မှ ပြန်စစ်ဆေးပါ။'}
+              </div>
+            ) : (
+            liveServers.map((s, i) => (
+              <button key={s.id}
                 disabled={!s.online}
                 onClick={() => {
                   setSelectedServer(s.id);
@@ -532,8 +536,13 @@ export default function VPNPage() {
                     deviceTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }, 100);
                 }}
-                className={`vpn-fade bg-[#12122a] border rounded-2xl p-7 text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(108,92,231,0.15)] ${selectedServer === s.id ? 'border-purple-500 ring-2 ring-purple-500/30 shadow-[0_0_40px_rgba(108,92,231,0.2)]' : s.online ? 'border-purple-500/15 hover:border-purple-500' : 'border-red-500/15 hover:border-red-500/40 opacity-70 cursor-not-allowed'}`}
-                style={{ transitionDelay: `${i * 0.1}s` }}>
+                className={`relative bg-[#12122a] border rounded-2xl p-7 text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(108,92,231,0.15)] ${selectedServer === s.id ? 'border-purple-500 ring-2 ring-purple-500/30 shadow-[0_0_40px_rgba(108,92,231,0.2)]' : s.online ? 'border-purple-500/15 hover:border-purple-500' : 'border-red-500/15 hover:border-red-500/40 opacity-70 cursor-not-allowed'}`}
+                style={{ animation: 'vpn-fadeInUp 0.5s ease forwards', animationDelay: `${i * 0.1}s`, opacity: 0 }}>
+                {s.badge && (
+                  <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 text-white shadow-lg shadow-cyan-500/30">
+                    {s.badge}
+                  </span>
+                )}
                 <div className="text-5xl mb-3">{s.flag}</div>
                 <div className="font-bold text-white mb-2">{s.name}</div>
                 <div className={`inline-flex items-center gap-1.5 text-sm ${s.online ? 'text-green-400' : 'text-red-400'}`}>
@@ -549,9 +558,10 @@ export default function VPNPage() {
                   </div>
                 )}
               </button>
-            ))}
+            ))
+            )}
           </div>
-          {!selectedServer && (
+          {!selectedServer && liveServers.length > 0 && (
             <p className="vpn-fade text-center text-gray-500 text-sm mt-6 animate-pulse">
               👆 {language === 'en' ? 'Click a server to continue' : 'Server တစ်ခုကို ရွေးပါ'}
             </p>

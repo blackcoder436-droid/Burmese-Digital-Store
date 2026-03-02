@@ -20,6 +20,7 @@ export interface VpnServer {
   enabledProtocols: string[]; // available protocols for this server
   online: boolean;
   enabled: boolean;
+  badge?: string; // user-facing badge (e.g. "New", "Popular")
 }
 
 // ---- Static fallback (used if DB is empty / first boot) ----
@@ -142,6 +143,7 @@ function docToServer(doc: IVpnServerDocument): VpnServer {
     enabledProtocols: doc.enabledProtocols ?? ['trojan', 'vless', 'vmess', 'shadowsocks'],
     online: doc.online,
     enabled: doc.enabled,
+    badge: (doc as unknown as Record<string, unknown>).badge as string || '',
   };
 }
 

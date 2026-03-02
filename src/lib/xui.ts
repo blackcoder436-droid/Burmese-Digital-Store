@@ -505,8 +505,11 @@ function buildClientSettings(opts: {
     reset: 0,
   };
 
-  if (protocol === 'trojan' || protocol === 'shadowsocks') {
+  if (protocol === 'trojan') {
     return { ...base, password: clientUUID };
+  }
+  if (protocol === 'shadowsocks') {
+    return { ...base, password: clientUUID, method: 'chacha20-ietf-poly1305' };
   }
   // vless, vmess
   return { ...base, id: clientUUID, flow: protocol === 'vless' ? '' : undefined };
