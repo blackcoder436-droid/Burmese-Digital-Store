@@ -14,6 +14,7 @@ import { createLogger } from '@/lib/logger';
 import { expireOverdueOrders } from '@/lib/fraud-detection';
 import { isValidObjectId as isValidOid } from 'mongoose';
 import { releaseFromQuarantine, deleteFromQuarantine } from '@/lib/quarantine';
+import { approveOrder, rejectOrder } from '@/lib/order-actions';
 
 const log = createLogger({ route: '/api/admin/orders' });
 
@@ -132,6 +133,54 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // ── Use shared order-actions for approve/reject ──
+    if (status === 'completed') {
+      const result = await approveOrder(orderId, {
+        adminId: admin.userId,
+        adminName: admin.email || 'Web Admin',
+        source: 'web',
+        adminNote,
+        verificationChecklist,
+      });
+
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: result.error },
+          { status: result.error?.includes('not found') ? 404 : 400 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: { order: result.order },
+        message: 'Order completed successfully',
+      });
+    }
+
+    if (status === 'rejected') {
+      const result = await rejectOrder(orderId, {
+        adminId: admin.userId,
+        adminName: admin.email || 'Web Admin',
+        source: 'web',
+        adminNote,
+        rejectReason,
+      });
+
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: result.error },
+          { status: result.error?.includes('not found') ? 404 : 400 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: { order: result.order },
+        message: 'Order rejected successfully',
+      });
+    }
+
+    // ── Other status changes (pending, verifying, refunded) — manual handling ──
     const order = await Order.findById(orderId);
     if (!order) {
       return NextResponse.json(
@@ -139,143 +188,12 @@ export async function PATCH(request: NextRequest) {
         { status: 404 }
       );
     }
+
     const previousStatus = order.status;
 
-    // If completing the order, deliver keys or provision VPN
-    if (status === 'completed' && order.status !== 'completed') {
-
-      // ---- VPN ORDER: provision key via 3xUI ----
-      if (order.orderType === 'vpn' && order.vpnPlan) {
-        // Idempotency guard: prevent double-provision
-        if (order.vpnProvisionStatus === 'provisioned' && order.vpnKey?.clientUUID) {
-          log.warn('VPN already provisioned, skipping duplicate', { orderId: order._id });
-          order.status = status;
-          if (adminNote) order.adminNote = adminNote;
-          await order.save();
-          return NextResponse.json({ success: true, data: { order }, message: 'Order already provisioned' });
-        }
-
-        const vpnPlan = order.vpnPlan;
-        const plan = getPlan(vpnPlan.planId);
-        const server = await getServer(vpnPlan.serverId);
-
-        if (!plan || !server) {
-          return NextResponse.json(
-            { success: false, error: 'Invalid VPN plan or server configuration' },
-            { status: 400 }
-          );
-        }
-
-        // Get user info for the client name
-        const user = await User.findById(order.user).select('name email').lean() as { name?: string; email?: string } | null;
-        const username = user?.name || user?.email?.split('@')[0] || '';
-
-        log.info('Provisioning VPN key', {
-          orderId: order._id,
-          serverId: vpnPlan.serverId,
-          planId: vpnPlan.planId,
-        });
-
-        const result = await provisionVpnKey({
-          serverId: vpnPlan.serverId,
-          username,
-          userId: order.user.toString(),
-          devices: plan.devices,
-          expiryDays: plan.expiryDays,
-          dataLimitGB: plan.dataLimitGB,
-          protocol: vpnPlan.protocol || 'trojan',
-        });
-
-        if (!result) {
-          // Provision failed
-          order.vpnProvisionStatus = 'failed';
-          await order.save();
-
-          try {
-            await logActivity({
-              admin: admin.userId,
-              action: 'vpn_provision_failed',
-              target: `VPN Order #${order._id.toString().slice(-8)}`,
-              details: `Failed to provision on ${server.name}`,
-              metadata: { orderId: order._id, serverId: vpnPlan.serverId },
-            });
-          } catch { /* don't fail for logging */ }
-
-          return NextResponse.json(
-            { success: false, error: 'VPN key provisioning failed. Check server connectivity.' },
-            { status: 500 }
-          );
-        }
-
-        // Save VPN key data
-        order.vpnKey = {
-          clientEmail: result.clientEmail,
-          clientUUID: result.clientUUID,
-          subId: result.subId,
-          subLink: result.subLink,
-          configLink: result.configLink,
-          protocol: result.protocol,
-          expiryTime: result.expiryTime,
-          provisionedAt: new Date(),
-        };
-        order.vpnProvisionStatus = 'provisioned';
-
-        try {
-          await logActivity({
-            admin: admin.userId,
-            action: 'vpn_provisioned',
-            target: `VPN Order #${order._id.toString().slice(-8)} — ${server.name}`,
-            details: `${plan.name}, ${plan.devices} device(s)`,
-            metadata: { orderId: order._id, serverId: vpnPlan.serverId, clientEmail: result.clientEmail },
-          });
-        } catch { /* don't fail for logging */ }
-
-      } else {
-        // ---- PRODUCT ORDER: deliver keys from stock ----
-        const product = await Product.findById(order.product);
-        if (!product) {
-          return NextResponse.json(
-            { success: false, error: 'Product not found' },
-            { status: 404 }
-          );
-        }
-
-        const keysToDeliver = product.details
-          .filter((d: { sold: boolean }) => !d.sold)
-          .slice(0, order.quantity);
-
-        if (keysToDeliver.length < order.quantity) {
-          return NextResponse.json(
-            { success: false, error: 'Not enough stock to fulfill this order' },
-            { status: 400 }
-          );
-        }
-
-        // Mark keys as sold
-        for (const key of keysToDeliver) {
-          key.sold = true;
-          key.soldTo = order.user;
-          key.soldAt = new Date();
-        }
-        await product.save();
-
-        // Update product stock
-        await Product.findByIdAndUpdate(product._id, {
-          stock: product.details.filter((d: { sold: boolean }) => !d.sold).length,
-        });
-
-        order.deliveredKeys = keysToDeliver.map((k: { serialKey?: string; loginEmail?: string; loginPassword?: string; additionalInfo?: string }) => ({
-          serialKey: k.serialKey,
-          loginEmail: k.loginEmail,
-          loginPassword: k.loginPassword,
-          additionalInfo: k.additionalInfo,
-        }));
-      }
-    }
-
-    // ---- VPN ORDER: revoke key on reject/refund ----
+    // Revoke VPN key on refund
     if (
-      (status === 'rejected' || status === 'refunded') &&
+      status === 'refunded' &&
       order.orderType === 'vpn' &&
       order.vpnProvisionStatus === 'provisioned' &&
       order.vpnKey?.clientEmail &&
@@ -285,16 +203,14 @@ export async function PATCH(request: NextRequest) {
         const revoked = await revokeVpnKey(order.vpnPlan.serverId, order.vpnKey.clientEmail);
         if (revoked) {
           order.vpnProvisionStatus = 'revoked';
-          log.info('VPN key revoked on reject/refund', { orderId: order._id, clientEmail: order.vpnKey.clientEmail });
+          log.info('VPN key revoked on refund', { orderId: order._id });
           await logActivity({
             admin: admin.userId,
             action: 'vpn_revoked',
             target: `VPN Order #${order._id.toString().slice(-8)}`,
-            details: `Key revoked on ${status}`,
-            metadata: { orderId: order._id, serverId: order.vpnPlan.serverId, clientEmail: order.vpnKey.clientEmail },
+            details: `Key revoked on refund`,
+            metadata: { orderId: order._id, serverId: order.vpnPlan.serverId },
           });
-        } else {
-          log.warn('Failed to revoke VPN key', { orderId: order._id });
         }
       } catch (revokeErr) {
         log.error('Error revoking VPN key', { error: revokeErr instanceof Error ? revokeErr.message : String(revokeErr) });
@@ -304,91 +220,48 @@ export async function PATCH(request: NextRequest) {
     order.status = status;
     if (adminNote) order.adminNote = adminNote;
     if (rejectReason) order.rejectReason = rejectReason;
-
-    // S7: Release/delete quarantined screenshot based on status
-    if (order.paymentScreenshot) {
-      const screenshotRelPath = order.paymentScreenshot.startsWith('/')
-        ? order.paymentScreenshot.slice(1)
-        : order.paymentScreenshot;
-      if (status === 'completed') {
-        // Release screenshot from quarantine to public directory
-        await releaseFromQuarantine(screenshotRelPath);
-      } else if (status === 'rejected') {
-        // Delete quarantined screenshot on rejection
-        await deleteFromQuarantine(screenshotRelPath);
-      }
-    }
-
-    // Save verification checklist if provided (on approve)
-    if (verificationChecklist && status === 'completed') {
-      order.verificationChecklist = {
-        ...verificationChecklist,
-        completedAt: new Date(),
-        completedBy: admin.userId,
-      };
-    }
-
     await order.save();
 
+    // Notification for other status changes
     if (previousStatus !== status) {
       try {
         const statusToType: Record<string, 'order_placed' | 'order_verifying' | 'order_completed' | 'order_rejected' | 'order_refunded'> = {
           pending: 'order_placed',
           verifying: 'order_verifying',
-          completed: 'order_completed',
-          rejected: 'order_rejected',
           refunded: 'order_refunded',
         };
 
         const messageByStatus: Record<string, string> = {
           pending: `Your order ${order.orderNumber} is pending review.`,
           verifying: `Your order ${order.orderNumber} is being verified.`,
-          completed: `Your order ${order.orderNumber} has been completed.`,
-          rejected: `Your order ${order.orderNumber} was rejected.${rejectReason ? ` Reason: ${rejectReason}` : ''}`,
           refunded: `Your order ${order.orderNumber} has been refunded.`,
         };
 
-        await createNotification({
-          user: order.user,
-          type: statusToType[status] || 'order_verifying',
-          title: `Order ${status}`,
-          message: messageByStatus[status] || `Your order ${order.orderNumber} is now ${status}.`,
-          orderId: order._id,
-        });
-      } catch (notificationError: unknown) {
-        log.warn('Admin status notification failed (non-blocking)', {
-          error: notificationError instanceof Error ? notificationError.message : String(notificationError),
-          orderId,
-        });
-      }
+        if (statusToType[status]) {
+          await createNotification({
+            user: order.user,
+            type: statusToType[status],
+            title: `Order ${status}`,
+            message: messageByStatus[status] || `Your order ${order.orderNumber} is now ${status}.`,
+            orderId: order._id,
+          });
+        }
+      } catch { /* non-blocking */ }
+
+      // Activity log
+      try {
+        const actionMap: Record<string, string> = { refunded: 'order_refunded' };
+        if (actionMap[status]) {
+          await logActivity({
+            admin: admin.userId,
+            action: actionMap[status],
+            target: `Order #${order.orderNumber}`,
+            details: adminNote || undefined,
+            metadata: { orderId: order._id, amount: order.totalAmount },
+          });
+        }
+      } catch { /* non-blocking */ }
     }
-
-    // Log activity for status changes
-    try {
-      let targetLabel = '';
-      if (order.orderType === 'vpn' && order.vpnPlan) {
-        const server = await getServer(order.vpnPlan.serverId);
-        targetLabel = `VPN Order #${order._id.toString().slice(-8)} — ${server?.name || order.vpnPlan.serverId}`;
-      } else {
-        const productDoc = await Product.findById(order.product).select('name').lean() as { name?: string } | null;
-        targetLabel = `Order #${order._id.toString().slice(-8)} — ${productDoc?.name || 'Product'}`;
-      }
-
-      const actionMap: Record<string, 'order_approved' | 'order_rejected' | 'order_refunded'> = {
-        completed: 'order_approved',
-        rejected: 'order_rejected',
-        refunded: 'order_refunded',
-      };
-      if (actionMap[status]) {
-        await logActivity({
-          admin: admin.userId,
-          action: actionMap[status],
-          target: targetLabel,
-          details: adminNote || undefined,
-          metadata: { orderId: order._id, amount: order.totalAmount },
-        });
-      }
-    } catch { /* don't fail order for logging */ }
 
     return NextResponse.json({
       success: true,

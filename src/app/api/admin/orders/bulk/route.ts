@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Order from '@/models/Order';
-import Product from '@/models/Product';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
-import { provisionVpnKey, revokeVpnKey } from '@/lib/xui';
-import { getPlan } from '@/lib/vpn-plans';
-import { getServer } from '@/lib/vpn-servers';
-import User from '@/models/User';
-import { createNotification } from '@/models/Notification';
 import { createLogger } from '@/lib/logger';
-import { releaseFromQuarantine, deleteFromQuarantine } from '@/lib/quarantine';
-    const { isValidObjectId: isValidOid, Types } = await import('mongoose');
+import { approveOrder, rejectOrder } from '@/lib/order-actions';
+    const { isValidObjectId: isValidOid } = await import('mongoose');
 
 const log = createLogger({ route: '/api/admin/orders/bulk' });
 
@@ -103,123 +97,18 @@ export async function POST(request: NextRequest) {
             continue;
           }
 
-          // VPN orders — provision
-          if (order.orderType === 'vpn' && order.vpnPlan) {
-            if (order.vpnProvisionStatus === 'provisioned' && order.vpnKey?.clientUUID) {
-              order.status = 'completed';
-              await order.save();
-              results.push({ orderId: order._id.toString(), success: true, orderNumber: order.orderNumber });
-              successCount++;
-              continue;
-            }
+          const approveResult = await approveOrder(order._id.toString(), {
+            adminId: admin.userId,
+            adminName: admin.email || 'Web Admin',
+            source: 'web',
+            verificationChecklist: verificationChecklist,
+          });
 
-            const plan = getPlan(order.vpnPlan.planId);
-            const server = await getServer(order.vpnPlan.serverId);
-            if (!plan || !server) {
-              results.push({ orderId: order._id.toString(), success: false, error: `Invalid VPN plan/server for ${order.orderNumber}`, orderNumber: order.orderNumber });
-              failCount++;
-              continue;
-            }
-
-            const user = order.user as unknown as { _id: string; name?: string; email?: string };
-            const username = user?.name || user?.email?.split('@')[0] || '';
-
-            const result = await provisionVpnKey({
-              serverId: order.vpnPlan.serverId,
-              username,
-              userId: order.user._id?.toString() || order.user.toString(),
-              devices: plan.devices,
-              expiryDays: plan.expiryDays,
-              dataLimitGB: plan.dataLimitGB,
-              protocol: order.vpnPlan.protocol || 'trojan',
-            });
-
-            if (!result) {
-              order.vpnProvisionStatus = 'failed';
-              await order.save();
-              results.push({ orderId: order._id.toString(), success: false, error: `VPN provision failed for ${order.orderNumber}`, orderNumber: order.orderNumber });
-              failCount++;
-              continue;
-            }
-
-            order.vpnKey = {
-              clientEmail: result.clientEmail,
-              clientUUID: result.clientUUID,
-              subId: result.subId,
-              subLink: result.subLink,
-              configLink: result.configLink,
-              protocol: result.protocol,
-              expiryTime: result.expiryTime,
-              provisionedAt: new Date(),
-            };
-            order.vpnProvisionStatus = 'provisioned';
-
-          } else {
-            // Product orders — deliver keys
-            const product = await Product.findById(order.product);
-            if (!product) {
-              results.push({ orderId: order._id.toString(), success: false, error: `Product not found for ${order.orderNumber}`, orderNumber: order.orderNumber });
-              failCount++;
-              continue;
-            }
-
-            const keysToDeliver = product.details
-              .filter((d: { sold: boolean }) => !d.sold)
-              .slice(0, order.quantity);
-
-            if (keysToDeliver.length < order.quantity) {
-              results.push({ orderId: order._id.toString(), success: false, error: `Insufficient stock for ${order.orderNumber}`, orderNumber: order.orderNumber });
-              failCount++;
-              continue;
-            }
-
-            for (const key of keysToDeliver) {
-              key.sold = true;
-              key.soldTo = order.user._id || order.user;
-              key.soldAt = new Date();
-            }
-            await product.save();
-
-            await Product.findByIdAndUpdate(product._id, {
-              stock: product.details.filter((d: { sold: boolean }) => !d.sold).length,
-            });
-
-            order.deliveredKeys = keysToDeliver.map((k: { serialKey?: string; loginEmail?: string; loginPassword?: string; additionalInfo?: string }) => ({
-              serialKey: k.serialKey,
-              loginEmail: k.loginEmail,
-              loginPassword: k.loginPassword,
-              additionalInfo: k.additionalInfo,
-            }));
+          if (!approveResult.success) {
+            results.push({ orderId: order._id.toString(), success: false, error: approveResult.error || 'Approve failed', orderNumber: order.orderNumber });
+            failCount++;
+            continue;
           }
-
-          // Release screenshot from quarantine
-          if (order.paymentScreenshot) {
-            const screenshotRelPath = order.paymentScreenshot.startsWith('/')
-              ? order.paymentScreenshot.slice(1)
-              : order.paymentScreenshot;
-            await releaseFromQuarantine(screenshotRelPath).catch(() => {});
-          }
-
-          order.status = 'completed';
-          if (verificationChecklist) {
-            order.verificationChecklist = {
-              ...verificationChecklist,
-              completedAt: new Date(),
-              completedBy: new Types.ObjectId(admin.userId),
-            };
-          }
-          await order.save();
-
-          // Notification
-          try {
-            await createNotification({
-              user: order.user._id || order.user,
-              type: 'order_completed',
-              title: 'Order completed',
-              message: `Your order ${order.orderNumber} has been completed.`,
-              orderId: order._id,
-            });
-          } catch { /* non-blocking */ }
 
           results.push({ orderId: order._id.toString(), success: true, orderNumber: order.orderNumber });
           successCount++;
@@ -233,35 +122,18 @@ export async function POST(request: NextRequest) {
             continue;
           }
 
-          // Revoke VPN key if provisioned
-          if (order.orderType === 'vpn' && order.vpnProvisionStatus === 'provisioned' && order.vpnKey?.clientEmail && order.vpnPlan?.serverId) {
-            try {
-              const revoked = await revokeVpnKey(order.vpnPlan.serverId, order.vpnKey.clientEmail);
-              if (revoked) order.vpnProvisionStatus = 'revoked';
-            } catch { /* continue anyway */ }
+          const rejectResult = await rejectOrder(order._id.toString(), {
+            adminId: admin.userId,
+            adminName: admin.email || 'Web Admin',
+            source: 'web',
+            rejectReason: rejectReason!,
+          });
+
+          if (!rejectResult.success) {
+            results.push({ orderId: order._id.toString(), success: false, error: rejectResult.error || 'Reject failed', orderNumber: order.orderNumber });
+            failCount++;
+            continue;
           }
-
-          // Delete quarantined screenshot
-          if (order.paymentScreenshot) {
-            const screenshotRelPath = order.paymentScreenshot.startsWith('/')
-              ? order.paymentScreenshot.slice(1)
-              : order.paymentScreenshot;
-            await deleteFromQuarantine(screenshotRelPath).catch(() => {});
-          }
-
-          order.status = 'rejected';
-          order.rejectReason = rejectReason!;
-          await order.save();
-
-          try {
-            await createNotification({
-              user: order.user._id || order.user,
-              type: 'order_rejected',
-              title: 'Order rejected',
-              message: `Your order ${order.orderNumber} was rejected. Reason: ${rejectReason}`,
-              orderId: order._id,
-            });
-          } catch { /* non-blocking */ }
 
           results.push({ orderId: order._id.toString(), success: true, orderNumber: order.orderNumber });
           successCount++;

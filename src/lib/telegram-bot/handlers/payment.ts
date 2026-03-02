@@ -5,19 +5,17 @@
 
 import connectDB from '@/lib/mongodb';
 import Order from '@/models/Order';
-import User from '@/models/User';
 import { sendMessage, sendPhoto, downloadFile, editMessageText } from '../api';
 import { MSG } from '../messages';
 import { approveRejectKeyboard, mainMenuKeyboard } from '../keyboards';
 import { getSession, clearSession } from '../session';
-import { provisionVpnKey } from '@/lib/xui';
-import { getPlan } from '@/lib/vpn-plans';
-import { getServer } from '@/lib/vpn-servers';
 import { computeScreenshotHash, isDuplicateScreenshot } from '@/lib/fraud-detection';
 import { extractPaymentInfo, verifyAmount } from '@/lib/ocr';
 import { getSiteSettings, getFeatureFlag } from '@/models/SiteSettings';
-import { processReferralReward } from './referral';
 import { createLogger } from '@/lib/logger';
+import { approveOrder, rejectOrder } from '@/lib/order-actions';
+import { getPlan } from '@/lib/vpn-plans';
+import { getServer } from '@/lib/vpn-servers';
 import type { TelegramPhotoSize } from '../types';
 import path from 'path';
 import fs from 'fs/promises';
@@ -206,43 +204,28 @@ export function cancelAutoApprove(orderId: string): void {
 }
 
 /**
- * Execute auto-approve: provision VPN key and notify user
+ * Execute auto-approve: uses shared approveOrder
  */
 async function executeAutoApprove(orderId: string, userId: number): Promise<void> {
   try {
-    await connectDB();
+    const result = await approveOrder(orderId, {
+      adminId: 'bot-auto',
+      adminName: 'Auto-Approve (OCR)',
+      source: 'auto-approve',
+    });
 
-    // Atomic check — only approve if still verifying
-    const order = await Order.findOneAndUpdate(
-      { _id: orderId, status: 'verifying' },
-      { $set: { status: 'completed' } },
-      { new: true }
-    );
-
-    if (!order) {
-      log.info('Auto-approve skipped (already processed)', { orderId });
+    if (!result.success) {
+      log.error('Auto-approve failed', { orderId, error: result.error });
       return;
     }
 
-    // Provision VPN key
-    const result = await provisionVpnKeyForOrder(order);
-    if (!result) {
-      // Revert status on failure
-      await Order.updateOne({ _id: orderId }, { $set: { status: 'verifying' } });
-      log.error('Auto-approve VPN provisioning failed', { orderId });
-      return;
-    }
-
-    // Process referral reward
-    await processReferralReward(order.user, order._id);
-
-    // Notify user
-    await sendMessage(userId, MSG.orderApproved(order.orderNumber));
-    await sendVpnKeyToUser(userId, order);
-
-    // Update admin message
+    // Update admin message in channel
+    const CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID;
+    const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID;
     const targetChat = CHANNEL_ID || ADMIN_CHAT_ID;
-    if (targetChat && order.telegramMessageId) {
+
+    const order = result.order;
+    if (targetChat && order?.telegramMessageId) {
       await editMessageText(
         targetChat,
         order.telegramMessageId,
@@ -260,7 +243,7 @@ async function executeAutoApprove(orderId: string, userId: number): Promise<void
 }
 
 /**
- * Handle admin approve from bot callback
+ * Handle admin approve from bot callback — uses shared approveOrder
  */
 export async function handleBotApprove(
   callbackQueryId: string,
@@ -271,36 +254,16 @@ export async function handleBotApprove(
   cancelAutoApprove(orderId);
 
   try {
-    await connectDB();
+    const result = await approveOrder(orderId, {
+      adminId: 'telegram-bot',
+      adminName,
+      source: 'vpn-bot',
+    });
 
-    const order = await Order.findById(orderId);
-    if (!order) {
+    if (!result.success) {
+      log.warn('Bot approve failed', { orderId, error: result.error });
       return;
     }
-
-    if (order.status === 'completed' || order.status === 'rejected') {
-      return;
-    }
-
-    // Provision VPN key
-    const result = await provisionVpnKeyForOrder(order);
-    if (!result) {
-      await sendMessage(
-        ADMIN_CHAT_ID || '',
-        `❌ VPN provisioning failed for order ${order.orderNumber}`
-      );
-      return;
-    }
-
-    order.status = 'completed';
-    await order.save();
-
-    // Process referral reward
-    await processReferralReward(order.user, order._id);
-
-    // Notify user
-    await sendMessage(userId, MSG.orderApproved(order.orderNumber));
-    await sendVpnKeyToUser(userId, order);
 
     log.info('Bot order approved by admin', { orderId, adminName });
   } catch (error) {
@@ -312,7 +275,7 @@ export async function handleBotApprove(
 }
 
 /**
- * Handle admin reject from bot callback
+ * Handle admin reject from bot callback — uses shared rejectOrder
  */
 export async function handleBotReject(
   callbackQueryId: string,
@@ -323,19 +286,17 @@ export async function handleBotReject(
   cancelAutoApprove(orderId);
 
   try {
-    await connectDB();
+    const result = await rejectOrder(orderId, {
+      adminId: 'telegram-bot',
+      adminName,
+      source: 'vpn-bot',
+      rejectReason: `Rejected via Bot by ${adminName}`,
+    });
 
-    const order = await Order.findById(orderId);
-    if (!order || order.status === 'completed' || order.status === 'rejected') {
+    if (!result.success) {
+      log.warn('Bot reject failed', { orderId, error: result.error });
       return;
     }
-
-    order.status = 'rejected';
-    order.rejectReason = `Rejected via Bot by ${adminName}`;
-    await order.save();
-
-    // Notify user
-    await sendMessage(userId, MSG.orderRejected(order.orderNumber));
 
     log.info('Bot order rejected by admin', { orderId, adminName });
   } catch (error) {
@@ -344,86 +305,4 @@ export async function handleBotReject(
       error: error instanceof Error ? error.message : String(error),
     });
   }
-}
-
-/**
- * Provision VPN key for an order (shared logic)
- */
-async function provisionVpnKeyForOrder(
-  order: InstanceType<typeof Order>
-): Promise<boolean> {
-  if (!order.vpnPlan) return false;
-
-  const plan = getPlan(order.vpnPlan.planId);
-  const server = await getServer(order.vpnPlan.serverId);
-
-  if (!plan || !server) return false;
-
-  const user = await User.findById(order.user).select('name email telegramUsername').lean() as
-    | { name?: string; email?: string; telegramUsername?: string }
-    | null;
-  const username = user?.telegramUsername || user?.name || user?.email?.split('@')[0] || '';
-
-  const result = await provisionVpnKey({
-    serverId: order.vpnPlan.serverId,
-    username,
-    userId: order.user.toString(),
-    devices: plan.devices,
-    expiryDays: plan.expiryDays,
-    dataLimitGB: plan.dataLimitGB,
-    protocol: order.vpnPlan.protocol || 'trojan',
-  });
-
-  if (!result) {
-    order.vpnProvisionStatus = 'failed';
-    await order.save();
-    return false;
-  }
-
-  order.vpnKey = {
-    clientEmail: result.clientEmail,
-    clientUUID: result.clientUUID,
-    subId: result.subId,
-    subLink: result.subLink,
-    configLink: result.configLink,
-    protocol: result.protocol,
-    expiryTime: result.expiryTime,
-    provisionedAt: new Date(),
-  };
-  order.vpnProvisionStatus = 'provisioned';
-  await order.save();
-
-  return true;
-}
-
-/**
- * Send VPN key details to user
- */
-async function sendVpnKeyToUser(
-  chatId: number,
-  order: InstanceType<typeof Order>
-): Promise<void> {
-  if (!order.vpnKey || !order.vpnPlan) return;
-
-  const plan = getPlan(order.vpnPlan.planId);
-  const server = await getServer(order.vpnPlan.serverId);
-
-  const expiryDate = new Date(order.vpnKey.expiryTime).toLocaleDateString('en-GB', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-
-  await sendMessage(
-    chatId,
-    MSG.keyGenerated({
-      planName: plan?.name || 'VPN Key',
-      serverName: server ? `${server.flag} ${server.name}` : 'Unknown',
-      protocol: order.vpnKey.protocol,
-      expiryDate,
-      subLink: order.vpnKey.subLink,
-      configLink: order.vpnKey.configLink,
-    }),
-    { replyMarkup: mainMenuKeyboard() }
-  );
 }

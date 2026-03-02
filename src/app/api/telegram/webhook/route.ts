@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Order from '@/models/Order';
-import Product from '@/models/Product';
-import User from '@/models/User';
-import { createNotification } from '@/models/Notification';
-import { provisionVpnKey } from '@/lib/xui';
-import { getPlan } from '@/lib/vpn-plans';
-import { getServer } from '@/lib/vpn-servers';
-import { releaseFromQuarantine } from '@/lib/quarantine';
-import { logActivity } from '@/models/ActivityLog';
 import { answerCallbackQuery, editTelegramMessage } from '@/lib/telegram';
 import { webhookLimiter } from '@/lib/rateLimit';
 import { createLogger } from '@/lib/logger';
+import { approveOrder, rejectOrder } from '@/lib/order-actions';
 
 const log = createLogger({ route: '/api/telegram/webhook' });
 
@@ -103,125 +96,16 @@ async function handleWebOrderCallback(callbackQuery: any) {
   }
 
   if (action === 'approve_order') {
-    // ---- APPROVE ORDER ----
-    const newStatus = 'completed';
+    const result = await approveOrder(orderId, {
+      adminId: 'telegram',
+      adminName: telegramUser,
+      source: 'noti-bot',
+    });
 
-    // VPN ORDER: provision key
-    if (order.orderType === 'vpn' && order.vpnPlan) {
-      if (order.vpnProvisionStatus === 'provisioned' && order.vpnKey?.clientUUID) {
-        // Already provisioned
-        order.status = newStatus;
-        await order.save();
-      } else {
-        const plan = getPlan(order.vpnPlan.planId);
-        const server = await getServer(order.vpnPlan.serverId);
-
-        if (!plan || !server) {
-          await answerCallbackQuery(callbackQueryId, '❌ Invalid VPN plan or server');
-          return NextResponse.json({ ok: true });
-        }
-
-        const user = await User.findById(order.user).select('name email').lean() as { name?: string; email?: string } | null;
-        const username = user?.name || user?.email?.split('@')[0] || '';
-
-        const result = await provisionVpnKey({
-          serverId: order.vpnPlan.serverId,
-          username,
-          userId: order.user.toString(),
-          devices: plan.devices,
-          expiryDays: plan.expiryDays,
-          dataLimitGB: plan.dataLimitGB,
-          protocol: order.vpnPlan.protocol || 'trojan',
-        });
-
-        if (!result) {
-          await answerCallbackQuery(callbackQueryId, '❌ VPN provisioning failed! Check server.');
-          order.vpnProvisionStatus = 'failed';
-          await order.save();
-          return NextResponse.json({ ok: true });
-        }
-
-        order.vpnKey = {
-          clientEmail: result.clientEmail,
-          clientUUID: result.clientUUID,
-          subId: result.subId,
-          subLink: result.subLink,
-          configLink: result.configLink,
-          protocol: result.protocol,
-          expiryTime: result.expiryTime,
-          provisionedAt: new Date(),
-        };
-        order.vpnProvisionStatus = 'provisioned';
-        order.status = newStatus;
-        await order.save();
-      }
-    } else {
-      // PRODUCT ORDER: deliver keys from stock
-      const product = await Product.findById(order.product);
-      if (!product) {
-        await answerCallbackQuery(callbackQueryId, '❌ Product not found');
-        return NextResponse.json({ ok: true });
-      }
-
-      const keysToDeliver = product.details
-        .filter((d: { sold: boolean }) => !d.sold)
-        .slice(0, order.quantity);
-
-      if (keysToDeliver.length < order.quantity) {
-        await answerCallbackQuery(callbackQueryId, `❌ Not enough stock (${keysToDeliver.length}/${order.quantity})`);
-        return NextResponse.json({ ok: true });
-      }
-
-      for (const key of keysToDeliver) {
-        key.sold = true;
-        key.soldTo = order.user;
-        key.soldAt = new Date();
-      }
-      await product.save();
-
-      await Product.findByIdAndUpdate(product._id, {
-        stock: product.details.filter((d: { sold: boolean }) => !d.sold).length,
-      });
-
-      order.deliveredKeys = keysToDeliver.map((k: { serialKey?: string; loginEmail?: string; loginPassword?: string; additionalInfo?: string }) => ({
-        serialKey: k.serialKey,
-        loginEmail: k.loginEmail,
-        loginPassword: k.loginPassword,
-        additionalInfo: k.additionalInfo,
-      }));
-      order.status = newStatus;
-      await order.save();
+    if (!result.success) {
+      await answerCallbackQuery(callbackQueryId, `❌ ${result.error}`);
+      return NextResponse.json({ ok: true });
     }
-
-    // Release quarantined screenshot
-    if (order.paymentScreenshot) {
-      const screenshotRelPath = order.paymentScreenshot.startsWith('/')
-        ? order.paymentScreenshot.slice(1)
-        : order.paymentScreenshot;
-      await releaseFromQuarantine(screenshotRelPath);
-    }
-
-    // Notify user
-    try {
-      await createNotification({
-        user: order.user,
-        type: 'order_completed',
-        title: 'Order completed',
-        message: `Your order ${order.orderNumber} has been completed.`,
-        orderId: order._id,
-      });
-    } catch { /* non-blocking */ }
-
-    // Log activity
-    try {
-      await logActivity({
-        admin: 'telegram',
-        action: 'order_approved',
-        target: `Order #${order.orderNumber}`,
-        details: `Approved via Telegram by ${telegramUser}`,
-        metadata: { orderId: order._id, amount: order.totalAmount },
-      });
-    } catch { /* non-blocking */ }
 
     // Update Telegram message
     if (messageId) {
@@ -236,32 +120,17 @@ async function handleWebOrderCallback(callbackQuery: any) {
     log.info('Order approved via Telegram', { orderId: order._id, orderNumber: order.orderNumber });
 
   } else if (action === 'reject_order') {
-    // ---- REJECT ORDER ----
-    order.status = 'rejected';
-    order.rejectReason = `Rejected via Telegram by ${telegramUser}`;
-    await order.save();
+    const result = await rejectOrder(orderId, {
+      adminId: 'telegram',
+      adminName: telegramUser,
+      source: 'noti-bot',
+      rejectReason: `Rejected via Telegram by ${telegramUser}`,
+    });
 
-    // Notify user
-    try {
-      await createNotification({
-        user: order.user,
-        type: 'order_rejected',
-        title: 'Order rejected',
-        message: `Your order ${order.orderNumber} was rejected.`,
-        orderId: order._id,
-      });
-    } catch { /* non-blocking */ }
-
-    // Log activity
-    try {
-      await logActivity({
-        admin: 'telegram',
-        action: 'order_rejected',
-        target: `Order #${order.orderNumber}`,
-        details: `Rejected via Telegram by ${telegramUser}`,
-        metadata: { orderId: order._id },
-      });
-    } catch { /* non-blocking */ }
+    if (!result.success) {
+      await answerCallbackQuery(callbackQueryId, `❌ ${result.error}`);
+      return NextResponse.json({ ok: true });
+    }
 
     // Update Telegram message
     if (messageId) {
