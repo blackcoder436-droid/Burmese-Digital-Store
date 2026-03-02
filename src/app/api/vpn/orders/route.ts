@@ -89,6 +89,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate protocol is enabled on the selected server
+    const server = await getServer(serverId);
+    if (server && !server.enabledProtocols.includes(protocol)) {
+      return NextResponse.json(
+        { success: false, error: `${protocol} is not available on this server. Available: ${server.enabledProtocols.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     // Validate plan
     const planId = buildPlanId(devices, months);
     if (!isValidPlanId(planId)) {

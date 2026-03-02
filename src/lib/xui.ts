@@ -37,6 +37,7 @@ interface XuiInbound {
   protocol: string;
   port: number;
   remark: string;
+  enable: boolean;
   settings: string; // JSON string
   streamSettings: string; // JSON string — contains network, security, wsSettings, etc.
   [key: string]: unknown;
@@ -202,10 +203,11 @@ class XuiSession {
     }
   }
 
-  // ---- Find inbound by protocol ----
+  // ---- Find inbound by protocol (only enabled inbounds) ----
   async getInboundByProtocol(protocol = 'trojan'): Promise<XuiInbound | null> {
     const inbounds = await this.getInbounds();
-    return inbounds.find((ib) => ib.protocol === protocol) || null;
+    // Only match enabled inbounds — disabled inbounds won't accept connections
+    return inbounds.find((ib) => ib.protocol === protocol && ib.enable !== false) || null;
   }
 
   // ---- Create client ----
@@ -222,16 +224,22 @@ class XuiSession {
     const { username, userId, devices, expiryDays, dataLimitGB = 0, protocol = 'trojan' } = opts;
 
     try {
-      // Find inbound by protocol
+      // Find inbound by protocol (must be enabled on 3xUI)
       let inbound = await this.getInboundByProtocol(protocol);
       if (!inbound) {
-        // fallback to first inbound
+        // Log why the requested protocol wasn't found
+        log.warn('Requested protocol inbound not found or disabled, falling back', {
+          server: this.server.id,
+          requestedProtocol: protocol,
+        });
+        // Fallback to first *enabled* inbound
         const inbounds = await this.getInbounds();
-        if (inbounds.length === 0) {
-          log.error('No inbounds found', { server: this.server.id });
+        const enabledInbounds = inbounds.filter((ib) => ib.enable !== false);
+        if (enabledInbounds.length === 0) {
+          log.error('No enabled inbounds found', { server: this.server.id });
           return null;
         }
-        inbound = inbounds[0];
+        inbound = enabledInbounds[0];
       }
 
       const inboundId = inbound.id;
@@ -585,6 +593,58 @@ export async function getVpnClientStats(serverId: string, clientEmail: string) {
   const session = await getSession(serverId);
   if (!session) return null;
   return session.getClientStats(clientEmail);
+}
+
+/**
+ * Get the list of actually-enabled protocols from the 3xUI panel.
+ * Queries the panel's inbound list and returns only protocols with enable=true.
+ */
+export async function getEnabledProtocolsFromPanel(serverId: string): Promise<string[] | null> {
+  const session = await getSession(serverId);
+  if (!session) return null;
+
+  const inbounds = await session.getInbounds();
+  if (inbounds.length === 0) return null;
+
+  // Collect unique protocols from enabled inbounds only
+  const enabledProtocols = new Set<string>();
+  for (const ib of inbounds) {
+    if (ib.enable !== false) {
+      enabledProtocols.add(ib.protocol);
+    }
+  }
+
+  return Array.from(enabledProtocols);
+}
+
+/**
+ * Sync a server's enabledProtocols in DB to match what's actually enabled on the 3xUI panel.
+ * Returns the updated list or null on failure.
+ */
+export async function syncEnabledProtocols(serverId: string): Promise<string[] | null> {
+  const panelProtocols = await getEnabledProtocolsFromPanel(serverId);
+  if (!panelProtocols) return null;
+
+  try {
+    const { default: VpnServerModel } = await import('@/models/VpnServer');
+    const { default: connectDB } = await import('@/lib/mongodb');
+    await connectDB();
+    await VpnServerModel.updateOne(
+      { serverId },
+      { $set: { enabledProtocols: panelProtocols } }
+    );
+    // Invalidate cache so next request picks up new protocols
+    const { invalidateServerCache } = await import('@/lib/vpn-servers');
+    invalidateServerCache();
+    log.info('Synced enabledProtocols from panel', { serverId, enabledProtocols: panelProtocols });
+    return panelProtocols;
+  } catch (error) {
+    log.error('Failed to sync enabledProtocols', {
+      serverId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 /**

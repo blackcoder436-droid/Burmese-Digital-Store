@@ -36,7 +36,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     trojanPort: 22716,
     protocolPorts: { trojan: 22716 },
     protocol: 'trojan',
-    enabledProtocols: ['trojan', 'vless', 'vmess', 'shadowsocks'],
+    enabledProtocols: ['trojan', 'vless', 'vmess'],
     online: true,
     enabled: true,
   },

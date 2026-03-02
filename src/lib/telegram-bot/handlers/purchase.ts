@@ -87,6 +87,16 @@ export async function handleProtocolSelect(
     return;
   }
 
+  // Validate protocol is enabled on this server
+  if (!server.enabledProtocols.includes(protocol)) {
+    await sendMessage(
+      chatId,
+      `❌ ${protocol} protocol ကို ဒီ server မှာ မရနိုင်ပါ။\nရနိုင်သော protocols: ${server.enabledProtocols.join(', ')}`,
+      { replyMarkup: protocolKeyboard(serverId, server.enabledProtocols) }
+    );
+    return;
+  }
+
   updateSessionField(telegramId, 'protocol', protocol);
 
   await sendMessage(
