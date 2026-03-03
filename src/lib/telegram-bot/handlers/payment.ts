@@ -102,6 +102,16 @@ export async function handlePaymentScreenshot(
         };
 
         ocrMatch = amountMatch;
+
+        log.info('OCR result for order', {
+          orderId: order._id,
+          extractedAmount: ocrResult.amount,
+          expectedAmount: order.totalAmount,
+          confidence: ocrResult.confidence,
+          transactionId: ocrResult.transactionId,
+          amountMatch,
+          rawTextPreview: ocrResult.rawText?.substring(0, 300),
+        });
       } catch (ocrError) {
         log.warn('OCR failed for bot screenshot', {
           error: ocrError instanceof Error ? ocrError.message : String(ocrError),
@@ -155,11 +165,18 @@ export async function handlePaymentScreenshot(
       replyMarkup: mainMenuKeyboard(),
     });
 
-    // Auto-approve if feature enabled (OCR match not required)
+    // Auto-approve only if OCR amount matches and feature enabled
     const autoApproveEnabled = await getFeatureFlag('auto_approve');
-    if (autoApproveEnabled && !order.requiresManualReview) {
+    if (ocrMatch && autoApproveEnabled && !order.requiresManualReview) {
       const delay = settings.autoApproveDelaySeconds || 100;
       scheduleAutoApprove(order._id.toString(), telegramId, delay, ocrMatch);
+    } else {
+      log.info('Auto-approve skipped', {
+        orderId: order._id,
+        ocrMatch,
+        autoApproveEnabled,
+        requiresManualReview: order.requiresManualReview,
+      });
     }
 
     clearSession(telegramId);

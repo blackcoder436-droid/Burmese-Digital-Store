@@ -85,27 +85,65 @@ function extractTransactionId(text: string): string | null {
 
 /**
  * Extract payment amount from OCR text
- * Handles Myanmar Kyat (MMK/Ks) formats
+ * Handles Myanmar Kyat (MMK/Ks) formats from Kpay, WaveMoney, UAB Pay, AYA Pay
  */
 function extractAmount(text: string): string | null {
+  // Normalize: replace common OCR artifacts
+  const normalized = text
+    .replace(/[–—−]/g, '-')  // normalize various dash/minus characters
+    .replace(/\s+/g, ' ');
+
   const patterns = [
-    // Amount with currency: 5,000 Ks, 5000 MMK, etc.
-    /(?:amount|ပမာဏ|total|ငွေပမာဏ)\s*[:\-]?\s*([0-9,]+(?:\.\d{1,2})?)\s*(?:ks|kyat|mmk|ကျပ)/i,
-    // Currency before amount
+    // Kpay: "-3,000.00 (Ks)" or "-3,000.00 Ks" — negative amount with (Ks) or Ks
+    /[-]\s*([0-9,]+(?:\.\d{1,2})?)\s*(?:\(?\s*(?:ks|kyat|mmk)\s*\)?)/i,
+    // Amount with currency after: "5,000 Ks", "5000 MMK", "3,000.00 ကျပ"
+    /([0-9,]+(?:\.\d{1,2})?)\s*(?:ks|kyat|mmk|ကျပ)/i,
+    // Amount with currency keyword before: "ပမာဏ 5,000", "amount: 3,000"
+    /(?:amount|ပမာဏ|total|ငွေပမာဏ|ပေးငွေ|ပမာ)\s*[:\-]?\s*([0-9,]+(?:\.\d{1,2})?)/i,
+    // Currency before amount: "Ks 5,000", "MMK 3000"
     /(?:ks|mmk|ကျပ)\s*[:\-]?\s*([0-9,]+(?:\.\d{1,2})?)/i,
-    // Amount field with number
-    /(?:amount|ပမာဏ|total)\s*[:\-]?\s*([0-9,]+(?:\.\d{1,2})?)/i,
-    // Standalone large number (likely amount) - at least 3 digits
-    /\b(\d{1,3}(?:,\d{3})+(?:\.\d{2})?)\b/,
+    // Wave: "5,000.00 ကျပ" or just number followed by Burmese
+    /([0-9,]+(?:\.\d{1,2})?)\s*(?:ကျပ|ks)/i,
+    // Kpay negative with .00: "-3,000.00"
+    /[-]\s*([0-9,]+\.\d{2})\b/,
+    // Standalone formatted number (comma-separated, at least 1,000)
+    /\b([0-9]{1,3}(?:,\d{3})+(?:\.\d{1,2})?)\b/,
+    // Standalone number >= 1000 without commas (e.g. "3000", "5000.00")
+    /\b([0-9]{4,7}(?:\.\d{1,2})?)\b/,
   ];
 
+  const amounts: number[] = [];
+
   for (const pattern of patterns) {
-    const match = text.match(pattern);
+    const match = normalized.match(pattern);
     if (match && match[1]) {
-      return match[1].replace(/,/g, '').trim();
+      const cleaned = match[1].replace(/,/g, '').trim();
+      const value = parseFloat(cleaned);
+      if (!isNaN(value) && value >= 500) {
+        log.debug('OCR amount candidate', { pattern: pattern.source, raw: match[0], value });
+        return cleaned;
+      }
     }
   }
 
+  // Fallback: find ALL numbers >= 500 in the text and return the largest
+  const allNumbers = normalized.match(/[0-9,]+(?:\.\d{1,2})?/g);
+  if (allNumbers) {
+    for (const numStr of allNumbers) {
+      const value = parseFloat(numStr.replace(/,/g, ''));
+      if (!isNaN(value) && value >= 500) {
+        amounts.push(value);
+      }
+    }
+    if (amounts.length > 0) {
+      // Return the largest amount found (most likely the payment amount)
+      const largest = Math.max(...amounts);
+      log.debug('OCR amount fallback — largest number', { largest, candidates: amounts });
+      return largest.toString();
+    }
+  }
+
+  log.warn('OCR could not extract amount', { textLength: text.length });
   return null;
 }
 
@@ -118,8 +156,11 @@ export function verifyAmount(
   tolerance: number = 0
 ): boolean {
   if (!extractedAmount) return false;
-  const extracted = parseFloat(extractedAmount);
-  return Math.abs(extracted - expectedAmount) <= tolerance;
+  const extracted = parseFloat(extractedAmount.replace(/,/g, ''));
+  if (isNaN(extracted)) return false;
+  const match = Math.abs(extracted - expectedAmount) <= tolerance;
+  log.debug('OCR amount verify', { extracted, expectedAmount, tolerance, match });
+  return match;
 }
 
 /**
