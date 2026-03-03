@@ -13,6 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Globe,
+  Plus,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 
@@ -69,6 +72,21 @@ export default function AdminVpnKeysPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Create Key modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createType, setCreateType] = useState<'test' | 'sell'>('sell');
+  const [createServerId, setCreateServerId] = useState('');
+  const [createProtocol, setCreateProtocol] = useState('trojan');
+  const [createUsername, setCreateUsername] = useState('');
+  const [createDevices, setCreateDevices] = useState(1);
+  const [createExpiryDays, setCreateExpiryDays] = useState(30);
+  const [createDataLimitGB, setCreateDataLimitGB] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [createResult, setCreateResult] = useState<any>(null);
+  const [availableServers, setAvailableServers] = useState<{ id: string; name: string; flag: string; enabledProtocols: string[]; online: boolean }[]>([]);
+
   useEffect(() => {
     fetchKeys();
   }, [filter, serverFilter, page]);
@@ -104,6 +122,84 @@ export default function AdminVpnKeysPage() {
     setTimeout(() => setCopiedId(null), 2000);
   }
 
+  async function fetchServersForCreate() {
+    try {
+      const res = await fetch('/api/admin/vpn-keys/create');
+      const data = await res.json();
+      if (data.success) {
+        setAvailableServers(data.data.servers);
+        if (data.data.servers.length > 0 && !createServerId) {
+          setCreateServerId(data.data.servers[0].id);
+          setCreateProtocol(data.data.servers[0].enabledProtocols[0] || 'trojan');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch servers:', err);
+    }
+  }
+
+  function openCreateModal(type: 'test' | 'sell') {
+    setCreateType(type);
+    setCreateUsername('');
+    setCreateError('');
+    setCreateResult(null);
+
+    if (type === 'test') {
+      setCreateDevices(1);
+      setCreateExpiryDays(3);
+      setCreateDataLimitGB(3);
+    } else {
+      setCreateDevices(1);
+      setCreateExpiryDays(30);
+      setCreateDataLimitGB(0);
+    }
+
+    setShowCreateModal(true);
+    if (availableServers.length === 0) fetchServersForCreate();
+  }
+
+  async function handleCreateKey() {
+    if (!createServerId || !createProtocol || !createUsername.trim()) {
+      setCreateError('Server, Protocol, Username are required');
+      return;
+    }
+
+    setCreating(true);
+    setCreateError('');
+    setCreateResult(null);
+
+    try {
+      const res = await fetch('/api/admin/vpn-keys/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: createType,
+          serverId: createServerId,
+          protocol: createProtocol,
+          username: createUsername.trim(),
+          devices: createDevices,
+          expiryDays: createExpiryDays,
+          dataLimitGB: createDataLimitGB,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setCreateResult(data.data);
+        fetchKeys(); // Refresh the list
+      } else {
+        setCreateError(data.error || 'Failed to create key');
+      }
+    } catch (err) {
+      setCreateError('Network error. Please try again.');
+      console.error(err);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  const selectedServer = availableServers.find((s) => s.id === createServerId);
+
   function formatExpiry(expiryMs: number) {
     const now = Date.now();
     const remaining = expiryMs - now;
@@ -131,12 +227,28 @@ export default function AdminVpnKeysPage() {
             {t('admin.vpnKeysPage.subtitle')}
           </p>
         </div>
-        <button
-          onClick={() => fetchKeys()}
-          className="p-3 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-xl transition-all"
-        >
-          <RefreshCw className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => openCreateModal('test')}
+            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 rounded-xl text-sm font-semibold transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Test Key
+          </button>
+          <button
+            onClick={() => openCreateModal('sell')}
+            className="flex items-center gap-2 px-4 py-2.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 rounded-xl text-sm font-semibold transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Sell Key
+          </button>
+          <button
+            onClick={() => fetchKeys()}
+            className="p-3 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-xl transition-all"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -312,6 +424,260 @@ export default function AdminVpnKeysPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Create Key Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[#0a0a1a] border border-purple-500/20 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-purple-500/10">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Key className="w-5 h-5 text-purple-400" />
+                {createType === 'test' ? '🧪 Create Test Key' : '🔑 Create Sell Key'}
+              </h2>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="p-2 text-gray-400 hover:text-white rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {createResult ? (
+              <div className="p-5 space-y-4">
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold mb-3">
+                    <CheckCircle className="w-5 h-5" />
+                    Key Created Successfully!
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Server:</span>
+                      <span className="text-white font-medium">{createResult.server}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Protocol:</span>
+                      <span className="text-white font-medium">{createResult.protocol}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Username:</span>
+                      <span className="text-white font-medium">{createResult.username}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Devices:</span>
+                      <span className="text-white font-medium">{createResult.devices}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Expiry:</span>
+                      <span className="text-white font-medium">{createResult.expiryDays} days</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Data Limit:</span>
+                      <span className="text-white font-medium">{createResult.dataLimitGB === 0 ? 'Unlimited' : `${createResult.dataLimitGB} GB`}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub Link */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1">Subscription Link</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={createResult.subLink}
+                      className="flex-1 bg-[#12122a] border border-purple-500/10 text-white text-xs rounded-lg px-3 py-2 font-mono"
+                    />
+                    <button
+                      onClick={() => copyToClipboard(createResult.subLink, 'sublink')}
+                      className="px-3 py-2 bg-purple-500/10 text-purple-400 rounded-lg hover:bg-purple-500/20 transition-colors"
+                    >
+                      {copiedId === 'sublink' ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Config Link */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1">Config Link</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={createResult.configLink}
+                      className="flex-1 bg-[#12122a] border border-purple-500/10 text-white text-xs rounded-lg px-3 py-2 font-mono"
+                    />
+                    <button
+                      onClick={() => copyToClipboard(createResult.configLink, 'configlink')}
+                      className="px-3 py-2 bg-purple-500/10 text-purple-400 rounded-lg hover:bg-purple-500/20 transition-colors"
+                    >
+                      {copiedId === 'configlink' ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="w-full py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-500 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="p-5 space-y-4">
+                {/* Type Toggle */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setCreateType('test');
+                      setCreateDevices(1);
+                      setCreateExpiryDays(3);
+                      setCreateDataLimitGB(3);
+                    }}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                      createType === 'test'
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                        : 'bg-[#12122a] text-gray-500 border border-purple-500/[0.08]'
+                    }`}
+                  >
+                    🧪 Test Key
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCreateType('sell');
+                      setCreateDevices(1);
+                      setCreateExpiryDays(30);
+                      setCreateDataLimitGB(0);
+                    }}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                      createType === 'sell'
+                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                        : 'bg-[#12122a] text-gray-500 border border-purple-500/[0.08]'
+                    }`}
+                  >
+                    🔑 Sell Key
+                  </button>
+                </div>
+
+                {/* Server */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Server</label>
+                  <select
+                    value={createServerId}
+                    onChange={(e) => {
+                      setCreateServerId(e.target.value);
+                      const srv = availableServers.find((s) => s.id === e.target.value);
+                      if (srv && !srv.enabledProtocols.includes(createProtocol)) {
+                        setCreateProtocol(srv.enabledProtocols[0] || 'trojan');
+                      }
+                    }}
+                    className="w-full bg-[#12122a] border border-purple-500/10 text-white rounded-xl px-4 py-3 focus:border-purple-500 focus:outline-none"
+                  >
+                    {availableServers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.flag} {s.name} {s.online ? '🟢' : '🔴'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Protocol */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Protocol</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {(selectedServer?.enabledProtocols || ['trojan', 'vless', 'vmess']).map((proto) => (
+                      <button
+                        key={proto}
+                        onClick={() => setCreateProtocol(proto)}
+                        className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                          createProtocol === proto
+                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                            : 'bg-[#12122a] text-gray-500 border border-purple-500/[0.08] hover:text-gray-300'
+                        }`}
+                      >
+                        {proto.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Username */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">Client Name / Username</label>
+                  <input
+                    type="text"
+                    value={createUsername}
+                    onChange={(e) => setCreateUsername(e.target.value)}
+                    placeholder="e.g. user123 or Aung Thu"
+                    className="w-full bg-[#12122a] border border-purple-500/10 text-white rounded-xl px-4 py-3 focus:border-purple-500 focus:outline-none placeholder-gray-600"
+                  />
+                </div>
+
+                {/* Devices + Expiry + Data */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5">Devices</label>
+                    <select
+                      value={createDevices}
+                      onChange={(e) => setCreateDevices(Number(e.target.value))}
+                      className="w-full bg-[#12122a] border border-purple-500/10 text-white rounded-xl px-3 py-3 focus:border-purple-500 focus:outline-none"
+                    >
+                      {[1, 2, 3, 4, 5].map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5">Expiry (days)</label>
+                    <input
+                      type="number"
+                      value={createExpiryDays}
+                      onChange={(e) => setCreateExpiryDays(Number(e.target.value))}
+                      min={1}
+                      max={365}
+                      className="w-full bg-[#12122a] border border-purple-500/10 text-white rounded-xl px-3 py-3 focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5">Data (GB)</label>
+                    <input
+                      type="number"
+                      value={createDataLimitGB}
+                      onChange={(e) => setCreateDataLimitGB(Number(e.target.value))}
+                      min={0}
+                      placeholder="0 = ∞"
+                      className="w-full bg-[#12122a] border border-purple-500/10 text-white rounded-xl px-3 py-3 focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {createType === 'test' && (
+                  <p className="text-xs text-amber-400/70">
+                    ⚠️ Test key defaults: 1 device, 3 days, 3GB data limit
+                  </p>
+                )}
+
+                {createError && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm">
+                    ❌ {createError}
+                  </div>
+                )}
+
+                <button
+                  onClick={handleCreateKey}
+                  disabled={creating || !createUsername.trim()}
+                  className="w-full py-3 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                >
+                  {creating ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</>
+                  ) : (
+                    <><Plus className="w-4 h-4" /> Create {createType === 'test' ? 'Test' : 'Sell'} Key</>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

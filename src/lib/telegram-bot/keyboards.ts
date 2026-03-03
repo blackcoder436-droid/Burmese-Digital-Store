@@ -245,7 +245,10 @@ export function adminPanelKeyboard(): InlineKeyboardMarkup {
       { text: '⚙️ Features', callback_data: 'admin_features' },
       { text: '🔒 Protocols', callback_data: 'admin_protocols' },
     ],
-    [{ text: '📦 Backup', callback_data: 'admin_backup' }],
+    [
+      { text: '🔑 Key ထုတ်မည်', callback_data: 'admin_create_key' },
+      { text: '📦 Backup', callback_data: 'admin_backup' },
+    ],
   ]);
 }
 
@@ -323,4 +326,105 @@ export function adminBansKeyboard(): InlineKeyboardMarkup {
     [{ text: '📋 Banned List', callback_data: 'ban_list' }],
     [{ text: '◀️ Admin Panel', callback_data: 'admin_back' }],
   ]);
+}
+
+// ---- Admin Create Key ----
+
+export function adminCreateKeyTypeKeyboard(): InlineKeyboardMarkup {
+  return markup([
+    [{ text: '🧪 Test Key (3 days, 3GB)', callback_data: 'akey_type_test' }],
+    [{ text: '🔑 Sell Key (Custom)', callback_data: 'akey_type_sell' }],
+    [{ text: '◀️ Admin Panel', callback_data: 'admin_back' }],
+  ]);
+}
+
+export function adminCreateKeyServerKeyboard(
+  servers: VpnServer[],
+  keyType: string
+): InlineKeyboardMarkup {
+  const keyboard: InlineKeyboard = [];
+  for (const server of servers) {
+    if (!server.enabled) continue;
+    const statusIcon = server.online ? '🟢' : '🔴';
+    keyboard.push([
+      {
+        text: `${server.flag} ${server.name} ${statusIcon}`,
+        callback_data: `akey_srv_${keyType}_${server.id}`,
+      },
+    ]);
+  }
+  keyboard.push([{ text: '◀️ နောက်သို့', callback_data: 'admin_create_key' }]);
+  return markup(keyboard);
+}
+
+export function adminCreateKeyProtocolKeyboard(
+  serverId: string,
+  keyType: string,
+  enabledProtocols: string[]
+): InlineKeyboardMarkup {
+  const protocolInfo: Record<string, string> = {
+    trojan: '⭐ Trojan',
+    vless: '⚡ VLESS',
+    vmess: '🔒 VMess',
+    shadowsocks: '🌐 Shadowsocks',
+  };
+
+  const keyboard: InlineKeyboard = [];
+  for (const proto of enabledProtocols) {
+    keyboard.push([
+      {
+        text: protocolInfo[proto] || proto,
+        callback_data: `akey_proto_${keyType}_${serverId}_${proto}`,
+      },
+    ]);
+  }
+  keyboard.push([{ text: '◀️ Server ရွေး', callback_data: `akey_type_${keyType}` }]);
+  return markup(keyboard);
+}
+
+export function adminCreateKeyDeviceKeyboard(
+  serverId: string,
+  keyType: string,
+  protocol: string
+): InlineKeyboardMarkup {
+  const keyboard: InlineKeyboard = [];
+  for (let d = 1; d <= 5; d++) {
+    keyboard.push([
+      {
+        text: `📱 ${d} Device${d > 1 ? 's' : ''}`,
+        callback_data: `akey_dev_${keyType}_${serverId}_${protocol}_${d}`,
+      },
+    ]);
+  }
+  keyboard.push([{ text: '◀️ Protocol ရွေး', callback_data: `akey_srv_${keyType}_${serverId}` }]);
+  return markup(keyboard);
+}
+
+export function adminCreateKeyDurationKeyboard(
+  serverId: string,
+  keyType: string,
+  protocol: string,
+  devices: number
+): InlineKeyboardMarkup {
+  const durations = [
+    { days: 3, label: '3 ရက် (Test)' },
+    { days: 30, label: '1 လ' },
+    { days: 90, label: '3 လ' },
+    { days: 150, label: '5 လ' },
+    { days: 210, label: '7 လ' },
+    { days: 270, label: '9 လ' },
+    { days: 365, label: '12 လ' },
+  ];
+
+  const keyboard: InlineKeyboard = [];
+  for (const dur of durations) {
+    keyboard.push([
+      {
+        text: `📅 ${dur.label}`,
+        callback_data: `akey_dur_${keyType}_${serverId}_${protocol}_${devices}_${dur.days}`,
+      },
+    ]);
+  }
+  keyboard.push([{ text: '◀️ Device ရွေး', callback_data: `akey_proto_${keyType}_${serverId}_${protocol}` }]);
+  return markup(keyboard);
 }

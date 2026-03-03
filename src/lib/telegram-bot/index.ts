@@ -87,6 +87,12 @@ import {
   handleBroadcast,
   handleBanCommand,
   handleUnbanCommand,
+  handleAdminCreateKey,
+  handleAdminKeyType,
+  handleAdminKeyServer,
+  handleAdminKeyProtocol,
+  handleAdminKeyDevice,
+  handleAdminKeyDuration,
 } from './handlers/admin';
 
 const log = createLogger({ module: 'telegram-bot-router' });
@@ -459,6 +465,57 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     } else if (data === 'admin_backup') {
       if (ctx.isAdmin) {
         await answerCallback(ctx.callbackQueryId!, 'ℹ️ Backup ကို Admin Dashboard မှ ပြုလုပ်ပါ');
+      }
+    }
+    // ---- Admin Create Key Flow ----
+    else if (data === 'admin_create_key') {
+      if (ctx.isAdmin) await handleAdminCreateKey(ctx.chatId);
+    } else if (data.startsWith('akey_type_')) {
+      if (ctx.isAdmin) {
+        const keyType = data.substring(10); // 'test' or 'sell'
+        await handleAdminKeyType(ctx.chatId, keyType);
+      }
+    } else if (data.startsWith('akey_srv_')) {
+      if (ctx.isAdmin) {
+        // akey_srv_{type}_{serverId}
+        const rest = data.substring(9);
+        const firstUnderscore = rest.indexOf('_');
+        const keyType = rest.substring(0, firstUnderscore);
+        const serverId = rest.substring(firstUnderscore + 1);
+        await handleAdminKeyServer(ctx.chatId, keyType, serverId);
+      }
+    } else if (data.startsWith('akey_proto_')) {
+      if (ctx.isAdmin) {
+        // akey_proto_{type}_{serverId}_{protocol}
+        const rest = data.substring(11);
+        const parts = rest.split('_');
+        const keyType = parts[0];
+        const serverId = parts[1];
+        const protocol = parts.slice(2).join('_');
+        await handleAdminKeyProtocol(ctx.chatId, keyType, serverId, protocol);
+      }
+    } else if (data.startsWith('akey_dev_')) {
+      if (ctx.isAdmin) {
+        // akey_dev_{type}_{serverId}_{protocol}_{devices}
+        const rest = data.substring(9);
+        const parts = rest.split('_');
+        const keyType = parts[0];
+        const serverId = parts[1];
+        const protocol = parts[2];
+        const devices = parseInt(parts[3], 10);
+        await handleAdminKeyDevice(ctx.chatId, keyType, serverId, protocol, devices);
+      }
+    } else if (data.startsWith('akey_dur_')) {
+      if (ctx.isAdmin) {
+        // akey_dur_{type}_{serverId}_{protocol}_{devices}_{days}
+        const rest = data.substring(9);
+        const parts = rest.split('_');
+        const keyType = parts[0];
+        const serverId = parts[1];
+        const protocol = parts[2];
+        const devices = parseInt(parts[3], 10);
+        const expiryDays = parseInt(parts[4], 10);
+        await handleAdminKeyDuration(ctx.chatId, keyType, serverId, protocol, devices, expiryDays);
       }
     }
     // ---- Existing web order approve/reject (backward compatible) ----

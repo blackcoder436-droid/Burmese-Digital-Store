@@ -1,12 +1,12 @@
 // ==========================================
 // Admin Bot Command Handlers
-// Admin panel, stats, bans, servers, features, broadcast
+// Admin panel, stats, bans, servers, features, broadcast, create key
 // ==========================================
 
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
 import Order from '@/models/Order';
-import { getAllServers, invalidateServerCache } from '@/lib/vpn-servers';
+import { getAllServers, getServer, invalidateServerCache } from '@/lib/vpn-servers';
 import VpnServerModel from '@/models/VpnServer';
 import {
   getSiteSettings,
@@ -20,10 +20,16 @@ import {
   adminServersKeyboard,
   adminFeaturesKeyboard,
   adminBansKeyboard,
+  adminCreateKeyTypeKeyboard,
+  adminCreateKeyServerKeyboard,
+  adminCreateKeyProtocolKeyboard,
+  adminCreateKeyDeviceKeyboard,
+  adminCreateKeyDurationKeyboard,
   statsKeyboard,
   mainMenuKeyboard,
 } from '../keyboards';
 import { setSession, getSession, clearSession } from '../session';
+import { provisionVpnKey } from '@/lib/xui';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ module: 'bot-admin' });
@@ -697,4 +703,195 @@ export async function handleUnbanCommand(
     return;
   }
   await processUnbanUser(chatId, args);
+}
+
+// ==========================================
+// Admin Create Key Flow
+// ==========================================
+
+/**
+ * Show key type selection (test / sell)
+ */
+export async function handleAdminCreateKey(chatId: number): Promise<void> {
+  await sendMessage(
+    chatId,
+    '🔑 <b>VPN Key ထုတ်ပေးမည်</b>\n\nKey အမျိုးအစား ရွေးပါ:',
+    { replyMarkup: adminCreateKeyTypeKeyboard() }
+  );
+}
+
+/**
+ * Handle key type selection → show server list
+ */
+export async function handleAdminKeyType(
+  chatId: number,
+  keyType: string
+): Promise<void> {
+  const serversMap = await getAllServers();
+  const serverList = Object.values(serversMap);
+  const label = keyType === 'test' ? '🧪 Test Key' : '🔑 Sell Key';
+  await sendMessage(
+    chatId,
+    `${label}\n\nServer ရွေးပါ:`,
+    { replyMarkup: adminCreateKeyServerKeyboard(serverList, keyType) }
+  );
+}
+
+/**
+ * Handle server selection → show protocol list
+ */
+export async function handleAdminKeyServer(
+  chatId: number,
+  keyType: string,
+  serverId: string
+): Promise<void> {
+  const server = await getServer(serverId);
+  if (!server) {
+    await sendMessage(chatId, '❌ Server မတွေ့ပါ');
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📡 ${server.flag} ${server.name}\n\nProtocol ရွေးပါ:`,
+    { replyMarkup: adminCreateKeyProtocolKeyboard(serverId, keyType, server.enabledProtocols) }
+  );
+}
+
+/**
+ * Handle protocol selection → show device count (sell) or create immediately (test)
+ */
+export async function handleAdminKeyProtocol(
+  chatId: number,
+  keyType: string,
+  serverId: string,
+  protocol: string
+): Promise<void> {
+  if (keyType === 'test') {
+    // Test key: 1 device, 3 days, 3GB — create immediately
+    await createAdminKey(chatId, keyType, serverId, protocol, 1, 3, 3);
+  } else {
+    // Sell key: ask device count
+    await sendMessage(
+      chatId,
+      `🔧 Protocol: <b>${protocol.toUpperCase()}</b>\n\nDevice အရေအတွက် ရွေးပါ:`,
+      { replyMarkup: adminCreateKeyDeviceKeyboard(serverId, keyType, protocol) }
+    );
+  }
+}
+
+/**
+ * Handle device selection → show duration
+ */
+export async function handleAdminKeyDevice(
+  chatId: number,
+  keyType: string,
+  serverId: string,
+  protocol: string,
+  devices: number
+): Promise<void> {
+  await sendMessage(
+    chatId,
+    `📱 ${devices} Device${devices > 1 ? 's' : ''}\n\nသက်တမ်း ရွေးပါ:`,
+    { replyMarkup: adminCreateKeyDurationKeyboard(serverId, keyType, protocol, devices) }
+  );
+}
+
+/**
+ * Handle duration selection → create key
+ */
+export async function handleAdminKeyDuration(
+  chatId: number,
+  keyType: string,
+  serverId: string,
+  protocol: string,
+  devices: number,
+  expiryDays: number
+): Promise<void> {
+  await createAdminKey(chatId, keyType, serverId, protocol, devices, expiryDays, 0);
+}
+
+/**
+ * Create a VPN key and send the result to admin
+ */
+async function createAdminKey(
+  chatId: number,
+  keyType: string,
+  serverId: string,
+  protocol: string,
+  devices: number,
+  expiryDays: number,
+  dataLimitGB: number
+): Promise<void> {
+  const server = await getServer(serverId);
+  if (!server) {
+    await sendMessage(chatId, '❌ Server မတွေ့ပါ');
+    return;
+  }
+
+  await sendMessage(chatId, '⏳ Key ဖန်တီးနေပါသည်...');
+
+  try {
+    const label = keyType === 'test' ? 'test' : 'admin';
+    const username = `${label}_${Date.now().toString(36)}`;
+
+    const result = await provisionVpnKey({
+      serverId,
+      username,
+      userId: `admin_bot_${chatId}`,
+      devices,
+      expiryDays,
+      dataLimitGB,
+      protocol,
+    });
+
+    if (!result) {
+      await sendMessage(chatId, '❌ Key ဖန်တီးရာတွင် အမှားဖြစ်ပါသည်။ Server ချိတ်ဆက်မှု စစ်ဆေးပါ', {
+        replyMarkup: adminPanelKeyboard(),
+      });
+      return;
+    }
+
+    const typeLabel = keyType === 'test' ? '🧪 TEST KEY' : '🔑 SELL KEY';
+    const dataLabel = dataLimitGB === 0 ? 'Unlimited' : `${dataLimitGB} GB`;
+    const expiryDate = new Date(result.expiryTime).toLocaleDateString('en-GB');
+
+    const message = [
+      `✅ <b>${typeLabel} Created!</b>`,
+      '',
+      `🖥️ Server: ${server.flag} ${server.name}`,
+      `🔧 Protocol: ${protocol.toUpperCase()}`,
+      `📱 Devices: ${devices}`,
+      `📅 Expiry: ${expiryDays} days (${expiryDate})`,
+      `📊 Data: ${dataLabel}`,
+      '',
+      `📋 <b>Subscription Link:</b>`,
+      `<code>${result.subLink}</code>`,
+      '',
+      `📋 <b>Config Link:</b>`,
+      `<code>${result.configLink}</code>`,
+      '',
+      '👆 Link ကိုနှိပ်ပြီး Copy ယူပါ',
+    ].join('\n');
+
+    await sendMessage(chatId, message, {
+      replyMarkup: adminPanelKeyboard(),
+    });
+
+    log.info('Admin created VPN key via bot', {
+      keyType,
+      serverId,
+      protocol,
+      devices,
+      expiryDays,
+      clientEmail: result.clientEmail,
+    });
+  } catch (error) {
+    log.error('Admin create key error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await sendMessage(chatId, '❌ Key ဖန်တီးရာတွင် အမှားဖြစ်ပါသည်', {
+      replyMarkup: adminPanelKeyboard(),
+    });
+  }
 }
