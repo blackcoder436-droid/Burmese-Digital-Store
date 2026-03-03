@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import PaymentUpload from '@/components/PaymentUpload';
+import CountryFlag from '@/components/CountryFlag';
 import { useLanguage } from '@/lib/language';
 import { ArrowLeft } from 'lucide-react';
 import { buildPlanId, getPlan } from '@/lib/vpn-plans';
@@ -238,7 +239,7 @@ function VpnOrderPageContent() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">{server.flag}</span>
+                        <CountryFlag flag={server.flag} size={22} />
                         <span className="text-white font-medium text-sm sm:text-base">{server.name}</span>
                       </div>
                       <span className="inline-flex items-center gap-1 text-[11px] text-green-400">
@@ -301,7 +302,7 @@ function VpnOrderPageContent() {
                   <div>
                     <p className="text-white font-semibold text-sm leading-tight">{plan.devices} Device{plan.devices > 1 ? 's' : ''} / {monthLabel(plan.months)}</p>
                     <p className="text-gray-400 text-xs mt-1">
-                      {servers.find((s) => s.id === selectedServer)?.flag} {servers.find((s) => s.id === selectedServer)?.name || selectedServer} • {selectedProtocol.toUpperCase()}
+                      <CountryFlag flag={servers.find((s) => s.id === selectedServer)?.flag || ''} size={16} className="mr-1" /> {servers.find((s) => s.id === selectedServer)?.name || selectedServer} • {selectedProtocol.toUpperCase()}
                     </p>
                   </div>
                 </div>

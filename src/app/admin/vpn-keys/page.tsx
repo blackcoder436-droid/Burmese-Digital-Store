@@ -576,7 +576,7 @@ export default function AdminVpnKeysPage() {
                   >
                     {availableServers.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.flag} {s.name} {s.online ? '🟢' : '🔴'}
+                        {s.flag} {s.name} {s.online ? ' 🟢' : ' 🔴'}
                       </option>
                     ))}
                   </select>

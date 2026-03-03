@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
+import CountryFlag from '@/components/CountryFlag';
 
 interface VpnServerData {
   _id: string;
@@ -635,7 +636,7 @@ export default function AdminServersPage() {
               <div className="flex items-center gap-4 p-4">
                 {/* Flag + Status indicator */}
                 <div className="relative flex-shrink-0">
-                  <span className="text-4xl leading-none">{server.flag}</span>
+                  <CountryFlag flag={server.flag} size={48} />
                   <span
                     className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-dark-800 ${
                       healthData[server.serverId]?.online ? 'bg-green-500' : server.enabled ? 'bg-yellow-500' : 'bg-red-500'

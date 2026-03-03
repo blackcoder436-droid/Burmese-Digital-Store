@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/lib/language';
 import MobileCarousel from '@/components/MobileCarousel';
+import CountryFlag from '@/components/CountryFlag';
 
 /* pricing data (1-5 devices x 6 durations) */
 const pricing: Record<number, { months: number; price: string; popular?: boolean }[]> = {
@@ -543,7 +544,7 @@ export default function VPNPage() {
                     {s.badge}
                   </span>
                 )}
-                <div className="text-5xl mb-3">{s.flag}</div>
+                <div className="mb-3 flex justify-center"><CountryFlag flag={s.flag} size={56} /></div>
                 <div className="font-bold text-white mb-2">{s.name}</div>
                 <div className={`inline-flex items-center gap-1.5 text-sm ${s.online ? 'text-green-400' : 'text-red-400'}`}>
                   <span className={`w-2 h-2 rounded-full ${s.online ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
@@ -584,7 +585,7 @@ export default function VPNPage() {
           {selectedServer && (
             <div className="vpn-fade flex justify-center mb-6">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm">
-                <span className="text-lg">{liveServers.find(s => s.id === selectedServer)?.flag}</span>
+                <CountryFlag flag={liveServers.find(s => s.id === selectedServer)?.flag || ''} size={22} />
                 <span className="text-purple-300 font-semibold">{liveServers.find(s => s.id === selectedServer)?.name}</span>
                 <button onClick={() => setSelectedServer(null)} className="ml-1 text-gray-500 hover:text-white transition-colors">✕</button>
               </div>
