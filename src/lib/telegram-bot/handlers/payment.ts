@@ -155,11 +155,11 @@ export async function handlePaymentScreenshot(
       replyMarkup: mainMenuKeyboard(),
     });
 
-    // Auto-approve if OCR matched and feature enabled
+    // Auto-approve if feature enabled (OCR match not required)
     const autoApproveEnabled = await getFeatureFlag('auto_approve');
-    if (ocrMatch && autoApproveEnabled && !order.requiresManualReview) {
+    if (autoApproveEnabled && !order.requiresManualReview) {
       const delay = settings.autoApproveDelaySeconds || 100;
-      scheduleAutoApprove(order._id.toString(), telegramId, delay);
+      scheduleAutoApprove(order._id.toString(), telegramId, delay, ocrMatch);
     }
 
     clearSession(telegramId);
@@ -184,18 +184,19 @@ export async function handlePaymentScreenshot(
 function scheduleAutoApprove(
   orderId: string,
   userId: number,
-  delaySeconds: number
+  delaySeconds: number,
+  ocrMatch: boolean = false
 ): void {
   // Cancel existing timer if any
   cancelAutoApprove(orderId);
 
   const timer = setTimeout(async () => {
     autoApproveTimers.delete(orderId);
-    await executeAutoApprove(orderId, userId);
+    await executeAutoApprove(orderId, userId, ocrMatch);
   }, delaySeconds * 1000);
 
   autoApproveTimers.set(orderId, timer);
-  log.info('Auto-approve scheduled', { orderId, delaySeconds });
+  log.info('Auto-approve scheduled', { orderId, delaySeconds, ocrMatch });
 }
 
 /**
@@ -212,11 +213,19 @@ export function cancelAutoApprove(orderId: string): void {
 /**
  * Execute auto-approve: uses shared approveOrder
  */
-async function executeAutoApprove(orderId: string, userId: number): Promise<void> {
+async function executeAutoApprove(orderId: string, userId: number, ocrMatch: boolean = false): Promise<void> {
   try {
+    // Re-check order status before approving (admin may have already acted)
+    await connectDB();
+    const checkOrder = await Order.findById(orderId);
+    if (!checkOrder || checkOrder.status !== 'verifying') {
+      log.info('Auto-approve skipped — order already processed', { orderId, status: checkOrder?.status });
+      return;
+    }
+
     const result = await approveOrder(orderId, {
       adminId: 'bot-auto',
-      adminName: 'Auto-Approve (OCR)',
+      adminName: ocrMatch ? 'Auto-Approve (OCR ✅)' : 'Auto-Approve (Timer)',
       source: 'auto-approve',
     });
 
@@ -232,8 +241,8 @@ async function executeAutoApprove(orderId: string, userId: number): Promise<void
 
     const order = result.order;
     if (targetChat && order?.telegramMessageId) {
-      // Admin message is a photo (sendPhoto with caption) — use editMessageCaption
-      const autoApproveText = `🤖 <b>AUTO-APPROVED</b>\n\nOrder ${order.orderNumber} auto-approved (OCR match)`;
+      const approveLabel = ocrMatch ? 'OCR match ✅' : 'Timer ⏱';
+      const autoApproveText = `🤖 <b>AUTO-APPROVED</b> (${approveLabel})\n\nOrder ${order.orderNumber} auto-approved`;
       const captionOk = await editMessageCaption(
         targetChat,
         order.telegramMessageId,
@@ -249,7 +258,7 @@ async function executeAutoApprove(orderId: string, userId: number): Promise<void
       }
     }
 
-    log.info('Order auto-approved', { orderId, userId });
+    log.info('Order auto-approved', { orderId, userId, ocrMatch });
   } catch (error) {
     log.error('Auto-approve error', {
       orderId,
