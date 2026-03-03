@@ -62,10 +62,11 @@ export default function AdminDashboard() {
       const orders = ordersData?.data?.orders || [];
       setRecentOrders(orders);
 
-      const totalRevenue = analyticsData?.data?.overviewStats?.totalRevenue || 0;
-      const completedCount = analyticsData?.data?.overviewStats?.completedOrders
+      // Use allTime totals for overall dashboard, overview for period stats
+      const totalRevenue = analyticsData?.data?.allTime?.totalRevenue || 0;
+      const completedCount = analyticsData?.data?.overview?.completedOrders
         ?? orders.filter((o: any) => o.status === 'completed').length;
-      const pendingCount = analyticsData?.data?.overviewStats?.pendingOrders
+      const pendingCount = analyticsData?.data?.overview?.pendingOrders
         ?? orders.filter((o: any) => o.status === 'pending' || o.status === 'verifying').length;
 
       setStats({

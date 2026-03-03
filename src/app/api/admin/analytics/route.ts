@@ -39,6 +39,10 @@ export async function GET(request: NextRequest) {
       startDate.setHours(0, 0, 0, 0);
       endDate = new Date(specificDate);
       endDate.setHours(23, 59, 59, 999);
+    } else if (range === 'all') {
+      // All-time: use earliest possible date
+      startDate = new Date('2020-01-01');
+      startDate.setHours(0, 0, 0, 0);
     } else {
       const days = parseInt(range) || 30;
       startDate = new Date();
