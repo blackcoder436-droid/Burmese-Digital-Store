@@ -153,7 +153,7 @@ export async function middleware(request: NextRequest) {
   const styleSrc = `style-src 'self' 'unsafe-inline'`; // Tailwind needs unsafe-inline for styles
   response.headers.set(
     'Content-Security-Policy',
-    `default-src 'self'; ${scriptSrc}; ${styleSrc}; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com; frame-src https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
+    `default-src 'self'; ${scriptSrc}; ${styleSrc}; img-src 'self' data: blob: https://*.googleusercontent.com https://flagcdn.com; font-src 'self'; connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com; frame-src https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
   );
 
   return response;
