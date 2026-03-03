@@ -469,11 +469,11 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     }
     // ---- Admin Create Key Flow ----
     else if (data === 'admin_create_key') {
-      if (ctx.isAdmin) await handleAdminCreateKey(ctx.chatId);
+      if (ctx.isAdmin) await handleAdminCreateKey(ctx.chatId, ctx.messageId);
     } else if (data.startsWith('akey_type_')) {
       if (ctx.isAdmin) {
         const keyType = data.substring(10); // 'test' or 'sell'
-        await handleAdminKeyType(ctx.chatId, keyType);
+        await handleAdminKeyType(ctx.chatId, keyType, ctx.messageId);
       }
     } else if (data.startsWith('akey_srv_')) {
       if (ctx.isAdmin) {
@@ -482,7 +482,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         const firstUnderscore = rest.indexOf('_');
         const keyType = rest.substring(0, firstUnderscore);
         const serverId = rest.substring(firstUnderscore + 1);
-        await handleAdminKeyServer(ctx.chatId, keyType, serverId);
+        await handleAdminKeyServer(ctx.chatId, keyType, serverId, ctx.messageId);
       }
     } else if (data.startsWith('akey_proto_')) {
       if (ctx.isAdmin) {
@@ -492,7 +492,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         const keyType = parts[0];
         const serverId = parts[1];
         const protocol = parts.slice(2).join('_');
-        await handleAdminKeyProtocol(ctx.chatId, keyType, serverId, protocol);
+        await handleAdminKeyProtocol(ctx.chatId, keyType, serverId, protocol, ctx.messageId);
       }
     } else if (data.startsWith('akey_dev_')) {
       if (ctx.isAdmin) {
@@ -503,7 +503,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         const serverId = parts[1];
         const protocol = parts[2];
         const devices = parseInt(parts[3], 10);
-        await handleAdminKeyDevice(ctx.chatId, keyType, serverId, protocol, devices);
+        await handleAdminKeyDevice(ctx.chatId, keyType, serverId, protocol, devices, ctx.messageId);
       }
     } else if (data.startsWith('akey_dur_')) {
       if (ctx.isAdmin) {
@@ -515,7 +515,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         const protocol = parts[2];
         const devices = parseInt(parts[3], 10);
         const expiryDays = parseInt(parts[4], 10);
-        await handleAdminKeyDuration(ctx.chatId, keyType, serverId, protocol, devices, expiryDays);
+        await handleAdminKeyDuration(ctx.chatId, keyType, serverId, protocol, devices, expiryDays, ctx.messageId);
       }
     }
     // ---- Existing web order approve/reject (backward compatible) ----

@@ -13,7 +13,7 @@ import {
   getAllFeatureFlags,
   setFeatureFlag,
 } from '@/models/SiteSettings';
-import { sendMessage } from '../api';
+import { sendMessage, editMessageText } from '../api';
 import { MSG } from '../messages';
 import {
   adminPanelKeyboard,
@@ -710,13 +710,31 @@ export async function handleUnbanCommand(
 // ==========================================
 
 /**
+ * Helper: edit existing message or send new one
+ */
+async function editOrSend(
+  chatId: number,
+  messageId: number | undefined,
+  text: string,
+  replyMarkup?: import('../types').InlineKeyboardMarkup
+): Promise<void> {
+  if (messageId) {
+    const ok = await editMessageText(chatId, messageId, text, { replyMarkup });
+    if (ok) return;
+  }
+  // Fallback: send new message
+  await sendMessage(chatId, text, { replyMarkup });
+}
+
+/**
  * Show key type selection (test / sell)
  */
-export async function handleAdminCreateKey(chatId: number): Promise<void> {
-  await sendMessage(
+export async function handleAdminCreateKey(chatId: number, messageId?: number): Promise<void> {
+  await editOrSend(
     chatId,
+    messageId,
     '🔑 <b>VPN Key ထုတ်ပေးမည်</b>\n\nKey အမျိုးအစား ရွေးပါ:',
-    { replyMarkup: adminCreateKeyTypeKeyboard() }
+    adminCreateKeyTypeKeyboard()
   );
 }
 
@@ -725,15 +743,17 @@ export async function handleAdminCreateKey(chatId: number): Promise<void> {
  */
 export async function handleAdminKeyType(
   chatId: number,
-  keyType: string
+  keyType: string,
+  messageId?: number
 ): Promise<void> {
   const serversMap = await getAllServers();
   const serverList = Object.values(serversMap);
   const label = keyType === 'test' ? '🧪 Test Key' : '🔑 Sell Key';
-  await sendMessage(
+  await editOrSend(
     chatId,
+    messageId,
     `${label}\n\nServer ရွေးပါ:`,
-    { replyMarkup: adminCreateKeyServerKeyboard(serverList, keyType) }
+    adminCreateKeyServerKeyboard(serverList, keyType)
   );
 }
 
@@ -743,18 +763,20 @@ export async function handleAdminKeyType(
 export async function handleAdminKeyServer(
   chatId: number,
   keyType: string,
-  serverId: string
+  serverId: string,
+  messageId?: number
 ): Promise<void> {
   const server = await getServer(serverId);
   if (!server) {
-    await sendMessage(chatId, '❌ Server မတွေ့ပါ');
+    await editOrSend(chatId, messageId, '❌ Server မတွေ့ပါ');
     return;
   }
 
-  await sendMessage(
+  await editOrSend(
     chatId,
+    messageId,
     `📡 ${server.flag} ${server.name}\n\nProtocol ရွေးပါ:`,
-    { replyMarkup: adminCreateKeyProtocolKeyboard(serverId, keyType, server.enabledProtocols) }
+    adminCreateKeyProtocolKeyboard(serverId, keyType, server.enabledProtocols)
   );
 }
 
@@ -765,17 +787,19 @@ export async function handleAdminKeyProtocol(
   chatId: number,
   keyType: string,
   serverId: string,
-  protocol: string
+  protocol: string,
+  messageId?: number
 ): Promise<void> {
   if (keyType === 'test') {
     // Test key: 1 device, 3 days, 3GB — create immediately
-    await createAdminKey(chatId, keyType, serverId, protocol, 1, 3, 3);
+    await createAdminKey(chatId, messageId, keyType, serverId, protocol, 1, 3, 3);
   } else {
     // Sell key: ask device count
-    await sendMessage(
+    await editOrSend(
       chatId,
+      messageId,
       `🔧 Protocol: <b>${protocol.toUpperCase()}</b>\n\nDevice အရေအတွက် ရွေးပါ:`,
-      { replyMarkup: adminCreateKeyDeviceKeyboard(serverId, keyType, protocol) }
+      adminCreateKeyDeviceKeyboard(serverId, keyType, protocol)
     );
   }
 }
@@ -788,12 +812,14 @@ export async function handleAdminKeyDevice(
   keyType: string,
   serverId: string,
   protocol: string,
-  devices: number
+  devices: number,
+  messageId?: number
 ): Promise<void> {
-  await sendMessage(
+  await editOrSend(
     chatId,
+    messageId,
     `📱 ${devices} Device${devices > 1 ? 's' : ''}\n\nသက်တမ်း ရွေးပါ:`,
-    { replyMarkup: adminCreateKeyDurationKeyboard(serverId, keyType, protocol, devices) }
+    adminCreateKeyDurationKeyboard(serverId, keyType, protocol, devices)
   );
 }
 
@@ -806,9 +832,10 @@ export async function handleAdminKeyDuration(
   serverId: string,
   protocol: string,
   devices: number,
-  expiryDays: number
+  expiryDays: number,
+  messageId?: number
 ): Promise<void> {
-  await createAdminKey(chatId, keyType, serverId, protocol, devices, expiryDays, 0);
+  await createAdminKey(chatId, messageId, keyType, serverId, protocol, devices, expiryDays, 0);
 }
 
 /**
@@ -816,6 +843,7 @@ export async function handleAdminKeyDuration(
  */
 async function createAdminKey(
   chatId: number,
+  messageId: number | undefined,
   keyType: string,
   serverId: string,
   protocol: string,
@@ -825,11 +853,12 @@ async function createAdminKey(
 ): Promise<void> {
   const server = await getServer(serverId);
   if (!server) {
-    await sendMessage(chatId, '❌ Server မတွေ့ပါ');
+    await editOrSend(chatId, messageId, '❌ Server မတွေ့ပါ');
     return;
   }
 
-  await sendMessage(chatId, '⏳ Key ဖန်တီးနေပါသည်...');
+  // Show loading on same message
+  await editOrSend(chatId, messageId, '⏳ Key ဖန်တီးနေပါသည်...');
 
   try {
     const label = keyType === 'test' ? 'test' : 'admin';
@@ -846,6 +875,7 @@ async function createAdminKey(
     });
 
     if (!result) {
+      // Result message — send new (can't edit loading to include keyboard reliably)
       await sendMessage(chatId, '❌ Key ဖန်တီးရာတွင် အမှားဖြစ်ပါသည်။ Server ချိတ်ဆက်မှု စစ်ဆေးပါ', {
         replyMarkup: adminPanelKeyboard(),
       });
@@ -856,7 +886,7 @@ async function createAdminKey(
     const dataLabel = dataLimitGB === 0 ? 'Unlimited' : `${dataLimitGB} GB`;
     const expiryDate = new Date(result.expiryTime).toLocaleDateString('en-GB');
 
-    const message = [
+    const resultMsg = [
       `✅ <b>${typeLabel} Created!</b>`,
       '',
       `🖥️ Server: ${server.flag} ${server.name}`,
@@ -874,7 +904,8 @@ async function createAdminKey(
       '👆 Link ကိုနှိပ်ပြီး Copy ယူပါ',
     ].join('\n');
 
-    await sendMessage(chatId, message, {
+    // Final result: send as new message (links are important, ensure they display)
+    await sendMessage(chatId, resultMsg, {
       replyMarkup: adminPanelKeyboard(),
     });
 
