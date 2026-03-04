@@ -220,6 +220,32 @@ export async function sendOrderWithApproveButtons(params: {
       orderId: params.orderId,
       messageId: data.result.message_id,
     });
+
+    // Also send to extra approve channels
+    const extraChannels = (process.env.TELEGRAM_APPROVE_CHANNELS || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id && id !== CHANNEL_ID);
+    for (const ch of extraChannels) {
+      try {
+        await fetch(`${TELEGRAM_API}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: ch,
+            text: lines.join('\n'),
+            parse_mode: 'HTML',
+            reply_markup: inlineKeyboard,
+          }),
+        });
+      } catch (err) {
+        log.warn('Failed to send approve buttons to extra channel', {
+          channel: ch,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     return true;
   } catch (error) {
     log.error('Telegram approve buttons error', {

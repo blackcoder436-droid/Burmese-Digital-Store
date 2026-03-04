@@ -66,6 +66,7 @@ import {
 // Admin
 import {
   isAdmin,
+  isApproveChannel,
   handleAdmin,
   handleAdminBack,
   handleAdminSales,
@@ -348,7 +349,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     }
     // ---- Admin Approve/Reject (from payment channel) ----
     else if (data.startsWith('bot_approve_')) {
-      if (!ctx.isAdmin) {
+      if (!ctx.isAdmin && !isApproveChannel(ctx.chatId)) {
         await answerCallback(ctx.callbackQueryId!, '❌ Admin only');
         return;
       }
@@ -383,7 +384,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         }
       }
     } else if (data.startsWith('bot_reject_')) {
-      if (!ctx.isAdmin) {
+      if (!ctx.isAdmin && !isApproveChannel(ctx.chatId)) {
         await answerCallback(ctx.callbackQueryId!, '❌ Admin only');
         return;
       }

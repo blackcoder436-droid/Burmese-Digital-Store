@@ -47,6 +47,8 @@ const serverSchema = z.object({
   TELEGRAM_CHAT_ID: z.string().optional(),
   TELEGRAM_ERROR_CHANNEL_ID: z.string().optional(),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+  // Extra channels that can receive & approve orders (comma-separated)
+  TELEGRAM_APPROVE_CHANNELS: z.string().optional(),
 
   // Telegram (VPN bot — user-facing bot for purchases)
   TELEGRAM_VPN_BOT_TOKEN: z.string().optional(),

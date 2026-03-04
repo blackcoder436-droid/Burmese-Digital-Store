@@ -160,6 +160,18 @@ export async function handlePaymentScreenshot(
       }
     }
 
+    // Also send to extra approve channels
+    const extraChannels = (process.env.TELEGRAM_APPROVE_CHANNELS || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id && id !== targetChat);
+    for (const ch of extraChannels) {
+      await sendPhoto(ch, largest.file_id, {
+        caption: adminMessage,
+        replyMarkup: approveRejectKeyboard(order._id.toString(), telegramId),
+      });
+    }
+
     // Tell user order is under review
     await sendMessage(chatId, MSG.orderPending, {
       replyMarkup: mainMenuKeyboard(),
