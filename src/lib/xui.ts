@@ -437,6 +437,57 @@ class XuiSession {
     return null;
   }
 
+  // ---- Get full client settings by email ----
+  async getClientFull(clientEmail: string): Promise<{
+    inboundId: number;
+    protocol: string;
+    client: Record<string, unknown>;
+  } | null> {
+    const inbounds = await this.getInbounds();
+    for (const ib of inbounds) {
+      try {
+        const settings = JSON.parse(ib.settings || '{}');
+        const clients = settings.clients || [];
+        for (const client of clients) {
+          if (client.email === clientEmail) {
+            return { inboundId: ib.id, protocol: ib.protocol, client };
+          }
+        }
+      } catch { /* skip parse errors */ }
+    }
+    return null;
+  }
+
+  // ---- Update client on 3x-UI panel ----
+  async updateClient(
+    inboundId: number,
+    clientUUID: string,
+    updatedClient: Record<string, unknown>
+  ): Promise<boolean> {
+    if (!this.loggedIn && !(await this.login())) return false;
+
+    try {
+      const body = new URLSearchParams({
+        id: String(inboundId),
+        settings: JSON.stringify({ clients: [updatedClient] }),
+      });
+
+      const res = await this.request(`/panel/api/inbounds/updateClient/${encodeURIComponent(clientUUID)}`, {
+        method: 'POST',
+        body: body.toString(),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+      const result: XuiApiResponse = await res.json();
+      if (!result.success) {
+        log.error('Failed to update client', { msg: result.msg, clientUUID });
+      }
+      return result.success;
+    } catch (error: unknown) {
+      log.error('Error updating client', { error: error instanceof Error ? error.message : String(error) });
+      return false;
+    }
+  }
+
   // ---- Fetch config link from 3X-UI subscription endpoint ----
   // 3X-UI /sub/{subId} returns base64-encoded config URI(s)
   async fetchSubscription(subUrl: string): Promise<string | null> {
@@ -584,6 +635,62 @@ export async function revokeVpnKey(serverId: string, clientEmail: string): Promi
   }
 
   return session.deleteClient(info.inboundId, clientEmail);
+}
+
+/**
+ * Update an existing VPN client on the 3xUI panel (e.g. change expiry, devices, data limit).
+ * Fetches current client settings, merges with provided updates, and pushes to 3xUI.
+ */
+export async function updateVpnClient(
+  serverId: string,
+  clientEmail: string,
+  updates: {
+    expiryTime?: number;
+    devices?: number;
+    dataLimitGB?: number;
+    enable?: boolean;
+  }
+): Promise<boolean> {
+  const session = await getSession(serverId);
+  if (!session) return false;
+
+  const found = await session.getClientFull(clientEmail);
+  if (!found) {
+    log.warn('Client not found for update', { serverId, clientEmail });
+    return false;
+  }
+
+  const { inboundId, protocol, client } = found;
+
+  // Determine the client UUID used in the 3x-UI URL path
+  // Trojan/SS use "password", vless/vmess use "id"
+  const clientUUID = (protocol === 'trojan' || protocol === 'shadowsocks')
+    ? String(client.password || '')
+    : String(client.id || '');
+
+  if (!clientUUID) {
+    log.error('Cannot determine client UUID for update', { clientEmail, protocol });
+    return false;
+  }
+
+  // Merge updates into existing client settings
+  const updatedClient = { ...client };
+  if (updates.expiryTime !== undefined) updatedClient.expiryTime = updates.expiryTime;
+  if (updates.devices !== undefined) updatedClient.limitIp = updates.devices;
+  if (updates.dataLimitGB !== undefined) {
+    updatedClient.totalGB = updates.dataLimitGB > 0
+      ? Math.floor(updates.dataLimitGB * 1024 * 1024 * 1024)
+      : 0;
+  }
+  if (updates.enable !== undefined) updatedClient.enable = updates.enable;
+
+  const success = await session.updateClient(inboundId, clientUUID, updatedClient);
+
+  if (success) {
+    log.info('VPN client updated on panel', { serverId, clientEmail, updates });
+  }
+
+  return success;
 }
 
 /**

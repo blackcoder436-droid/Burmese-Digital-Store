@@ -102,10 +102,29 @@ function LoginForm() {
   // Initialize Google Sign-In
   useEffect(() => {
     if (checking || !googleClientId) return;
+
+    // Check if GSI script is already loaded
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).google?.accounts?.id) {
+      initGoogleButton();
+      return;
+    }
+
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
-    script.onload = () => {
+    // Read nonce from existing Next.js script for CSP compliance
+    const existingNonce = document.querySelector('script[nonce]')?.getAttribute('nonce');
+    if (existingNonce) script.nonce = existingNonce;
+    script.onload = () => initGoogleButton();
+    script.onerror = () => {
+      console.error('Failed to load Google Sign-In SDK');
+      setGoogleClientId(''); // Hide button on failure
+    };
+    document.head.appendChild(script);
+    return () => { script.remove(); };
+
+    function initGoogleButton() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window as any).google?.accounts.id.initialize({
         client_id: googleClientId,
@@ -125,9 +144,7 @@ function LoginForm() {
           logo_alignment: 'center',
         });
       }
-    };
-    document.head.appendChild(script);
-    return () => { script.remove(); };
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checking, googleClientId]);
 

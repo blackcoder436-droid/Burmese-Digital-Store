@@ -91,6 +91,7 @@ function extractAmount(text: string): string | null {
   // Normalize: replace common OCR artifacts
   const normalized = text
     .replace(/[–—−]/g, '-')  // normalize various dash/minus characters
+    .replace(/[၀-၉]/g, (ch) => String(ch.charCodeAt(0) - 0x1040))  // Myanmar digits → ASCII
     .replace(/\s+/g, ' ');
 
   const patterns = [

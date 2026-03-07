@@ -16,6 +16,7 @@ import {
   Plus,
   X,
   Loader2,
+  Pencil,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 
@@ -71,6 +72,16 @@ export default function AdminVpnKeysPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Edit Key modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingKey, setEditingKey] = useState<VpnKeyEntry | null>(null);
+  const [editExpiryDate, setEditExpiryDate] = useState('');
+  const [editDevices, setEditDevices] = useState(1);
+  const [editDataLimitGB, setEditDataLimitGB] = useState(0);
+  const [updating, setUpdating] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState(false);
 
   // Create Key modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -195,6 +206,61 @@ export default function AdminVpnKeysPage() {
       console.error(err);
     } finally {
       setCreating(false);
+    }
+  }
+
+  function openEditModal(entry: VpnKeyEntry) {
+    setEditingKey(entry);
+    setEditError('');
+    setEditSuccess(false);
+    // Convert expiryTime (unix ms) to date string for input
+    if (entry.vpnKey?.expiryTime) {
+      const d = new Date(entry.vpnKey.expiryTime);
+      setEditExpiryDate(d.toISOString().slice(0, 16)); // datetime-local format
+    } else {
+      setEditExpiryDate('');
+    }
+    setEditDevices(entry.vpnPlan?.devices || 1);
+    setEditDataLimitGB(0);
+    setShowEditModal(true);
+  }
+
+  async function handleUpdateKey() {
+    if (!editingKey) return;
+    setUpdating(true);
+    setEditError('');
+    setEditSuccess(false);
+
+    try {
+      const updates: Record<string, unknown> = {};
+
+      if (editExpiryDate) {
+        updates.expiryTime = new Date(editExpiryDate).getTime();
+      }
+      updates.devices = editDevices;
+      updates.dataLimitGB = editDataLimitGB;
+
+      const res = await fetch('/api/admin/vpn-keys/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: editingKey._id,
+          ...updates,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditSuccess(true);
+        fetchKeys();
+      } else {
+        setEditError(data.error || 'Failed to update key');
+      }
+    } catch (err) {
+      setEditError('Network error. Please try again.');
+      console.error(err);
+    } finally {
+      setUpdating(false);
     }
   }
 
@@ -334,6 +400,7 @@ export default function AdminVpnKeysPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('admin.vpnKeysPage.expiry')}</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('admin.amount')}</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('admin.vpnKeysPage.key')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Edit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-purple-500/[0.05]">
@@ -391,6 +458,17 @@ export default function AdminVpnKeysPage() {
                           </button>
                         ) : (
                           <span className="text-xs text-gray-600">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {entry.vpnProvisionStatus === 'provisioned' && entry.vpnKey && (
+                          <button
+                            onClick={() => openEditModal(entry)}
+                            className="inline-flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                            title="Edit key on 3x-UI"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -677,6 +755,106 @@ export default function AdminVpnKeysPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Key Modal */}
+      {showEditModal && editingKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[#0a0a1a] border border-purple-500/20 rounded-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-5 border-b border-purple-500/10">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-amber-400" />
+                Edit VPN Key
+              </h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-2 text-gray-400 hover:text-white rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Key info */}
+              <div className="bg-[#12122a] border border-purple-500/[0.08] rounded-xl p-3 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">User:</span>
+                  <span className="text-white">{editingKey.user?.name || '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Server:</span>
+                  <span className="text-purple-300">{editingKey.vpnPlan?.serverId?.toUpperCase()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Client:</span>
+                  <span className="text-gray-300 truncate ml-2 max-w-[200px]">{editingKey.vpnKey?.clientEmail}</span>
+                </div>
+              </div>
+
+              {/* Expiry Date */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Expiry Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={editExpiryDate}
+                  onChange={(e) => setEditExpiryDate(e.target.value)}
+                  className="w-full bg-[#12122a] border border-purple-500/10 text-white rounded-xl px-4 py-3 focus:border-purple-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Devices */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Devices</label>
+                <select
+                  value={editDevices}
+                  onChange={(e) => setEditDevices(Number(e.target.value))}
+                  className="w-full bg-[#12122a] border border-purple-500/10 text-white rounded-xl px-4 py-3 focus:border-purple-500 focus:outline-none"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Data Limit */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5">Data Limit (GB) — 0 = Unlimited</label>
+                <input
+                  type="number"
+                  value={editDataLimitGB}
+                  onChange={(e) => setEditDataLimitGB(Number(e.target.value))}
+                  min={0}
+                  placeholder="0 = ∞"
+                  className="w-full bg-[#12122a] border border-purple-500/10 text-white rounded-xl px-4 py-3 focus:border-purple-500 focus:outline-none"
+                />
+              </div>
+
+              {editError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm">
+                  ❌ {editError}
+                </div>
+              )}
+
+              {editSuccess && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-emerald-400 text-sm flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" /> 3x-UI panel updated successfully!
+                </div>
+              )}
+
+              <button
+                onClick={handleUpdateKey}
+                disabled={updating}
+                className="w-full py-3 bg-amber-500 text-black rounded-xl font-semibold hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                {updating ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
+                ) : (
+                  <><Pencil className="w-4 h-4" /> Update on 3x-UI</>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

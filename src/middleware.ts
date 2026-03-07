@@ -148,12 +148,12 @@ export async function middleware(request: NextRequest) {
   // 'strict-dynamic' allows nonce-approved scripts to load their children
   const isDev = process.env.NODE_ENV === 'development';
   const scriptSrc = isDev
-    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com`
-    : `script-src 'self' 'nonce-${nonce}' https://accounts.google.com`;
-  const styleSrc = `style-src 'self' 'unsafe-inline'`; // Tailwind needs unsafe-inline for styles
+    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com https://www.gstatic.com`
+    : `script-src 'self' 'nonce-${nonce}' https://accounts.google.com https://apis.google.com https://www.gstatic.com`;
+  const styleSrc = `style-src 'self' 'unsafe-inline' https://accounts.google.com`; // Tailwind needs unsafe-inline for styles; Google GSI injects styles
   response.headers.set(
     'Content-Security-Policy',
-    `default-src 'self'; ${scriptSrc}; ${styleSrc}; img-src 'self' data: blob: https://*.googleusercontent.com https://flagcdn.com; font-src 'self'; connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com; frame-src https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
+    `default-src 'self'; ${scriptSrc}; ${styleSrc}; img-src 'self' data: blob: https://*.googleusercontent.com https://www.gstatic.com https://flagcdn.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com; frame-src https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
   );
 
   return response;
