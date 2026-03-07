@@ -98,6 +98,29 @@ export default function AdminVpnKeysPage() {
   const [createResult, setCreateResult] = useState<any>(null);
   const [availableServers, setAvailableServers] = useState<{ id: string; name: string; flag: string; enabledProtocols: string[]; online: boolean }[]>([]);
 
+  // Browse Server Keys state (lists all clients directly from 3x-UI)
+  const [showBrowseModal, setShowBrowseModal] = useState(false);
+  const [browseServers, setBrowseServers] = useState<{ id: string; name: string; flag: string }[]>([]);
+  const [browseServerId, setBrowseServerId] = useState('');
+  const [browseClients, setBrowseClients] = useState<{
+    email: string;
+    protocol: string;
+    enable: boolean;
+    expiryTime: number;
+    limitIp: number;
+    totalGB: number;
+    up: number;
+    down: number;
+    tgId: string;
+    subId: string;
+  }[]>([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseError, setBrowseError] = useState('');
+
+  // Direct edit from browse (no orderId, uses serverId + clientEmail)
+  const [directEditServerId, setDirectEditServerId] = useState('');
+  const [directEditClientEmail, setDirectEditClientEmail] = useState('');
+
   useEffect(() => {
     fetchKeys();
   }, [filter, serverFilter, page]);
@@ -211,6 +234,8 @@ export default function AdminVpnKeysPage() {
 
   function openEditModal(entry: VpnKeyEntry) {
     setEditingKey(entry);
+    setDirectEditServerId('');
+    setDirectEditClientEmail('');
     setEditError('');
     setEditSuccess(false);
     // Convert expiryTime (unix ms) to date string for input
@@ -226,7 +251,7 @@ export default function AdminVpnKeysPage() {
   }
 
   async function handleUpdateKey() {
-    if (!editingKey) return;
+    if (!editingKey && !directEditClientEmail) return;
     setUpdating(true);
     setEditError('');
     setEditSuccess(false);
@@ -240,19 +265,29 @@ export default function AdminVpnKeysPage() {
       updates.devices = editDevices;
       updates.dataLimitGB = editDataLimitGB;
 
+      const body: Record<string, unknown> = { ...updates };
+
+      if (editingKey) {
+        // Order-based edit
+        body.orderId = editingKey._id;
+      } else {
+        // Direct edit (admin-created keys)
+        body.serverId = directEditServerId;
+        body.clientEmail = directEditClientEmail;
+      }
+
       const res = await fetch('/api/admin/vpn-keys/update', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: editingKey._id,
-          ...updates,
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await res.json();
       if (data.success) {
         setEditSuccess(true);
         fetchKeys();
+        // Also refresh browse if open
+        if (browseServerId) fetchBrowseClients(browseServerId);
       } else {
         setEditError(data.error || 'Failed to update key');
       }
@@ -262,6 +297,65 @@ export default function AdminVpnKeysPage() {
     } finally {
       setUpdating(false);
     }
+  }
+
+  // ---- Browse Server Keys functions ----
+  async function openBrowseModal() {
+    setShowBrowseModal(true);
+    setBrowseError('');
+    setBrowseClients([]);
+    setBrowseServerId('');
+    // Fetch servers list
+    try {
+      const res = await fetch('/api/admin/vpn-keys/update');
+      const data = await res.json();
+      if (data.success) {
+        setBrowseServers(data.data.servers);
+        if (data.data.servers.length > 0) {
+          const first = data.data.servers[0].id;
+          setBrowseServerId(first);
+          fetchBrowseClients(first);
+        }
+      }
+    } catch {
+      setBrowseError('Failed to load servers');
+    }
+  }
+
+  async function fetchBrowseClients(serverId: string) {
+    setBrowseLoading(true);
+    setBrowseError('');
+    try {
+      const res = await fetch(`/api/admin/vpn-keys/update?serverId=${encodeURIComponent(serverId)}`);
+      const data = await res.json();
+      if (data.success) {
+        setBrowseClients(data.data.clients);
+      } else {
+        setBrowseError(data.error || 'Failed to load clients');
+      }
+    } catch {
+      setBrowseError('Failed to connect to server');
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  function openDirectEditModal(serverId: string, client: typeof browseClients[0]) {
+    setEditingKey(null);
+    setDirectEditServerId(serverId);
+    setDirectEditClientEmail(client.email);
+    setEditError('');
+    setEditSuccess(false);
+    if (client.expiryTime) {
+      const d = new Date(client.expiryTime);
+      setEditExpiryDate(d.toISOString().slice(0, 16));
+    } else {
+      setEditExpiryDate('');
+    }
+    setEditDevices(client.limitIp || 1);
+    const dataGB = client.totalGB > 0 ? Math.round(client.totalGB / (1024 * 1024 * 1024) * 100) / 100 : 0;
+    setEditDataLimitGB(dataGB);
+    setShowEditModal(true);
   }
 
   const selectedServer = availableServers.find((s) => s.id === createServerId);
@@ -294,6 +388,13 @@ export default function AdminVpnKeysPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={openBrowseModal}
+            className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 rounded-xl text-sm font-semibold transition-all"
+          >
+            <Server className="w-4 h-4" />
+            Browse Server
+          </button>
           <button
             onClick={() => openCreateModal('test')}
             className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 rounded-xl text-sm font-semibold transition-all"
@@ -759,8 +860,114 @@ export default function AdminVpnKeysPage() {
         </div>
       )}
 
+      {/* Browse Server Keys Modal */}
+      {showBrowseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[#0a0a1a] border border-purple-500/20 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-purple-500/10">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Server className="w-5 h-5 text-cyan-400" />
+                Browse Server Keys (3x-UI Direct)
+              </h2>
+              <button
+                onClick={() => setShowBrowseModal(false)}
+                className="p-2 text-gray-400 hover:text-white rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* Server selector */}
+              <div className="flex items-center gap-3">
+                <select
+                  value={browseServerId}
+                  onChange={(e) => {
+                    setBrowseServerId(e.target.value);
+                    fetchBrowseClients(e.target.value);
+                  }}
+                  className="flex-1 bg-[#12122a] border border-purple-500/10 text-white rounded-xl px-4 py-3 focus:border-purple-500 focus:outline-none"
+                >
+                  {browseServers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.flag} {s.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => browseServerId && fetchBrowseClients(browseServerId)}
+                  disabled={browseLoading}
+                  className="p-3 text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded-xl transition-all"
+                >
+                  <RefreshCw className={`w-5 h-5 ${browseLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {browseError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm">
+                  {browseError}
+                </div>
+              )}
+
+              {browseLoading ? (
+                <div className="space-y-2">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="h-12 bg-[#12122a] rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              ) : browseClients.length === 0 ? (
+                <div className="text-center py-10 text-gray-500">
+                  No clients found on this server
+                </div>
+              ) : (
+                <div className="bg-[#12122a] border border-purple-500/[0.08] rounded-xl overflow-hidden">
+                  <div className="px-4 py-2 border-b border-purple-500/[0.08] text-xs text-gray-500">
+                    {browseClients.length} client{browseClients.length !== 1 ? 's' : ''} on {browseServerId.toUpperCase()}
+                  </div>
+                  <div className="divide-y divide-purple-500/[0.05] max-h-[50vh] overflow-y-auto">
+                    {browseClients.map((client) => {
+                      const isExpired = client.expiryTime > 0 && client.expiryTime < Date.now();
+                      const expiryStr = client.expiryTime > 0
+                        ? formatExpiry(client.expiryTime)
+                        : { text: 'Never', color: 'text-gray-400' };
+                      const totalUsed = (client.up + client.down) / (1024 * 1024 * 1024);
+                      const dataLimit = client.totalGB > 0 ? (client.totalGB / (1024 * 1024 * 1024)).toFixed(1) : '∞';
+
+                      return (
+                        <div
+                          key={client.email}
+                          className={`px-4 py-3 hover:bg-purple-500/[0.03] transition-colors ${!client.enable || isExpired ? 'opacity-60' : ''}`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm text-white truncate font-medium">{client.email}</div>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                                <span className="text-purple-300 font-semibold">{client.protocol.toUpperCase()}</span>
+                                <span>{client.limitIp || '∞'} device{client.limitIp !== 1 ? 's' : ''}</span>
+                                <span className={expiryStr.color}>{expiryStr.text}</span>
+                                <span>{totalUsed.toFixed(2)} / {dataLimit} GB</span>
+                                {!client.enable && <span className="text-red-400 font-bold">DISABLED</span>}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => openDirectEditModal(browseServerId, client)}
+                              className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 text-xs text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-lg transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Key Modal */}
-      {showEditModal && editingKey && (
+      {showEditModal && (editingKey || directEditClientEmail) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-[#0a0a1a] border border-purple-500/20 rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-purple-500/10">
@@ -769,7 +976,7 @@ export default function AdminVpnKeysPage() {
                 Edit VPN Key
               </h2>
               <button
-                onClick={() => setShowEditModal(false)}
+                onClick={() => { setShowEditModal(false); setDirectEditClientEmail(''); setEditingKey(null); }}
                 className="p-2 text-gray-400 hover:text-white rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -779,18 +986,37 @@ export default function AdminVpnKeysPage() {
             <div className="p-5 space-y-4">
               {/* Key info */}
               <div className="bg-[#12122a] border border-purple-500/[0.08] rounded-xl p-3 text-xs space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">User:</span>
-                  <span className="text-white">{editingKey.user?.name || '—'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Server:</span>
-                  <span className="text-purple-300">{editingKey.vpnPlan?.serverId?.toUpperCase()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Client:</span>
-                  <span className="text-gray-300 truncate ml-2 max-w-[200px]">{editingKey.vpnKey?.clientEmail}</span>
-                </div>
+                {editingKey ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">User:</span>
+                      <span className="text-white">{editingKey.user?.name || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Server:</span>
+                      <span className="text-purple-300">{editingKey.vpnPlan?.serverId?.toUpperCase()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Client:</span>
+                      <span className="text-gray-300 truncate ml-2 max-w-[200px]">{editingKey.vpnKey?.clientEmail}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Mode:</span>
+                      <span className="text-cyan-400 font-semibold">Direct (3x-UI)</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Server:</span>
+                      <span className="text-purple-300">{directEditServerId.toUpperCase()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Client:</span>
+                      <span className="text-gray-300 truncate ml-2 max-w-[200px]">{directEditClientEmail}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Expiry Date */}

@@ -3,7 +3,8 @@ import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import dbConnect from '@/lib/mongodb';
 import Order from '@/models/Order';
-import { updateVpnClient } from '@/lib/xui';
+import { updateVpnClient, listServerClients } from '@/lib/xui';
+import { getAllServers } from '@/lib/vpn-servers';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ route: '/api/admin/vpn-keys/update' });
@@ -11,7 +12,9 @@ const log = createLogger({ route: '/api/admin/vpn-keys/update' });
 // ==========================================
 // PATCH /api/admin/vpn-keys/update
 // Admin can update VPN key settings on 3x-UI panel
-// (expiry, devices, data limit, enable/disable)
+// Supports two modes:
+//   1. orderId — update key linked to an order (customer keys)
+//   2. serverId + clientEmail — update any key directly on 3x-UI (admin-created keys)
 // ==========================================
 
 export async function PATCH(request: NextRequest) {
@@ -29,14 +32,13 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    await dbConnect();
-
     const body = await request.json();
-    const { orderId, expiryTime, devices, dataLimitGB, enable } = body;
+    const { orderId, serverId: directServerId, clientEmail: directClientEmail, expiryTime, devices, dataLimitGB, enable } = body;
 
-    if (!orderId) {
+    // Must provide either orderId OR serverId+clientEmail
+    if (!orderId && (!directServerId || !directClientEmail)) {
       return NextResponse.json(
-        { success: false, error: 'orderId is required' },
+        { success: false, error: 'Provide orderId or serverId + clientEmail' },
         { status: 400 }
       );
     }
@@ -65,20 +67,33 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const order = await Order.findById(orderId);
-    if (!order || order.orderType !== 'vpn' || !order.vpnKey?.clientEmail) {
-      return NextResponse.json(
-        { success: false, error: 'VPN order not found or not provisioned' },
-        { status: 404 }
-      );
-    }
+    let resolvedServerId: string;
+    let resolvedClientEmail: string;
+    let order: InstanceType<typeof Order> | null = null;
 
-    const serverId = order.vpnPlan?.serverId;
-    if (!serverId) {
-      return NextResponse.json(
-        { success: false, error: 'Server ID not found on order' },
-        { status: 400 }
-      );
+    if (orderId) {
+      // Mode 1: Resolve serverId + clientEmail from order
+      await dbConnect();
+      order = await Order.findById(orderId);
+      if (!order || order.orderType !== 'vpn' || !order.vpnKey?.clientEmail) {
+        return NextResponse.json(
+          { success: false, error: 'VPN order not found or not provisioned' },
+          { status: 404 }
+        );
+      }
+      const sid = order.vpnPlan?.serverId;
+      if (!sid) {
+        return NextResponse.json(
+          { success: false, error: 'Server ID not found on order' },
+          { status: 400 }
+        );
+      }
+      resolvedServerId = sid;
+      resolvedClientEmail = order.vpnKey.clientEmail;
+    } else {
+      // Mode 2: Direct serverId + clientEmail
+      resolvedServerId = directServerId;
+      resolvedClientEmail = directClientEmail;
     }
 
     // Build update payload
@@ -102,7 +117,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Update on 3x-UI panel
-    const success = await updateVpnClient(serverId, order.vpnKey.clientEmail, updates);
+    const success = await updateVpnClient(resolvedServerId, resolvedClientEmail, updates);
 
     if (!success) {
       return NextResponse.json(
@@ -111,16 +126,18 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Sync changes to local DB
-    if (updates.expiryTime !== undefined) {
-      order.vpnKey.expiryTime = updates.expiryTime;
+    // Sync changes to local DB if order exists
+    if (order && order.vpnKey) {
+      if (updates.expiryTime !== undefined) {
+        order.vpnKey.expiryTime = updates.expiryTime;
+      }
+      await order.save();
     }
-    await order.save();
 
     log.info('Admin updated VPN key', {
-      orderId,
-      clientEmail: order.vpnKey.clientEmail,
-      serverId,
+      orderId: orderId || null,
+      clientEmail: resolvedClientEmail,
+      serverId: resolvedServerId,
       updates,
       adminId: admin.userId,
     });
@@ -128,8 +145,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        orderId,
-        clientEmail: order.vpnKey.clientEmail,
+        orderId: orderId || null,
+        clientEmail: resolvedClientEmail,
+        serverId: resolvedServerId,
         updates,
       },
     });
@@ -139,6 +157,61 @@ export async function PATCH(request: NextRequest) {
     });
     return NextResponse.json(
       { success: false, error: 'Failed to update VPN key' },
+      { status: 500 }
+    );
+  }
+}
+
+// ==========================================
+// GET /api/admin/vpn-keys/update?serverId=xxx
+// List all clients on a specific 3x-UI server
+// (for browsing admin-created keys that have no Order)
+// ==========================================
+
+export async function GET(request: NextRequest) {
+  const limited = await apiLimiter(request);
+  if (limited) return limited;
+
+  try {
+    await requireAdmin();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Admin access required' },
+      { status: 403 }
+    );
+  }
+
+  try {
+    const url = new URL(request.url);
+    const serverId = url.searchParams.get('serverId');
+
+    if (!serverId) {
+      // Return available servers list
+      const serversMap = await getAllServers();
+      const servers = Object.values(serversMap)
+        .filter((s) => s.enabled)
+        .map((s) => ({ id: s.id, name: s.name, flag: s.flag }));
+      return NextResponse.json({ success: true, data: { servers } });
+    }
+
+    const clients = await listServerClients(serverId);
+    if (clients === null) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to connect to server' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: { serverId, clients },
+    });
+  } catch (error) {
+    log.error('Admin list server clients error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json(
+      { success: false, error: 'Failed to list server clients' },
       { status: 500 }
     );
   }

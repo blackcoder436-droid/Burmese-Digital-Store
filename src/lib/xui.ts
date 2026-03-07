@@ -488,6 +488,60 @@ class XuiSession {
     }
   }
 
+  // ---- List all clients across all inbounds ----
+  async listAllClients(): Promise<{
+    email: string;
+    protocol: string;
+    enable: boolean;
+    expiryTime: number;
+    limitIp: number;
+    totalGB: number;
+    up: number;
+    down: number;
+    tgId: string;
+    subId: string;
+  }[]> {
+    const inbounds = await this.getInbounds();
+    const clients: {
+      email: string;
+      protocol: string;
+      enable: boolean;
+      expiryTime: number;
+      limitIp: number;
+      totalGB: number;
+      up: number;
+      down: number;
+      tgId: string;
+      subId: string;
+    }[] = [];
+
+    for (const ib of inbounds) {
+      try {
+        const settings = JSON.parse(ib.settings || '{}');
+        const ibClients = settings.clients || [];
+        for (const c of ibClients) {
+          // Get traffic stats from clientStats array if available
+          const stats = Array.isArray(ib.clientStats)
+            ? ib.clientStats.find((s: Record<string, unknown>) => s.email === c.email)
+            : null;
+          clients.push({
+            email: c.email || '',
+            protocol: ib.protocol,
+            enable: c.enable !== false,
+            expiryTime: c.expiryTime || 0,
+            limitIp: c.limitIp || 0,
+            totalGB: c.totalGB || 0,
+            up: (stats?.up as number) || 0,
+            down: (stats?.down as number) || 0,
+            tgId: c.tgId || '',
+            subId: c.subId || '',
+          });
+        }
+      } catch { /* skip parse errors */ }
+    }
+    return clients;
+  }
+
   // ---- Fetch config link from 3X-UI subscription endpoint ----
   // 3X-UI /sub/{subId} returns base64-encoded config URI(s)
   async fetchSubscription(subUrl: string): Promise<string | null> {
@@ -691,6 +745,15 @@ export async function updateVpnClient(
   }
 
   return success;
+}
+
+/**
+ * List all clients on a 3x-UI server.
+ */
+export async function listServerClients(serverId: string) {
+  const session = await getSession(serverId);
+  if (!session) return null;
+  return session.listAllClients();
 }
 
 /**
