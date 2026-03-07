@@ -17,6 +17,8 @@ import {
   X,
   Loader2,
   Pencil,
+  Search,
+  Filter,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 
@@ -116,6 +118,9 @@ export default function AdminVpnKeysPage() {
   }[]>([]);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browseError, setBrowseError] = useState('');
+  const [browseSearch, setBrowseSearch] = useState('');
+  const [browseProtoFilter, setBrowseProtoFilter] = useState('all');
+  const [browseStatusFilter, setBrowseStatusFilter] = useState<'all' | 'active' | 'expired' | 'disabled'>('all');
 
   // Direct edit from browse (no orderId, uses serverId + clientEmail)
   const [directEditServerId, setDirectEditServerId] = useState('');
@@ -305,6 +310,9 @@ export default function AdminVpnKeysPage() {
     setBrowseError('');
     setBrowseClients([]);
     setBrowseServerId('');
+    setBrowseSearch('');
+    setBrowseProtoFilter('all');
+    setBrowseStatusFilter('all');
     // Fetch servers list
     try {
       const res = await fetch('/api/admin/vpn-keys/update');
@@ -901,6 +909,53 @@ export default function AdminVpnKeysPage() {
                 </button>
               </div>
 
+              {/* Search + Filter */}
+              <div className="flex flex-col gap-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                  <input
+                    type="text"
+                    placeholder="Search by name..."
+                    value={browseSearch}
+                    onChange={(e) => setBrowseSearch(e.target.value)}
+                    className="w-full bg-[#12122a] border border-purple-500/10 text-white rounded-xl pl-10 pr-4 py-2.5 text-sm focus:border-purple-500 focus:outline-none placeholder-gray-600"
+                  />
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Filter className="w-3.5 h-3.5 text-gray-500" />
+                  {['all', 'trojan', 'shadowsocks', 'vless', 'vmess'].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setBrowseProtoFilter(p)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        browseProtoFilter === p
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                          : 'bg-[#12122a] text-gray-500 border border-purple-500/[0.08] hover:text-gray-300'
+                      }`}
+                    >
+                      {p === 'all' ? 'All' : p.toUpperCase()}
+                    </button>
+                  ))}
+                  <span className="mx-1 text-gray-700">|</span>
+                  {(['all', 'active', 'expired', 'disabled'] as const).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setBrowseStatusFilter(s)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        browseStatusFilter === s
+                          ? s === 'active' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : s === 'expired' ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                            : s === 'disabled' ? 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
+                            : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                          : 'bg-[#12122a] text-gray-500 border border-purple-500/[0.08] hover:text-gray-300'
+                      }`}
+                    >
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {browseError && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-red-400 text-sm">
                   {browseError}
@@ -917,13 +972,25 @@ export default function AdminVpnKeysPage() {
                 <div className="text-center py-10 text-gray-500">
                   No clients found on this server
                 </div>
-              ) : (
+              ) : (() => {
+                const filteredClients = browseClients.filter((c) => {
+                  if (browseSearch && !c.email.toLowerCase().includes(browseSearch.toLowerCase())) return false;
+                  if (browseProtoFilter !== 'all' && c.protocol !== browseProtoFilter) return false;
+                  if (browseStatusFilter === 'active') return c.enable && (c.expiryTime === 0 || c.expiryTime > Date.now());
+                  if (browseStatusFilter === 'expired') return c.expiryTime > 0 && c.expiryTime < Date.now();
+                  if (browseStatusFilter === 'disabled') return !c.enable;
+                  return true;
+                });
+                return (
                 <div className="bg-[#12122a] border border-purple-500/[0.08] rounded-xl overflow-hidden">
                   <div className="px-4 py-2 border-b border-purple-500/[0.08] text-xs text-gray-500">
-                    {browseClients.length} client{browseClients.length !== 1 ? 's' : ''} on {browseServerId.toUpperCase()}
+                    {filteredClients.length} of {browseClients.length} client{browseClients.length !== 1 ? 's' : ''} on {browseServerId.toUpperCase()}
                   </div>
+                  {filteredClients.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 text-sm">No matching clients</div>
+                  ) : (
                   <div className="divide-y divide-purple-500/[0.05] max-h-[50vh] overflow-y-auto">
-                    {browseClients.map((client) => {
+                    {filteredClients.map((client) => {
                       const isExpired = client.expiryTime > 0 && client.expiryTime < Date.now();
                       const expiryStr = client.expiryTime > 0
                         ? formatExpiry(client.expiryTime)
@@ -959,8 +1026,10 @@ export default function AdminVpnKeysPage() {
                       );
                     })}
                   </div>
+                  )}
                 </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>
