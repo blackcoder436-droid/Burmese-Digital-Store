@@ -88,7 +88,6 @@ const UserSchema: Schema = new Schema(
     // Telegram bot integration
     telegramId: {
       type: Number,
-      default: null,
       sparse: true,
       unique: true,
     },
@@ -118,7 +117,6 @@ const UserSchema: Schema = new Schema(
     // Referral system
     referralCode: {
       type: String,
-      default: null,
       sparse: true,
       unique: true,
     },
