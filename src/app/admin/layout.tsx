@@ -14,6 +14,7 @@ import {
   Download,
   Tag,
   Key,
+  Gift,
   Server,
   Activity,
   Shield,
@@ -33,6 +34,7 @@ const allNavItems = [
   { href: '/admin/products', labelKey: 'admin.nav.products', icon: Package, group: 'main' },
   { href: '/admin/orders', labelKey: 'admin.nav.orders', icon: ShoppingCart, group: 'main' },
   { href: '/admin/vpn-keys', labelKey: 'admin.nav.vpnKeys', icon: Key, group: 'main' },
+  { href: '/admin/free-test-users', labelKey: 'freeTestUsers', icon: Gift, group: 'main', raw: true },
   { href: '/admin/servers', labelKey: 'admin.nav.servers', icon: Server, group: 'main' },
   { href: '/admin/users', labelKey: 'admin.nav.users', icon: Users, group: 'main' },
   { href: '/admin/payment-gateways', labelKey: 'admin.nav.paymentGateways', icon: CreditCard, group: 'tools' },
@@ -130,6 +132,7 @@ export default function AdminLayout({
     if (item.raw) {
       if (item.labelKey === 'performance') return 'Performance';
       if (item.labelKey === 'ratelimits') return 'Rate Limits';
+      if (item.labelKey === 'freeTestUsers') return 'Free Test Users';
     }
     return t(item.labelKey);
   }
