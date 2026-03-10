@@ -11,7 +11,7 @@ import { approveRejectKeyboard, mainMenuKeyboard } from '../keyboards';
 import { getSession, clearSession } from '../session';
 import { computeScreenshotHash, isDuplicateScreenshot } from '@/lib/fraud-detection';
 import { extractPaymentInfo, verifyAmount } from '@/lib/ocr';
-import { getSiteSettings, getFeatureFlag } from '@/models/SiteSettings';
+import { getSiteSettings } from '@/models/SiteSettings';
 import { createLogger } from '@/lib/logger';
 import { approveOrder, rejectOrder } from '@/lib/order-actions';
 import { getPlan } from '@/lib/vpn-plans';
@@ -177,17 +177,15 @@ export async function handlePaymentScreenshot(
       replyMarkup: mainMenuKeyboard(),
     });
 
-    // Auto-approve only if OCR amount matches and feature enabled
-    const autoApproveEnabled = await getFeatureFlag('auto_approve');
-    if (ocrMatch && autoApproveEnabled && !order.requiresManualReview) {
+    // Auto-approve if OCR amount matches — 100 seconds delay
+    // If OCR doesn't match, order stays pending/verifying until admin approves
+    if (ocrMatch) {
       const delay = settings.autoApproveDelaySeconds || 100;
       scheduleAutoApprove(order._id.toString(), telegramId, delay, ocrMatch);
     } else {
-      log.info('Auto-approve skipped', {
+      log.info('Auto-approve skipped (OCR no match) — waiting for admin', {
         orderId: order._id,
         ocrMatch,
-        autoApproveEnabled,
-        requiresManualReview: order.requiresManualReview,
       });
     }
 

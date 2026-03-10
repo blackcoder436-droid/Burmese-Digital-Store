@@ -210,6 +210,24 @@ export async function handlePlanSelect(
       { replyMarkup: sendScreenshotKeyboard(order._id.toString()) }
     );
 
+    // Notify admin/channel about new order (so all orders are visible)
+    const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID;
+    const CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID;
+    const targetChat = CHANNEL_ID || ADMIN_CHAT_ID;
+    if (targetChat) {
+      const orderNotice = [
+        `📦 <b>New Bot Order: ${order.orderNumber}</b>`,
+        ``,
+        `👤 ${firstName}${username ? ` (@${username})` : ''} [${telegramId}]`,
+        `🛒 VPN ${plan.name} — ${server.flag} ${server.name}`,
+        `🔧 ${session.protocol.toUpperCase()}`,
+        `💰 <b>${plan.price.toLocaleString()} Ks</b>`,
+        ``,
+        `⏳ <i>Waiting for payment screenshot...</i>`,
+      ].join('\n');
+      await sendMessage(targetChat, orderNotice).catch(() => {});
+    }
+
     log.info('Bot order created', {
       orderId: order._id,
       telegramId,

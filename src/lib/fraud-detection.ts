@@ -179,28 +179,11 @@ export async function detectFraudFlags(params: {
 
 /**
  * Check and auto-expire orders past their payment window.
- * This can be called periodically or on-demand.
+ * DISABLED: Admin wants no auto-reject. All orders stay pending/verifying
+ * until admin manually approves or rejects.
  */
 export async function expireOverdueOrders(): Promise<number> {
-  await dbConnect();
-
-  const result = await Order.updateMany(
-    {
-      status: 'pending',
-      paymentExpiresAt: { $lte: new Date() },
-    },
-    {
-      $set: {
-        status: 'rejected',
-        adminNote: 'Auto-rejected: Payment window expired',
-        rejectReason: 'Payment window expired',
-      },
-    }
-  );
-
-  if (result.modifiedCount > 0) {
-    log.info(`Auto-expired ${result.modifiedCount} overdue orders`);
-  }
-
-  return result.modifiedCount;
+  // No-op: auto-reject disabled per admin request.
+  // Orders remain pending/verifying until admin acts.
+  return 0;
 }
