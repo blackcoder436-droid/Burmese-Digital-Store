@@ -77,7 +77,7 @@ export function protocolKeyboard(
       ? `${info.icon} ${info.label} (အကောင်းဆုံး)`
       : `${info.icon} ${info.label}`;
     keyboard.push([
-      { text: label, callback_data: `${prefix}_${serverId}_${proto}` },
+      { text: label, callback_data: `${prefix}:${serverId}:${proto}` },
     ]);
   }
 
@@ -93,7 +93,7 @@ export function deviceKeyboard(serverId: string): InlineKeyboardMarkup {
   for (let d = 1; d <= 5; d++) {
     const label = d === 1 ? '📱 1 Device' : `📱 ${d} Devices`;
     keyboard.push([
-      { text: label, callback_data: `device_${serverId}_${d}` },
+      { text: label, callback_data: `device:${serverId}:${d}` },
     ]);
   }
 
@@ -114,7 +114,7 @@ export function planKeyboard(
     keyboard.push([
       {
         text: `📅 ${monthLabel} — ${plan.price.toLocaleString()} Ks`,
-        callback_data: `plan_${serverId}_${plan.id}`,
+        callback_data: `plan:${serverId}:${plan.id}`,
       },
     ]);
   }
@@ -200,7 +200,7 @@ export function exchangeProtocolKeyboard(
     keyboard.push([
       {
         text: protocolLabels[proto] || proto,
-        callback_data: `expro_${keyId}_${proto}`,
+        callback_data: `expro:${keyId}:${proto}`,
       },
     ]);
   }
@@ -349,7 +349,7 @@ export function adminCreateKeyServerKeyboard(
     keyboard.push([
       {
         text: `${server.flag} ${server.name} ${statusIcon}`,
-        callback_data: `akey_srv_${keyType}_${server.id}`,
+        callback_data: `akey_srv:${keyType}:${server.id}`,
       },
     ]);
   }
@@ -374,7 +374,7 @@ export function adminCreateKeyProtocolKeyboard(
     keyboard.push([
       {
         text: protocolInfo[proto] || proto,
-        callback_data: `akey_proto_${keyType}_${serverId}_${proto}`,
+        callback_data: `akey_proto:${keyType}:${serverId}:${proto}`,
       },
     ]);
   }
@@ -392,11 +392,11 @@ export function adminCreateKeyDeviceKeyboard(
     keyboard.push([
       {
         text: `📱 ${d} Device${d > 1 ? 's' : ''}`,
-        callback_data: `akey_dev_${keyType}_${serverId}_${protocol}_${d}`,
+        callback_data: `akey_dev:${keyType}:${serverId}:${protocol}:${d}`,
       },
     ]);
   }
-  keyboard.push([{ text: '◀️ Protocol ရွေး', callback_data: `akey_srv_${keyType}_${serverId}` }]);
+  keyboard.push([{ text: '◀️ Protocol ရွေး', callback_data: `akey_srv:${keyType}:${serverId}` }]);
   return markup(keyboard);
 }
 
@@ -421,10 +421,10 @@ export function adminCreateKeyDurationKeyboard(
     keyboard.push([
       {
         text: `📅 ${dur.label}`,
-        callback_data: `akey_dur_${keyType}_${serverId}_${protocol}_${devices}_${dur.days}`,
+        callback_data: `akey_dur:${keyType}:${serverId}:${protocol}:${devices}:${dur.days}`,
       },
     ]);
   }
-  keyboard.push([{ text: '◀️ Device ရွေး', callback_data: `akey_proto_${keyType}_${serverId}_${protocol}` }]);
+  keyboard.push([{ text: '◀️ Device ရွေး', callback_data: `akey_proto:${keyType}:${serverId}:${protocol}` }]);
   return markup(keyboard);
 }

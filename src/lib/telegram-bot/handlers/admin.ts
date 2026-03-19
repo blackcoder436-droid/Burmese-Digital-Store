@@ -36,17 +36,28 @@ const log = createLogger({ module: 'bot-admin' });
 
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID;
 
-/** All admin user IDs (comma-separated ADMIN_CHAT_ID support) */
-const ADMIN_IDS: string[] = (ADMIN_CHAT_ID || '')
+const ADMIN_ID_SOURCES = [
+  process.env.TELEGRAM_ADMIN_IDS || '',
+  ADMIN_CHAT_ID || '',
+  process.env.TELEGRAM_CHAT_ID || '',
+]
+  .join(',')
   .split(',')
   .map((id) => id.trim())
   .filter(Boolean);
 
+/** Admin user IDs (private Telegram user IDs, positive numbers) */
+const ADMIN_IDS: string[] = ADMIN_ID_SOURCES
+  .filter((id) => /^\d+$/.test(id));
+
 /** Channels from which approve/reject is allowed */
 const APPROVE_CHANNELS: string[] = [
   process.env.TELEGRAM_CHANNEL_ID,
+  ...(ADMIN_CHAT_ID || '').split(',').map((id) => id.trim()),
   ...(process.env.TELEGRAM_APPROVE_CHANNELS || '').split(',').map((id) => id.trim()),
-].filter(Boolean) as string[];
+]
+  .filter((id): id is string => !!id)
+  .filter((id) => /^-\d+$/.test(id));
 
 /**
  * Check if a telegram user is an admin

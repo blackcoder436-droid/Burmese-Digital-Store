@@ -54,6 +54,7 @@ const serverSchema = z.object({
   TELEGRAM_VPN_BOT_TOKEN: z.string().optional(),
   TELEGRAM_VPN_WEBHOOK_SECRET: z.string().optional(),
   ADMIN_CHAT_ID: z.string().optional(),
+  TELEGRAM_ADMIN_IDS: z.string().optional(),
 
   // Storage
   STORAGE_PROVIDER: z

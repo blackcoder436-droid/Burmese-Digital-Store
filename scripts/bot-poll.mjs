@@ -2,9 +2,9 @@
 // Fetches updates from Telegram API and forwards to local webhook endpoint
 // Usage: node scripts/bot-poll.mjs
 
-const BOT_TOKEN = '8533001019:AAFpWlhtq8KIne4W0jsH5Oivl8A6tHjmo6g';
-const LOCAL_WEBHOOK = 'http://localhost:3000/api/telegram/bot/webhook';
-const WEBHOOK_SECRET = 'mAPjt90RSU14l7vcbKX6Jw5fhex3HWds';
+const BOT_TOKEN = process.env.TELEGRAM_VPN_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+const LOCAL_WEBHOOK = process.env.LOCAL_WEBHOOK || 'http://localhost:3000/api/telegram/bot/webhook';
+const WEBHOOK_SECRET = process.env.TELEGRAM_VPN_WEBHOOK_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || '';
 
 let offset = 0;
 
@@ -43,6 +43,10 @@ async function poll() {
 }
 
 async function main() {
+  if (!BOT_TOKEN) {
+    throw new Error('Missing TELEGRAM_VPN_BOT_TOKEN or TELEGRAM_BOT_TOKEN');
+  }
+
   // Delete any existing webhook first
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteWebhook`);
   console.log('🤖 Bot polling started... (Ctrl+C to stop)');

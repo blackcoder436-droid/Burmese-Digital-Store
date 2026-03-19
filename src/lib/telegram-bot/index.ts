@@ -98,6 +98,65 @@ import {
 
 const log = createLogger({ module: 'telegram-bot-router' });
 
+function parseTwoPartCallback(data: string, colonPrefix: string, underscorePrefix: string): {
+  first: string;
+  second: string;
+} | null {
+  if (data.startsWith(`${colonPrefix}:`)) {
+    const body = data.substring(colonPrefix.length + 1);
+    const sep = body.indexOf(':');
+    if (sep === -1) return null;
+    return {
+      first: body.substring(0, sep),
+      second: body.substring(sep + 1),
+    };
+  }
+
+  if (data.startsWith(`${underscorePrefix}_`)) {
+    const body = data.substring(underscorePrefix.length + 1);
+    const sep = body.indexOf('_');
+    if (sep === -1) return null;
+    return {
+      first: body.substring(0, sep),
+      second: body.substring(sep + 1),
+    };
+  }
+
+  return null;
+}
+
+function parseThreePartCallback(
+  data: string,
+  colonPrefix: string,
+  underscorePrefix: string
+): { first: string; second: string; third: string } | null {
+  if (data.startsWith(`${colonPrefix}:`)) {
+    const body = data.substring(colonPrefix.length + 1);
+    const firstSep = body.indexOf(':');
+    const secondSep = body.lastIndexOf(':');
+    if (firstSep === -1 || secondSep === -1 || firstSep === secondSep) return null;
+    return {
+      first: body.substring(0, firstSep),
+      second: body.substring(firstSep + 1, secondSep),
+      third: body.substring(secondSep + 1),
+    };
+  }
+
+  if (data.startsWith(`${underscorePrefix}_`)) {
+    const body = data.substring(underscorePrefix.length + 1);
+    const firstSep = body.indexOf('_');
+    const secondSep = body.lastIndexOf('_');
+    if (firstSep === -1 || secondSep === -1 || firstSep === secondSep) return null;
+    return {
+      first: body.substring(0, firstSep),
+      second: body.substring(firstSep + 1, secondSep),
+      third: body.substring(secondSep + 1),
+    };
+  }
+
+  return null;
+}
+
 /**
  * Process a Telegram update — main dispatch function.
  * Called from the webhook route.
@@ -197,6 +256,8 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
     case '/admin':
       if (ctx.isAdmin) {
         await handleAdmin(ctx.chatId);
+      } else {
+        await handleHelp(ctx.chatId);
       }
       break;
 
@@ -262,20 +323,25 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     } else if (data.startsWith('server_')) {
       const serverId = data.substring(7);
       await handleServerSelect(ctx.chatId, ctx.userId, serverId);
-    } else if (data.startsWith('proto_')) {
-      const parts = data.substring(6).split('_');
-      const serverId = parts[0];
-      const protocol = parts.slice(1).join('_');
+    }
+    else if (data.startsWith('proto_') || data.startsWith('proto:')) {
+      const parsed = parseTwoPartCallback(data, 'proto', 'proto');
+      if (!parsed) return;
+      const serverId = parsed.first;
+      const protocol = parsed.second;
       await handleProtocolSelect(ctx.chatId, ctx.userId, serverId, protocol);
-    } else if (data.startsWith('device_')) {
-      const parts = data.substring(7).split('_');
-      const serverId = parts[0];
-      const count = parseInt(parts[1], 10);
+    } else if (data.startsWith('device_') || data.startsWith('device:')) {
+      const parsed = parseTwoPartCallback(data, 'device', 'device');
+      if (!parsed) return;
+      const serverId = parsed.first;
+      const count = parseInt(parsed.second, 10);
+      if (Number.isNaN(count)) return;
       await handleDeviceSelect(ctx.chatId, ctx.userId, serverId, count);
-    } else if (data.startsWith('plan_')) {
-      const parts = data.substring(5).split('_');
-      const serverId = parts[0];
-      const planId = parts.slice(1).join('_');
+    } else if (data.startsWith('plan_') || data.startsWith('plan:')) {
+      const parsed = parseTwoPartCallback(data, 'plan', 'plan');
+      if (!parsed) return;
+      const serverId = parsed.first;
+      const planId = parsed.second;
       await handlePlanSelect(
         ctx.chatId,
         ctx.userId,
@@ -296,10 +362,11 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     } else if (data.startsWith('free_server_')) {
       const serverId = data.substring(12);
       await handleFreeServerSelect(ctx.chatId, ctx.userId, serverId);
-    } else if (data.startsWith('free_proto_')) {
-      const parts = data.substring(11).split('_');
-      const serverId = parts[0];
-      const protocol = parts.slice(1).join('_');
+    } else if (data.startsWith('free_proto_') || data.startsWith('free_proto:')) {
+      const parsed = parseTwoPartCallback(data, 'free_proto', 'free_proto');
+      if (!parsed) return;
+      const serverId = parsed.first;
+      const protocol = parsed.second;
       await handleFreeProtocolSelect(
         ctx.chatId,
         ctx.userId,
@@ -324,10 +391,11 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     } else if (data.startsWith('exkey_')) {
       const orderId = data.substring(6);
       await handleExKeySelect(ctx.chatId, ctx.userId, orderId);
-    } else if (data.startsWith('expro_')) {
-      const parts = data.substring(6).split('_');
-      const keyId = parts[0];
-      const protocol = parts.slice(1).join('_');
+    } else if (data.startsWith('expro_') || data.startsWith('expro:')) {
+      const parsed = parseTwoPartCallback(data, 'expro', 'expro');
+      if (!parsed) return;
+      const keyId = parsed.first;
+      const protocol = parsed.second;
       await handleExProtoSelect(
         ctx.chatId,
         ctx.userId,
@@ -349,7 +417,13 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     }
     // ---- Admin Approve/Reject (from payment channel) ----
     else if (data.startsWith('bot_approve_')) {
-      if (!ctx.isAdmin && !isApproveChannel(ctx.chatId)) {
+      const callbackChatType = callback.message?.chat?.type;
+      const isPrivateChat = callbackChatType === 'private';
+      if (!ctx.isAdmin) {
+        await answerCallback(ctx.callbackQueryId!, '❌ Admin only');
+        return;
+      }
+      if (!isPrivateChat && !isApproveChannel(ctx.chatId)) {
         await answerCallback(ctx.callbackQueryId!, '❌ Admin only');
         return;
       }
@@ -384,7 +458,13 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         }
       }
     } else if (data.startsWith('bot_reject_')) {
-      if (!ctx.isAdmin && !isApproveChannel(ctx.chatId)) {
+      const callbackChatType = callback.message?.chat?.type;
+      const isPrivateChat = callbackChatType === 'private';
+      if (!ctx.isAdmin) {
+        await answerCallback(ctx.callbackQueryId!, '❌ Admin only');
+        return;
+      }
+      if (!isPrivateChat && !isApproveChannel(ctx.chatId)) {
         await answerCallback(ctx.callbackQueryId!, '❌ Admin only');
         return;
       }
@@ -476,46 +556,51 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         const keyType = data.substring(10); // 'test' or 'sell'
         await handleAdminKeyType(ctx.chatId, keyType, ctx.messageId);
       }
-    } else if (data.startsWith('akey_srv_')) {
+    } else if (data.startsWith('akey_srv_') || data.startsWith('akey_srv:')) {
       if (ctx.isAdmin) {
-        // akey_srv_{type}_{serverId}
-        const rest = data.substring(9);
-        const firstUnderscore = rest.indexOf('_');
-        const keyType = rest.substring(0, firstUnderscore);
-        const serverId = rest.substring(firstUnderscore + 1);
+        const parsed = parseTwoPartCallback(data, 'akey_srv', 'akey_srv');
+        if (!parsed) return;
+        const keyType = parsed.first;
+        const serverId = parsed.second;
         await handleAdminKeyServer(ctx.chatId, keyType, serverId, ctx.messageId);
       }
-    } else if (data.startsWith('akey_proto_')) {
+    } else if (data.startsWith('akey_proto_') || data.startsWith('akey_proto:')) {
       if (ctx.isAdmin) {
-        // akey_proto_{type}_{serverId}_{protocol}
-        const rest = data.substring(11);
-        const parts = rest.split('_');
-        const keyType = parts[0];
-        const serverId = parts[1];
-        const protocol = parts.slice(2).join('_');
+        const parsed = parseThreePartCallback(data, 'akey_proto', 'akey_proto');
+        if (!parsed) return;
+        const keyType = parsed.first;
+        const serverId = parsed.second;
+        const protocol = parsed.third;
         await handleAdminKeyProtocol(ctx.chatId, keyType, serverId, protocol, ctx.messageId);
       }
-    } else if (data.startsWith('akey_dev_')) {
+    } else if (data.startsWith('akey_dev_') || data.startsWith('akey_dev:')) {
       if (ctx.isAdmin) {
-        // akey_dev_{type}_{serverId}_{protocol}_{devices}
+        const isColon = data.startsWith('akey_dev:');
         const rest = data.substring(9);
-        const parts = rest.split('_');
+        const parts = isColon ? rest.split(':') : rest.split('_');
+        if (parts.length < 4) return;
+
         const keyType = parts[0];
-        const serverId = parts[1];
-        const protocol = parts[2];
-        const devices = parseInt(parts[3], 10);
+        const devices = parseInt(parts[parts.length - 1], 10);
+        const protocol = parts[parts.length - 2];
+        const serverId = parts.slice(1, parts.length - 2).join(isColon ? ':' : '_');
+        if (Number.isNaN(devices)) return;
         await handleAdminKeyDevice(ctx.chatId, keyType, serverId, protocol, devices, ctx.messageId);
       }
-    } else if (data.startsWith('akey_dur_')) {
+    } else if (data.startsWith('akey_dur_') || data.startsWith('akey_dur:')) {
       if (ctx.isAdmin) {
-        // akey_dur_{type}_{serverId}_{protocol}_{devices}_{days}
+        const isColon = data.startsWith('akey_dur:');
+        const sep = isColon ? ':' : '_';
         const rest = data.substring(9);
-        const parts = rest.split('_');
+        const parts = isColon ? rest.split(':') : rest.split('_');
+        if (parts.length < 5) return;
+
         const keyType = parts[0];
-        const serverId = parts[1];
-        const protocol = parts[2];
-        const devices = parseInt(parts[3], 10);
-        const expiryDays = parseInt(parts[4], 10);
+        const expiryDays = parseInt(parts[parts.length - 1], 10);
+        const devices = parseInt(parts[parts.length - 2], 10);
+        const protocol = parts[parts.length - 3];
+        const serverId = parts.slice(1, parts.length - 3).join(sep);
+        if (Number.isNaN(devices) || Number.isNaN(expiryDays)) return;
         await handleAdminKeyDuration(ctx.chatId, keyType, serverId, protocol, devices, expiryDays, ctx.messageId);
       }
     }
