@@ -18,6 +18,7 @@ import {
 import Image from 'next/image';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
+import { hasCustomProductImage, normalizeImageSrc } from '@/lib/image';
 
 interface Product {
   _id: string;
@@ -68,6 +69,8 @@ export default function AdminProductsPage() {
   const [bulkToggling, setBulkToggling] = useState(false);
   const [allGateways, setAllGateways] = useState<PaymentGateway[]>([]);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
+  const normalizedFormImage = normalizeImageSrc(form.image);
+  const hasFormImage = hasCustomProductImage(form.image);
   useEffect(() => {
     fetchProducts();
     fetchGateways();
@@ -236,7 +239,7 @@ export default function AdminProductsPage() {
       category: product.category,
       description: product.description,
       price: product.price,
-      image: product.image || '',
+      image: normalizeImageSrc(product.image) || '',
       featured: product.featured,
       purchaseDisabled: product.purchaseDisabled || false,
       allowedPaymentGateways: product.allowedPaymentGateways || [],
@@ -415,10 +418,10 @@ export default function AdminProductsPage() {
                   {t('admin.productsPage.productImage')}
                 </label>
                 <div className="flex items-center gap-4">
-                  {form.image && form.image !== '/images/default-product.png' ? (
+                  {hasFormImage && normalizedFormImage ? (
                     <div className="relative w-24 h-16 rounded-lg overflow-hidden border border-dark-600 shrink-0">
                       <Image
-                        src={form.image}
+                        src={normalizedFormImage}
                         alt="Product"
                         fill
                         className="object-cover"

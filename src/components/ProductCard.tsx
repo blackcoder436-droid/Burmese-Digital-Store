@@ -7,6 +7,7 @@ import { useLanguage } from '@/lib/language';
 import { useWishlist } from '@/lib/wishlist';
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { hasCustomProductImage, normalizeImageSrc } from '@/lib/image';
 
 interface Product {
   _id: string;
@@ -26,9 +27,11 @@ export default function ProductCard({ product }: { product: Product }) {
   const { t, lang, tr } = useLanguage();
   const { isWishlisted, toggleWishlist } = useWishlist();
   const inStock = product.stock > 0;
-  const hasImage = !!(product.image && product.image !== '/images/default-product.png');
+  const normalizedImage = normalizeImageSrc(product.image);
+  const hasImage = hasCustomProductImage(product.image);
   const liked = isWishlisted(product._id);
   const [showShare, setShowShare] = useState(false);
+  const [imageAspect, setImageAspect] = useState<'square' | 'landscape'>('landscape');
 
   const handleLike = useCallback(async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -107,14 +110,18 @@ export default function ProductCard({ product }: { product: Product }) {
         <div className="absolute top-0 left-0 w-0 group-hover:w-full h-[2px] bg-gradient-to-r from-purple-500 to-cyan-500 transition-all duration-500 ease-out" />
         
         {/* Product Image */}
-        <div className="relative w-full h-40 overflow-hidden bg-dark-800">
+        <div className={`relative w-full overflow-hidden bg-dark-900 ${imageAspect === 'square' ? 'aspect-square' : 'aspect-[4/3]'}`}>
           {hasImage ? (
             <>
               <Image
-                src={product.image!}
+                src={normalizedImage!}
                 alt={product.name}
                 fill
-                className="object-cover group-hover:scale-105 transition-transform duration-500"
+                className="object-contain p-2 group-hover:scale-105 transition-transform duration-500"
+                onLoadingComplete={(img) => {
+                  const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
+                  setImageAspect(ratio >= 0.9 && ratio <= 1.1 ? 'square' : 'landscape');
+                }}
                 unoptimized
               />
               <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-dark-900/80" />
@@ -152,13 +159,16 @@ export default function ProductCard({ product }: { product: Product }) {
 
         <div className="p-5 flex flex-col flex-1">
         {/* Name + Price */}
-        <div className="flex items-baseline justify-between gap-2 mb-1">
-          <h3 className="min-w-0 text-base font-bold text-white group-hover:text-purple-300 transition-colors duration-300 truncate relative">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 mb-1">
+          <h3 className="min-w-0 text-base font-bold text-white group-hover:text-purple-300 transition-colors duration-300 leading-snug line-clamp-2 relative">
             {product.name}
           </h3>
-          <span className="shrink-0 text-lg font-black text-purple-400 whitespace-nowrap">
-            {product.price.toLocaleString()} <span className="text-xs text-gray-500 font-medium">MMK</span>
-          </span>
+          <div className="shrink-0 text-right leading-none pt-0.5">
+            <span className="text-lg font-black text-purple-400 whitespace-nowrap">
+              {product.price.toLocaleString()}
+            </span>
+            <span className="ml-1 text-xs text-gray-500 font-medium">MMK</span>
+          </div>
         </div>
 
         {/* Rating — always visible */}
@@ -175,12 +185,12 @@ export default function ProductCard({ product }: { product: Product }) {
         </div>
 
         {/* Description */}
-        <p className="text-sm text-gray-500 mb-5 line-clamp-2 flex-1 leading-relaxed relative">
+        <p className="text-sm text-gray-500 mb-5 line-clamp-2 flex-1 leading-relaxed relative whitespace-pre-line">
           {product.description}
         </p>
 
         {/* Actions: like, comment, share (left) | view details (right) */}
-        <div className="flex items-center justify-between pt-4 border-t border-dark-600/50 relative">
+        <div className="flex items-center justify-between gap-2 pt-4 border-t border-dark-600/50 relative">
           <div className="flex items-center gap-2">
             {/* Like */}
             <button
@@ -226,16 +236,16 @@ export default function ProductCard({ product }: { product: Product }) {
             </div>
           </div>
           {/* View Details */}
-          <div className={`min-w-0 flex items-center gap-1.5 text-xs sm:text-sm font-bold ${inStock ? 'text-white' : 'text-gray-600'}`}>
+          <div className={`min-w-0 max-w-[46%] flex items-center gap-1.5 text-xs sm:text-sm font-bold px-2.5 py-1.5 rounded-lg border ${inStock ? 'text-white border-purple-500/30 bg-purple-500/10' : 'text-gray-500 border-dark-600/50 bg-dark-800/40'}`}>
             {inStock ? (
               <>
                 <ShoppingBag className="w-4 h-4 text-purple-400 shrink-0" />
-                <span className="truncate">{t('shop.viewDetails')}</span>
+                <span className="truncate leading-tight">{t('shop.viewDetails')}</span>
               </>
             ) : (
               <>
                 <ShoppingBag className="w-4 h-4 shrink-0" />
-                <span className="truncate">{t('shop.unavailable')}</span>
+                <span className="truncate leading-tight">{t('shop.unavailable')}</span>
               </>
             )}
           </div>

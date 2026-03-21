@@ -4,7 +4,8 @@ import Product from '@/models/Product';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
-import { sanitizeString } from '@/lib/security';
+import { sanitizeString, sanitizeUrlString } from '@/lib/security';
+import { normalizeImageSrc } from '@/lib/image';
 
 // PATCH /api/admin/products - Bulk update purchaseDisabled for all products
 export async function PATCH(request: NextRequest) {
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
       category: safeCategory,
       description: safeDescription,
       price: safePrice,
-      image: image ? sanitizeString(String(image)).slice(0, 500) : '/images/default-product.png',
+      image: normalizeImageSrc(sanitizeUrlString(String(image || '')).slice(0, 500)) || '/images/default-product.png',
       featured: featured || false,
       details: Array.isArray(details) ? details : [],
       stock: Array.isArray(details) ? details.length : 0,

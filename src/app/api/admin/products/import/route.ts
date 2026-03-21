@@ -3,8 +3,9 @@ import connectDB from '@/lib/mongodb';
 import Product from '@/models/Product';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
-import { sanitizeString } from '@/lib/security';
+import { sanitizeString, sanitizeUrlString } from '@/lib/security';
 import { logActivity } from '@/models/ActivityLog';
+import { normalizeImageSrc } from '@/lib/image';
 
 const VALID_CATEGORIES = new Set(['vpn', 'streaming', 'gaming', 'software', 'gift-card', 'other']);
 
@@ -86,7 +87,9 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const image = sanitizeString(getColumn(raw, headerMap, 'image') || '/images/default-product.png').slice(0, 500);
+      const image = normalizeImageSrc(
+        sanitizeUrlString(getColumn(raw, headerMap, 'image') || '/images/default-product.png').slice(0, 500)
+      ) || '/images/default-product.png';
       const featured = parseBoolean(getColumn(raw, headerMap, 'featured'));
       const active = parseBoolean(getColumn(raw, headerMap, 'active'), true);
 

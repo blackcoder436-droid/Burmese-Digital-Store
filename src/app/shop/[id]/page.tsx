@@ -30,6 +30,7 @@ import { useLanguage } from '@/lib/language';
 import { useCart } from '@/lib/cart';
 import { useWishlist } from '@/lib/wishlist';
 import { useScrollFade } from '@/hooks/useScrollFade';
+import { hasCustomProductImage, normalizeImageSrc } from '@/lib/image';
 
 interface Product {
   _id: string;
@@ -259,12 +260,21 @@ export default function ProductDetailPage() {
   const total = Math.max(0, subtotal - couponDiscount);
   const alreadyInCart = isInCart(product._id);
   const cartItem = getItem(product._id);
+  const normalizedImage = normalizeImageSrc(product.image);
+  const hasImage = hasCustomProductImage(product.image);
   const normalizedDescription = product.description
-    .replace(/(\d)\s*year(s)?/gi, '$1 Year$2')
-    .replace(/(\d)\s*month(s)?/gi, '$1 Month$2')
-    .replace(/\s+/g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/(\d)\s*year(s)?/gi, '$1 Year$2')
+        .replace(/(\d)\s*month(s)?/gi, '$1 Month$2')
+        .trimEnd()
+    )
+    .join('\n')
     .trim();
-  const durationOnlyMatch = normalizedDescription.match(/^(\d+)\s+(Year|Years|Month|Months)$/i);
+  const oneLineDescription = normalizedDescription.replace(/\n+/g, ' ').trim();
+  const durationOnlyMatch = oneLineDescription.match(/^(\d+)\s+(Year|Years|Month|Months)$/i);
 
   return (
     <div className="min-h-screen pt-8 pb-12" ref={containerRef}>
@@ -272,13 +282,13 @@ export default function ProductDetailPage() {
         {/* Product Info */}
         <div className="scroll-fade game-card overflow-hidden mb-6" data-delay="100">
           {/* Product Image */}
-          {product.image && product.image !== '/images/default-product.png' && (
-            <div className="relative w-full h-48 sm:h-64">
+          {hasImage && normalizedImage && (
+            <div className="relative w-full h-48 sm:h-64 bg-dark-900">
               <Image
-                src={product.image}
+                src={normalizedImage}
                 alt={product.name}
                 fill
-                className="object-cover"
+                className="object-contain p-3"
                 priority
                 unoptimized
               />
@@ -339,7 +349,7 @@ export default function ProductDetailPage() {
           </div>
 
           {!durationOnlyMatch && (
-            <p className="text-gray-400 leading-relaxed mb-6 sm:mb-8 text-sm sm:text-base break-words">{normalizedDescription}</p>
+            <p className="text-gray-400 leading-relaxed mb-6 sm:mb-8 text-sm sm:text-base break-words whitespace-pre-line">{normalizedDescription}</p>
           )}
 
           <div className="flex flex-col gap-5 sm:gap-6 p-4 sm:p-6 bg-dark-900 rounded-2xl border border-dark-600/50">

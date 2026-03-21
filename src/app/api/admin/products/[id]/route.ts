@@ -6,7 +6,8 @@ import { createNotification } from '@/models/Notification';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
-import { sanitizeString, isValidObjectId } from '@/lib/security';
+import { sanitizeString, sanitizeUrlString, isValidObjectId } from '@/lib/security';
+import { normalizeImageSrc } from '@/lib/image';
 
 // PUT /api/admin/products/[id] - Update product
 export async function PUT(
@@ -36,7 +37,7 @@ export async function PUT(
     if (category !== undefined) updateData.category = sanitizeString(category);
     if (description !== undefined) updateData.description = sanitizeString(description);
     if (price !== undefined) updateData.price = Math.max(0, Number(price) || 0);
-    if (image !== undefined) updateData.image = sanitizeString(String(image)).slice(0, 500);
+    if (image !== undefined) updateData.image = normalizeImageSrc(sanitizeUrlString(String(image)).slice(0, 500));
     if (featured !== undefined) updateData.featured = featured;
     if (active !== undefined) updateData.active = active;
     if (purchaseDisabled !== undefined) updateData.purchaseDisabled = purchaseDisabled;
