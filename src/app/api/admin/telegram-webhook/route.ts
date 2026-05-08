@@ -5,9 +5,9 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ route: '/api/admin/telegram-webhook' });
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const BOT_TOKEN = process.env.TELEGRAM_VPN_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
-const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
+const WEBHOOK_SECRET = process.env.TELEGRAM_VPN_WEBHOOK_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET;
 
 // GET /api/admin/telegram-webhook — Check current webhook status
 export async function GET(request: NextRequest) {
