@@ -22,6 +22,17 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ module: 'bot-free-test' });
 
+async function reply(chatId: any, messageId: any, text: any, options?: any) {
+  if (messageId) {
+    const api = await import('../api');
+    await api.editMessageText(chatId, messageId, text, options);
+  } else {
+    const api = await import('../api');
+    await api.sendMessage(chatId, text, options);
+  }
+}
+
+
 const CHANNEL_USERNAME = '@BurmeseDigitalStore';
 
 /**
@@ -31,12 +42,13 @@ export async function handleFreeTest(
   chatId: number,
   telegramId: number,
   firstName: string,
-  username?: string
+  username?: string,
+  messageId?: number
 ): Promise<void> {
   // Check feature flag
   const enabled = await getFeatureFlag('free_test_key');
   if (!enabled) {
-    await sendMessage(chatId, MSG.notAvailable, {
+    await reply(chatId, messageId, MSG.notAvailable, {
       replyMarkup: mainMenuKeyboard(),
     });
     return;
@@ -47,14 +59,14 @@ export async function handleFreeTest(
 
   // Check if already used
   if (user.freeVpnTestUsedAt) {
-    await sendMessage(chatId, MSG.freeTestAlreadyUsed, {
+    await reply(chatId, messageId, MSG.freeTestAlreadyUsed, {
       replyMarkup: mainMenuKeyboard(),
     });
     return;
   }
 
   // Prompt to join channel
-  await sendMessage(chatId, MSG.freeTestJoinChannel, {
+  await reply(chatId, messageId, MSG.freeTestJoinChannel, {
     replyMarkup: freeTestJoinKeyboard(),
   });
 }
@@ -66,14 +78,15 @@ export async function handleFreeTestVerify(
   chatId: number,
   telegramId: number,
   firstName: string,
-  username?: string
+  username?: string,
+  messageId?: number
 ): Promise<void> {
   // Check channel membership
   const member = await getChatMember(CHANNEL_USERNAME, telegramId);
   const isMember = member && ['creator', 'administrator', 'member'].includes(member.status);
 
   if (!isMember) {
-    await sendMessage(chatId, MSG.freeTestNotJoined, {
+    await reply(chatId, messageId, MSG.freeTestNotJoined, {
       replyMarkup: freeTestJoinKeyboard(),
     });
     return;
@@ -82,13 +95,13 @@ export async function handleFreeTestVerify(
   // Show server selection for free test
   const servers = await getOnlineServers();
   if (servers.length === 0) {
-    await sendMessage(chatId, '❌ Server များ ယာယီပိတ်ထားပါသည်');
+    await reply(chatId, messageId, '❌ Server များ ယာယီပိတ်ထားပါသည်');
     return;
   }
 
   setSession(telegramId, { isFree: true });
 
-  await sendMessage(chatId, `🎁 <b>Free Test Key</b>\n\nServer ရွေးပါ:`, {
+  await reply(chatId, messageId, `🎁 <b>Free Test Key</b>\n\nServer ရွေးပါ:`, {
     replyMarkup: freeServerKeyboard(servers),
   });
 }
@@ -103,7 +116,7 @@ export async function handleFreeServerSelect(
 ): Promise<void> {
   const server = await getServer(serverId);
   if (!server) {
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
     return;
   }
 
@@ -113,7 +126,7 @@ export async function handleFreeServerSelect(
     isFree: true,
   });
 
-  await sendMessage(chatId, MSG.selectProtocol(server.name), {
+  await reply(chatId, messageId, MSG.selectProtocol(server.name), {
     replyMarkup: freeProtocolKeyboard(serverId, server.enabledProtocols),
   });
 }
@@ -136,7 +149,7 @@ export async function handleFreeProtocolSelect(
 
     // Double-check not already used
     if (user.freeVpnTestUsedAt) {
-      await sendMessage(chatId, MSG.freeTestAlreadyUsed, {
+      await reply(chatId, messageId, MSG.freeTestAlreadyUsed, {
         replyMarkup: mainMenuKeyboard(),
       });
       return;
@@ -144,7 +157,7 @@ export async function handleFreeProtocolSelect(
 
     const server = await getServer(serverId);
     if (!server) {
-      await sendMessage(chatId, MSG.error);
+      await reply(chatId, messageId, MSG.error);
       return;
     }
 
@@ -160,7 +173,7 @@ export async function handleFreeProtocolSelect(
     });
 
     if (!result) {
-      await sendMessage(chatId, '❌ Key ဖန်တီးရာတွင် အမှားဖြစ်ပါသည်။ ပြန်ကြိုးစားပါ');
+      await reply(chatId, messageId, '❌ Key ဖန်တီးရာတွင် အမှားဖြစ်ပါသည်။ ပြန်ကြိုးစားပါ');
       return;
     }
 
@@ -191,6 +204,6 @@ export async function handleFreeProtocolSelect(
     log.error('Free test key error', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }

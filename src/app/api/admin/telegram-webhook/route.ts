@@ -61,11 +61,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'NEXT_PUBLIC_APP_URL not configured' }, { status: 400 });
     }
 
-    const webhookUrl = `${APP_URL}/api/telegram/webhook`;
+    const webhookUrl = `${APP_URL}/api/telegram/bot/webhook`;
 
     const body: Record<string, unknown> = {
       url: webhookUrl,
-      allowed_updates: ['callback_query'],
+      allowed_updates: ['message', 'callback_query'],
       drop_pending_updates: true,
     };
 

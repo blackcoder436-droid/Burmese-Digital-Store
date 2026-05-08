@@ -23,6 +23,17 @@ import type { InlineKeyboard } from '../types';
 
 const log = createLogger({ module: 'bot-keys' });
 
+async function reply(chatId: any, messageId: any, text: any, options?: any) {
+  if (messageId) {
+    const api = await import('../api');
+    await api.editMessageText(chatId, messageId, text, options);
+  } else {
+    const api = await import('../api');
+    await api.sendMessage(chatId, text, options);
+  }
+}
+
+
 /**
  * Handle my_keys callback — show user's active VPN keys
  */
@@ -30,7 +41,8 @@ export async function handleMyKeys(
   chatId: number,
   telegramId: number,
   firstName: string,
-  username?: string
+  username?: string,
+  messageId?: number
 ): Promise<void> {
   try {
     await connectDB();
@@ -48,7 +60,7 @@ export async function handleMyKeys(
       .lean();
 
     if (orders.length === 0) {
-      await sendMessage(chatId, MSG.noKeys, {
+      await reply(chatId, messageId, MSG.noKeys, {
         replyMarkup: mainMenuKeyboard(),
       });
       return;
@@ -89,12 +101,12 @@ export async function handleMyKeys(
 
     keyboard.push([{ text: '🏠 Main Menu', callback_data: 'main_menu' }]);
 
-    await sendMessage(chatId, text, { replyMarkup: markup(keyboard) });
+    await reply(chatId, messageId, text, { replyMarkup: markup(keyboard) });
   } catch (error) {
     log.error('Error loading keys', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }
 
@@ -104,14 +116,15 @@ export async function handleMyKeys(
 export async function handleViewKey(
   chatId: number,
   telegramId: number,
-  orderId: string
+  orderId: string,
+  messageId?: number
 ): Promise<void> {
   try {
     await connectDB();
 
     const order = await Order.findById(orderId);
     if (!order || !order.vpnKey || !order.vpnPlan) {
-      await sendMessage(chatId, '❌ Key မတွေ့ပါ');
+      await reply(chatId, messageId, '❌ Key မတွေ့ပါ');
       return;
     }
 
@@ -147,12 +160,12 @@ export async function handleViewKey(
       [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
     ];
 
-    await sendMessage(chatId, text, { replyMarkup: markup(keyboard) });
+    await reply(chatId, messageId, text, { replyMarkup: markup(keyboard) });
   } catch (error) {
     log.error('Error viewing key', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }
 
@@ -163,12 +176,13 @@ export async function handleExchangeKey(
   chatId: number,
   telegramId: number,
   firstName: string,
-  username?: string
+  username?: string,
+  messageId?: number
 ): Promise<void> {
   // Check feature flag
   const enabled = await getFeatureFlag('protocol_change');
   if (!enabled) {
-    await sendMessage(chatId, MSG.exchangeDisabled, {
+    await reply(chatId, messageId, MSG.exchangeDisabled, {
       replyMarkup: mainMenuKeyboard(),
     });
     return;
@@ -189,7 +203,7 @@ export async function handleExchangeKey(
       .lean();
 
     if (orders.length === 0) {
-      await sendMessage(chatId, MSG.exchangeNoKeys, {
+      await reply(chatId, messageId, MSG.exchangeNoKeys, {
         replyMarkup: mainMenuKeyboard(),
       });
       return;
@@ -214,12 +228,12 @@ export async function handleExchangeKey(
 
     keyboard.push([{ text: '🏠 Main Menu', callback_data: 'main_menu' }]);
 
-    await sendMessage(chatId, text, { replyMarkup: markup(keyboard) });
+    await reply(chatId, messageId, text, { replyMarkup: markup(keyboard) });
   } catch (error) {
     log.error('Exchange key list error', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }
 
@@ -229,20 +243,21 @@ export async function handleExchangeKey(
 export async function handleExKeySelect(
   chatId: number,
   telegramId: number,
-  orderId: string
+  orderId: string,
+  messageId?: number
 ): Promise<void> {
   try {
     await connectDB();
     const order = await Order.findById(orderId);
 
     if (!order?.vpnKey || !order.vpnPlan) {
-      await sendMessage(chatId, '❌ Key မတွေ့ပါ');
+      await reply(chatId, messageId, '❌ Key မတွေ့ပါ');
       return;
     }
 
     const server = await getServer(order.vpnPlan.serverId);
     if (!server) {
-      await sendMessage(chatId, MSG.error);
+      await reply(chatId, messageId, MSG.error);
       return;
     }
 
@@ -266,7 +281,7 @@ export async function handleExKeySelect(
     log.error('Exchange key select error', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }
 
@@ -286,13 +301,13 @@ export async function handleExProtoSelect(
 
     const order = await Order.findById(orderId);
     if (!order?.vpnKey || !order.vpnPlan) {
-      await sendMessage(chatId, MSG.exchangeFailed);
+      await reply(chatId, messageId, MSG.exchangeFailed);
       return;
     }
 
     const server = await getServer(order.vpnPlan.serverId);
     if (!server) {
-      await sendMessage(chatId, MSG.exchangeFailed);
+      await reply(chatId, messageId, MSG.exchangeFailed);
       return;
     }
 
@@ -315,7 +330,7 @@ export async function handleExProtoSelect(
     });
 
     if (!result) {
-      await sendMessage(chatId, MSG.exchangeFailed);
+      await reply(chatId, messageId, MSG.exchangeFailed);
       return;
     }
 
@@ -351,7 +366,7 @@ export async function handleExProtoSelect(
     clearSession(telegramId);
 
     // Send success + new key
-    await sendMessage(chatId, MSG.exchangeSuccess(newProtocol));
+    await reply(chatId, messageId, MSG.exchangeSuccess(newProtocol));
 
     const expiryDate = new Date(result.expiryTime).toLocaleDateString('en-GB', {
       year: 'numeric',
@@ -382,7 +397,7 @@ export async function handleExProtoSelect(
     log.error('Protocol exchange error', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.exchangeFailed);
+    await reply(chatId, messageId, MSG.exchangeFailed);
   }
 }
 
@@ -393,7 +408,8 @@ export async function handleCheckUsage(
   chatId: number,
   telegramId: number,
   firstName: string,
-  username?: string
+  username?: string,
+  messageId?: number
 ): Promise<void> {
   try {
     await connectDB();
@@ -410,7 +426,7 @@ export async function handleCheckUsage(
       .lean();
 
     if (orders.length === 0) {
-      await sendMessage(chatId, MSG.noKeys, {
+      await reply(chatId, messageId, MSG.noKeys, {
         replyMarkup: mainMenuKeyboard(),
       });
       return;
@@ -430,11 +446,11 @@ export async function handleCheckUsage(
       text += `⚙️ ${order.vpnKey.protocol.toUpperCase()} | 📅 ${daysLeft} ရက်ကျန်\n\n`;
     }
 
-    await sendMessage(chatId, text, { replyMarkup: mainMenuKeyboard() });
+    await reply(chatId, messageId, text, { replyMarkup: mainMenuKeyboard() });
   } catch (error) {
     log.error('Check usage error', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }

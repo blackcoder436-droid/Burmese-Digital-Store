@@ -24,17 +24,29 @@ import { findOrCreateTelegramUser } from './commands';
 
 const log = createLogger({ module: 'bot-purchase' });
 
+async function reply(chatId: any, messageId: any, text: any, options?: any) {
+  if (messageId) {
+    const api = await import('../api');
+    await api.editMessageText(chatId, messageId, text, options);
+  } else {
+    const api = await import('../api');
+    await api.sendMessage(chatId, text, options);
+  }
+}
+
+
 /**
  * Show server selection
  */
 export async function handleBuyKey(
   chatId: number,
-  telegramId: number
+  telegramId: number,
+  messageId?: number
 ): Promise<void> {
   const servers = await getOnlineServers();
 
   if (servers.length === 0) {
-    await sendMessage(chatId, '❌ Server များ ယာယီပိတ်ထားပါသည်', {
+    await reply(chatId, messageId, '❌ Server များ ယာယီပိတ်ထားပါသည်', {
       replyMarkup: mainMenuKeyboard(),
     });
     return;
@@ -43,7 +55,7 @@ export async function handleBuyKey(
   // Initialize session
   setSession(telegramId, {});
 
-  await sendMessage(chatId, MSG.selectServer, {
+  await reply(chatId, messageId, MSG.selectServer, {
     replyMarkup: serverKeyboard(servers),
   });
 }
@@ -54,12 +66,13 @@ export async function handleBuyKey(
 export async function handleServerSelect(
   chatId: number,
   telegramId: number,
-  serverId: string
+  serverId: string,
+  messageId?: number
 ): Promise<void> {
   const server = await getServer(serverId);
 
   if (!server || !server.enabled || !server.online) {
-    await sendMessage(chatId, '❌ Server မရနိုင်ပါ', {
+    await reply(chatId, messageId, '❌ Server မရနိုင်ပါ', {
       replyMarkup: mainMenuKeyboard(),
     });
     return;
@@ -67,7 +80,7 @@ export async function handleServerSelect(
 
   setSession(telegramId, { serverId });
 
-  await sendMessage(chatId, MSG.selectProtocol(server.name), {
+  await reply(chatId, messageId, MSG.selectProtocol(server.name), {
     replyMarkup: protocolKeyboard(serverId, server.enabledProtocols),
   });
 }
@@ -79,18 +92,20 @@ export async function handleProtocolSelect(
   chatId: number,
   telegramId: number,
   serverId: string,
-  protocol: string
+  protocol: string,
+  messageId?: number
 ): Promise<void> {
   const server = await getServer(serverId);
   if (!server) {
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
     return;
   }
 
   // Validate protocol is enabled on this server
   if (!server.enabledProtocols.includes(protocol)) {
-    await sendMessage(
+    await reply(
       chatId,
+      messageId,
       `❌ ${protocol} protocol ကို ဒီ server မှာ မရနိုင်ပါ။\nရနိုင်သော protocols: ${server.enabledProtocols.join(', ')}`,
       { replyMarkup: protocolKeyboard(serverId, server.enabledProtocols) }
     );
@@ -99,8 +114,9 @@ export async function handleProtocolSelect(
 
   updateSessionField(telegramId, 'protocol', protocol);
 
-  await sendMessage(
+  await reply(
     chatId,
+    messageId,
     MSG.selectDevices(server.name, protocol),
     { replyMarkup: deviceKeyboard(serverId) }
   );
@@ -113,13 +129,14 @@ export async function handleDeviceSelect(
   chatId: number,
   telegramId: number,
   serverId: string,
-  deviceCount: number
+  deviceCount: number,
+  messageId?: number
 ): Promise<void> {
   const server = await getServer(serverId);
   const session = getSession(telegramId);
 
   if (!server || !session?.protocol) {
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
     return;
   }
 
@@ -127,8 +144,9 @@ export async function handleDeviceSelect(
 
   const plans = getPlansForDevices(deviceCount);
 
-  await sendMessage(
+  await reply(
     chatId,
+    messageId,
     MSG.selectPlan(server.name, session.protocol, deviceCount),
     { replyMarkup: planKeyboard(serverId, plans) }
   );
@@ -143,14 +161,15 @@ export async function handlePlanSelect(
   firstName: string,
   username: string | undefined,
   serverId: string,
-  planId: string
+  planId: string,
+  messageId?: number
 ): Promise<void> {
   const session = getSession(telegramId);
   const plan = getPlan(planId);
   const server = await getServer(serverId);
 
   if (!plan || !server || !session?.protocol) {
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
     return;
   }
 
@@ -162,7 +181,7 @@ export async function handlePlanSelect(
 
     // Check ban
     if (user.isBanned) {
-      await sendMessage(chatId, MSG.banned + (user.banReason || 'No reason'));
+      await reply(chatId, messageId, MSG.banned + (user.banReason || 'No reason'));
       return;
     }
 
@@ -197,8 +216,9 @@ export async function handlePlanSelect(
     });
 
     // Show payment info
-    await sendMessage(
+    await reply(
       chatId,
+      messageId,
       MSG.paymentInfo({
         orderNumber: order.orderNumber,
         planName: plan.name,
@@ -239,7 +259,7 @@ export async function handlePlanSelect(
     log.error('Error creating bot order', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }
 
@@ -249,7 +269,8 @@ export async function handlePlanSelect(
 export async function handleSendScreenshot(
   chatId: number,
   telegramId: number,
-  orderId: string
+  orderId: string,
+  messageId?: number
 ): Promise<void> {
   setSession(telegramId, {
     ...(getSession(telegramId) || {}),
@@ -257,5 +278,5 @@ export async function handleSendScreenshot(
     waitingScreenshot: true,
   });
 
-  await sendMessage(chatId, MSG.waitingScreenshot);
+  await reply(chatId, messageId, MSG.waitingScreenshot);
 }

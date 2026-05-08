@@ -134,6 +134,7 @@ export default function Navbar() {
   const navLinks = [
     { href: '/', label: t('nav.home') },
     { href: '/shop', label: t('nav.shop') },
+    { href: '/vps', label: 'VPS' },
     { href: '/vpn', label: t('nav.vpn') },
     { href: '/contact', label: t('nav.contact') },
   ];

@@ -30,6 +30,8 @@ import {
   handleSendScreenshot,
 } from './handlers/purchase';
 
+import { handleVPSCategory, handleVPSSelect, handleVPSBuy } from './handlers/vps';
+
 // Payment
 import {
   handlePaymentScreenshot,
@@ -62,6 +64,14 @@ import {
   handleReferralStats,
   handleClaimFreeMonth,
 } from './handlers/referral';
+
+// Shop
+import {
+  handleShopCategories,
+  handleShopCategory,
+  handleShopProduct,
+  handleShopBuy,
+} from './handlers/shop';
 
 // Admin
 import {
@@ -183,17 +193,25 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
   const message = update.message;
   if (!message?.from || !message.chat) return;
 
-  const ctx: BotContext = {
-    chatId: message.chat.id,
-    userId: message.from.id,
-    username: message.from.username,
-    firstName: message.from.first_name,
-    lastName: message.from.last_name,
-    messageId: message.message_id,
-    text: message.text,
-    photo: message.photo,
-    isAdmin: isAdmin(message.from.id),
-  };
+    let userLang: 'en' | 'my' = 'my';
+    try {
+      const { default: User } = await import('@/models/User');
+      const user = await User.findOne({ telegramId: message.from.id }).select('language');
+      if (user && user.language) userLang = user.language;
+    } catch (e) {}
+
+    const ctx: BotContext = {
+      chatId: message.chat.id,
+      userId: message.from.id,
+      username: message.from.username,
+      firstName: message.from.first_name,
+      lastName: message.from.last_name,
+      messageId: message.message_id,
+      text: message.text,
+      photo: message.photo,
+      isAdmin: isAdmin(message.from.id),
+      lang: userLang,
+    };
 
   // Only handle private messages
   if (message.chat.type !== 'private') return;
@@ -252,6 +270,11 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
       await handleHelp(ctx.chatId);
       break;
 
+    case '/language':
+      const { handleSettingsLanguage } = await import('./handlers/commands');
+      await handleSettingsLanguage(ctx.chatId, ctx.userId);
+      break;
+
     // Admin commands
     case '/admin':
       if (ctx.isAdmin) {
@@ -292,6 +315,13 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
   const callback = update.callback_query;
   if (!callback?.from || !callback.data) return;
 
+  let userLang: 'en' | 'my' = 'my';
+  try {
+    const { default: User } = await import('@/models/User');
+    const user = await User.findOne({ telegramId: callback.from.id }).select('language');
+    if (user && user.language) userLang = user.language;
+  } catch (e) {}
+
   const ctx: BotContext = {
     chatId: callback.message?.chat.id || callback.from.id,
     userId: callback.from.id,
@@ -302,6 +332,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     callbackQueryId: callback.id,
     callbackData: callback.data,
     isAdmin: isAdmin(callback.from.id),
+    lang: userLang,
   };
 
   const data = callback.data;
@@ -309,34 +340,70 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
   try {
     // ---- Main Menu ----
     if (data === 'main_menu') {
-      await handleMainMenu(ctx.chatId, ctx.userId);
+      await handleMainMenu(ctx.chatId, ctx.userId, ctx.messageId);
+    }
+    // ---- Shop ----
+    else if (data === 'shop_categories') {
+      await handleShopCategories(ctx.chatId, ctx.messageId);
+    } else if (data.startsWith('shop_cat_')) {
+      const category = data.substring(9);
+      if (category === 'vps') {
+        const { handleVPSCategory } = await import('./handlers/vps');
+        await handleVPSCategory(ctx);
+      } else if (category === 'vpn') {
+        await handleBuyKey(ctx.chatId, ctx.userId, ctx.messageId);
+      } else {
+        await handleShopCategory(ctx.chatId, category, ctx.messageId!);
+      }
+    } else if (data.startsWith('vps_select_')) {
+      const { handleVPSSelect } = await import('./handlers/vps');
+      const vpsId = data.replace('vps_select_', '');
+      await handleVPSSelect(ctx, vpsId);
+    } else if (data.startsWith('vps_buy_')) {
+      const { handleVPSBuy } = await import('./handlers/vps');
+      const vpsId = data.replace('vps_buy_', '');
+      await handleVPSBuy(ctx, vpsId);
+    } else if (data === 'settings_language') {
+      const { handleSettingsLanguage } = await import('./handlers/commands');
+      await handleSettingsLanguage(ctx.chatId, ctx.userId, ctx.messageId);
+    } else if (data.startsWith('setlang_')) {
+      const lang = data.replace('setlang_', '');
+      log.info('Language selection callback', { data, lang, userId: ctx.userId, messageId: ctx.messageId });
+      const { handleChangeLanguage } = await import('./handlers/commands');
+      await handleChangeLanguage(ctx.chatId, ctx.userId, lang as any, ctx.messageId);
+    } else if (data.startsWith('shop_prod_')) {
+      const productId = data.substring(10);
+      await handleShopProduct(ctx.chatId, productId, ctx.messageId!);
+    } else if (data.startsWith('shop_buy_')) {
+      const productId = data.substring(9);
+      await handleShopBuy(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, productId, ctx.messageId!);
     }
     // ---- Help / Contact ----
     else if (data === 'help') {
-      await handleHelp(ctx.chatId);
+      await handleHelp(ctx.chatId, ctx.userId, ctx.messageId);
     } else if (data === 'contact') {
-      await handleContact(ctx.chatId);
+      await handleContact(ctx.chatId, ctx.userId, ctx.messageId);
     }
     // ---- Buy VPN Key Flow ----
     else if (data === 'buy_key') {
-      await handleBuyKey(ctx.chatId, ctx.userId);
+      await handleBuyKey(ctx.chatId, ctx.userId, ctx.messageId);
     } else if (data.startsWith('server_')) {
       const serverId = data.substring(7);
-      await handleServerSelect(ctx.chatId, ctx.userId, serverId);
+      await handleServerSelect(ctx.chatId, ctx.userId, serverId, ctx.messageId);
     }
     else if (data.startsWith('proto_') || data.startsWith('proto:')) {
       const parsed = parseTwoPartCallback(data, 'proto', 'proto');
       if (!parsed) return;
       const serverId = parsed.first;
       const protocol = parsed.second;
-      await handleProtocolSelect(ctx.chatId, ctx.userId, serverId, protocol);
+      await handleProtocolSelect(ctx.chatId, ctx.userId, serverId, protocol, ctx.messageId);
     } else if (data.startsWith('device_') || data.startsWith('device:')) {
       const parsed = parseTwoPartCallback(data, 'device', 'device');
       if (!parsed) return;
       const serverId = parsed.first;
       const count = parseInt(parsed.second, 10);
       if (Number.isNaN(count)) return;
-      await handleDeviceSelect(ctx.chatId, ctx.userId, serverId, count);
+      await handleDeviceSelect(ctx.chatId, ctx.userId, serverId, count, ctx.messageId);
     } else if (data.startsWith('plan_') || data.startsWith('plan:')) {
       const parsed = parseTwoPartCallback(data, 'plan', 'plan');
       if (!parsed) return;
@@ -348,17 +415,18 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         ctx.firstName,
         ctx.username,
         serverId,
-        planId
+        planId,
+        ctx.messageId
       );
     } else if (data.startsWith('send_screenshot_')) {
       const orderId = data.substring(16);
-      await handleSendScreenshot(ctx.chatId, ctx.userId, orderId);
+      await handleSendScreenshot(ctx.chatId, ctx.userId, orderId, ctx.messageId);
     }
     // ---- Free Test ----
     else if (data === 'free_test') {
-      await handleFreeTest(ctx.chatId, ctx.userId, ctx.firstName, ctx.username);
+      await handleFreeTest(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
     } else if (data === 'free_test_verify') {
-      await handleFreeTestVerify(ctx.chatId, ctx.userId, ctx.firstName, ctx.username);
+      await handleFreeTestVerify(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
     } else if (data.startsWith('free_server_')) {
       const serverId = data.substring(12);
       await handleFreeServerSelect(ctx.chatId, ctx.userId, serverId);
@@ -378,19 +446,19 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     }
     // ---- My Keys ----
     else if (data === 'my_keys') {
-      await handleMyKeys(ctx.chatId, ctx.userId, ctx.firstName, ctx.username);
+      await handleMyKeys(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
     } else if (data.startsWith('view_key_')) {
       const orderId = data.substring(9);
-      await handleViewKey(ctx.chatId, ctx.userId, orderId);
+      await handleViewKey(ctx.chatId, ctx.userId, orderId, ctx.messageId);
     } else if (data === 'check_usage') {
-      await handleCheckUsage(ctx.chatId, ctx.userId, ctx.firstName, ctx.username);
+      await handleCheckUsage(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
     }
     // ---- Exchange Key ----
     else if (data === 'exchange_key') {
-      await handleExchangeKey(ctx.chatId, ctx.userId, ctx.firstName, ctx.username);
+      await handleExchangeKey(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
     } else if (data.startsWith('exkey_')) {
       const orderId = data.substring(6);
-      await handleExKeySelect(ctx.chatId, ctx.userId, orderId);
+      await handleExKeySelect(ctx.chatId, ctx.userId, orderId, ctx.messageId);
     } else if (data.startsWith('expro_') || data.startsWith('expro:')) {
       const parsed = parseTwoPartCallback(data, 'expro', 'expro');
       if (!parsed) return;
@@ -407,13 +475,13 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     }
     // ---- Referral ----
     else if (data === 'referral') {
-      await handleReferral(ctx.chatId, ctx.userId, ctx.firstName, ctx.username);
+      await handleReferral(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
     } else if (data === 'my_referral_link') {
-      await handleMyReferralLink(ctx.chatId, ctx.userId, ctx.firstName, ctx.username);
+      await handleMyReferralLink(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
     } else if (data === 'referral_stats') {
-      await handleReferralStats(ctx.chatId, ctx.userId, ctx.firstName, ctx.username);
+      await handleReferralStats(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
     } else if (data === 'claim_free_month') {
-      await handleClaimFreeMonth(ctx.chatId, ctx.userId, ctx.firstName, ctx.username);
+      await handleClaimFreeMonth(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
     }
     // ---- Admin Approve/Reject (from payment channel) ----
     else if (data.startsWith('bot_approve_')) {
@@ -624,6 +692,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
       data,
       userId: ctx.userId,
       error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
     });
 
     if (ctx.callbackQueryId) {

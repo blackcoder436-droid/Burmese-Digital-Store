@@ -16,6 +16,7 @@ export interface IUserDocument extends Document {
   // Telegram bot integration
   telegramId?: number;
   telegramUsername?: string;
+  language?: 'en' | 'my';
   // Ban management
   isBanned: boolean;
   banReason?: string;
@@ -95,6 +96,11 @@ const UserSchema: Schema = new Schema(
       type: String,
       default: null,
       trim: true,
+    },
+    language: {
+      type: String,
+      enum: ['en', 'my'],
+      default: 'my',
     },
     // Ban management
     isBanned: {
@@ -179,7 +185,14 @@ UserSchema.index({ role: 1 });
 UserSchema.index({ deletedAt: 1 });
 UserSchema.index({ isBanned: 1 }); // Ban management
 // Database indexing audit (2026-02-19)
-UserSchema.index({ name: 'text', email: 'text' }); // Admin user search
+UserSchema.index(
+  { name: 'text', email: 'text' },
+  {
+    default_language: 'english',
+    language_override: 'textLanguage',
+    name: 'name_text_email_text',
+  }
+); // Admin user search
 UserSchema.index({ createdAt: -1 }); // Analytics user growth sorting
 
 // Soft-delete: auto-exclude deleted users from normal queries

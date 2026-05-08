@@ -18,6 +18,17 @@ import mongoose from 'mongoose';
 
 const log = createLogger({ module: 'bot-referral' });
 
+async function reply(chatId: any, messageId: any, text: any, options?: any) {
+  if (messageId) {
+    const api = await import('../api');
+    await api.editMessageText(chatId, messageId, text, options);
+  } else {
+    const api = await import('../api');
+    await api.sendMessage(chatId, text, options);
+  }
+}
+
+
 const REFERRAL_BONUS_DAYS = 5;
 const FREE_MONTH_THRESHOLD = 3; // 3 paid referrals to claim free month
 
@@ -28,11 +39,12 @@ export async function handleReferral(
   chatId: number,
   telegramId: number,
   firstName: string,
-  username?: string
+  username?: string,
+  messageId?: number
 ): Promise<void> {
   const enabled = await getFeatureFlag('referral_system');
   if (!enabled) {
-    await sendMessage(chatId, MSG.referralDisabled, {
+    await reply(chatId, messageId, MSG.referralDisabled, {
       replyMarkup: mainMenuKeyboard(),
     });
     return;
@@ -55,8 +67,9 @@ export async function handleReferral(
       stats.paidReferrals >= FREE_MONTH_THRESHOLD &&
       stats.paidReferrals % FREE_MONTH_THRESHOLD === 0;
 
-    await sendMessage(
+    await reply(
       chatId,
+      messageId,
       MSG.referralInfo({
         referralCode: user.referralCode,
         totalReferred: stats.totalReferred,
@@ -70,7 +83,7 @@ export async function handleReferral(
     log.error('Referral info error', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }
 
@@ -81,7 +94,8 @@ export async function handleMyReferralLink(
   chatId: number,
   telegramId: number,
   firstName: string,
-  username?: string
+  username?: string,
+  messageId?: number
 ): Promise<void> {
   try {
     await connectDB();
@@ -95,8 +109,9 @@ export async function handleMyReferralLink(
 
     const link = `https://t.me/BurmeseDigitalStore_bot?start=REF_${user.referralCode}`;
 
-    await sendMessage(
+    await reply(
       chatId,
+      messageId,
       `🔗 <b>Your Referral Link:</b>\n\n<code>${link}</code>\n\n` +
         `👆 Link ကို copy ပြီး သူငယ်ချင်းတွေကို share ပါ!\n` +
         `သူတို့ key ဝယ်ရင် သင် +${REFERRAL_BONUS_DAYS} ရက် bonus ရမယ်! 🎉`,
@@ -106,7 +121,7 @@ export async function handleMyReferralLink(
     log.error('Referral link error', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }
 
@@ -117,7 +132,8 @@ export async function handleReferralStats(
   chatId: number,
   telegramId: number,
   firstName: string,
-  username?: string
+  username?: string,
+  messageId?: number
 ): Promise<void> {
   try {
     await connectDB();
@@ -150,12 +166,12 @@ export async function handleReferralStats(
       }
     }
 
-    await sendMessage(chatId, text, { replyMarkup: mainMenuKeyboard() });
+    await reply(chatId, messageId, text, { replyMarkup: mainMenuKeyboard() });
   } catch (error) {
     log.error('Referral stats error', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }
 
@@ -166,7 +182,8 @@ export async function handleClaimFreeMonth(
   chatId: number,
   telegramId: number,
   firstName: string,
-  username?: string
+  username?: string,
+  messageId?: number
 ): Promise<void> {
   try {
     await connectDB();
@@ -175,8 +192,9 @@ export async function handleClaimFreeMonth(
     const stats = await getReferralStats(user._id);
 
     if (stats.paidReferrals < FREE_MONTH_THRESHOLD) {
-      await sendMessage(
+      await reply(
         chatId,
+        messageId,
         `❌ Free Month ရယူရန် အနည်းဆုံး ${FREE_MONTH_THRESHOLD} ယောက်ဝယ်ပေးရပါမည်\n` +
           `လက်ရှိ: ${stats.paidReferrals}/${FREE_MONTH_THRESHOLD}`,
         { replyMarkup: mainMenuKeyboard() }
@@ -187,7 +205,7 @@ export async function handleClaimFreeMonth(
     // Get first online server
     const servers = await getOnlineServers();
     if (servers.length === 0) {
-      await sendMessage(chatId, '❌ Server များ မရနိုင်ပါ');
+      await reply(chatId, messageId, '❌ Server များ မရနိုင်ပါ');
       return;
     }
 
@@ -205,7 +223,7 @@ export async function handleClaimFreeMonth(
     });
 
     if (!result) {
-      await sendMessage(chatId, '❌ Key ဖန်တီးရာတွင် အမှားဖြစ်ပါသည်');
+      await reply(chatId, messageId, '❌ Key ဖန်တီးရာတွင် အမှားဖြစ်ပါသည်');
       return;
     }
 
@@ -265,7 +283,7 @@ export async function handleClaimFreeMonth(
     log.error('Claim free month error', {
       error: error instanceof Error ? error.message : String(error),
     });
-    await sendMessage(chatId, MSG.error);
+    await reply(chatId, messageId, MSG.error);
   }
 }
 

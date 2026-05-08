@@ -16,18 +16,28 @@ export function markup(keyboard: InlineKeyboard): InlineKeyboardMarkup {
 
 // ---- Main Menu ----
 
-export function mainMenuKeyboard(): InlineKeyboardMarkup {
+export function mainMenuKeyboard(lang: 'en' | 'my' = 'my'): InlineKeyboardMarkup {
   return markup([
-    [{ text: '🛒 VPN Key ဝယ်မည်', callback_data: 'buy_key' }],
-    [{ text: '🎁 Free Test Key', callback_data: 'free_test' }],
-    [{ text: '🔑 My Keys', callback_data: 'my_keys' }],
-    [{ text: '🔄 Protocol ပြောင်း', callback_data: 'exchange_key' }],
-    [{ text: '📊 Usage စစ်ဆေး', callback_data: 'check_usage' }],
+    [
+      { text: lang === 'en' ? '🛒 Buy VPN' : '🛒 VPN ဝယ်မည်', callback_data: 'buy_key' },
+      { text: lang === 'en' ? '🛍️ Shop Products' : '🛍️ Products ဝယ်မည်', callback_data: 'shop_categories' }
+    ],
+    [
+      { text: '🔑 My Keys', callback_data: 'my_keys' },
+      { text: '🎁 Free Test', callback_data: 'free_test' }
+    ],
+    [
+      { text: lang === 'en' ? '🔄 Exchange Protocol' : '🔄 Protocol ပြောင်း', callback_data: 'exchange_key' },
+      { text: lang === 'en' ? '📊 Check Usage' : '📊 Usage စစ်ဆေး', callback_data: 'check_usage' }
+    ],
     [
       { text: '🎯 Referral', callback_data: 'referral' },
-      { text: '📖 Help', callback_data: 'help' },
+      { text: '📖 Help', callback_data: 'help' }
     ],
-    [{ text: '📞 ဆက်သွယ်ရန်', callback_data: 'contact' }],
+    [
+      { text: '🌐 Language/ဘာသာစကား', callback_data: 'settings_language' },
+      { text: lang === 'en' ? '📞 Contact Support' : '📞 ဆက်သွယ်ရန်', callback_data: 'contact' }
+    ],
   ]);
 }
 
@@ -38,16 +48,23 @@ export function serverKeyboard(
   prefix = 'server'
 ): InlineKeyboardMarkup {
   const keyboard: InlineKeyboard = [];
-
-  for (const server of servers) {
-    const statusIcon = server.online ? '🟢' : '🔴';
-    const badge = server.badge ? ` [${server.badge}]` : '';
-    keyboard.push([
-      {
-        text: `${server.flag} ${server.name} ${statusIcon}${badge}`,
-        callback_data: `${prefix}_${server.id}`,
-      },
-    ]);
+  
+  for (let i = 0; i < servers.length; i += 2) {
+    const row = [];
+    const server1 = servers[i];
+    row.push({
+      text: `${server1.flag} ${server1.name} ${server1.online ? '🟢' : '🔴'}${server1.badge ? ` [${server1.badge}]` : ''}`,
+      callback_data: `${prefix}_${server1.id}`,
+    });
+    
+    if (i + 1 < servers.length) {
+      const server2 = servers[i + 1];
+      row.push({
+        text: `${server2.flag} ${server2.name} ${server2.online ? '🟢' : '🔴'}${server2.badge ? ` [${server2.badge}]` : ''}`,
+        callback_data: `${prefix}_${server2.id}`,
+      });
+    }
+    keyboard.push(row);
   }
 
   keyboard.push([{ text: '🏠 Main Menu', callback_data: 'main_menu' }]);
@@ -70,15 +87,31 @@ export function protocolKeyboard(
 
   const keyboard: InlineKeyboard = [];
 
-  for (const proto of enabledProtocols) {
-    const info = protocolInfo[proto];
-    if (!info) continue;
-    const label = info.recommended
-      ? `${info.icon} ${info.label} (အကောင်းဆုံး)`
-      : `${info.icon} ${info.label}`;
-    keyboard.push([
-      { text: label, callback_data: `${prefix}:${serverId}:${proto}` },
-    ]);
+  for (let i = 0; i < enabledProtocols.length; i += 2) {
+    const row = [];
+    const p1 = enabledProtocols[i];
+    const info1 = protocolInfo[p1];
+    if (info1) {
+      row.push({
+        text: info1.recommended ? `${info1.icon} ${info1.label}(Best)` : `${info1.icon} ${info1.label}`,
+        callback_data: `${prefix}:${serverId}:${p1}`
+      });
+    }
+
+    if (i + 1 < enabledProtocols.length) {
+      const p2 = enabledProtocols[i + 1];
+      const info2 = protocolInfo[p2];
+      if (info2) {
+        row.push({
+          text: info2.recommended ? `${info2.icon} ${info2.label}(Best)` : `${info2.icon} ${info2.label}`,
+          callback_data: `${prefix}:${serverId}:${p2}`
+        });
+      }
+    }
+    
+    if (row.length > 0) {
+      keyboard.push(row);
+    }
   }
 
   keyboard.push([{ text: '◀️ နောက်သို့', callback_data: 'buy_key' }]);
@@ -90,12 +123,13 @@ export function protocolKeyboard(
 export function deviceKeyboard(serverId: string): InlineKeyboardMarkup {
   const keyboard: InlineKeyboard = [];
 
-  for (let d = 1; d <= 5; d++) {
-    const label = d === 1 ? '📱 1 Device' : `📱 ${d} Devices`;
-    keyboard.push([
-      { text: label, callback_data: `device:${serverId}:${d}` },
-    ]);
+  for (let d = 1; d <= 4; d += 2) {
+    const row = [];
+    row.push({ text: d === 1 ? '📱 1 Device' : `📱 ${d} Devices`, callback_data: `device:${serverId}:${d}` });
+    row.push({ text: `📱 ${d + 1} Devices`, callback_data: `device:${serverId}:${d + 1}` });
+    keyboard.push(row);
   }
+  keyboard.push([{ text: '📱 5 Devices', callback_data: `device:${serverId}:5` }]);
 
   keyboard.push([{ text: '◀️ နောက်သို့', callback_data: `server_${serverId}` }]);
   return markup(keyboard);
@@ -109,14 +143,24 @@ export function planKeyboard(
 ): InlineKeyboardMarkup {
   const keyboard: InlineKeyboard = [];
 
-  for (const plan of plans) {
-    const monthLabel = plan.months === 1 ? '1 Month' : `${plan.months} Months`;
-    keyboard.push([
-      {
-        text: `📅 ${monthLabel} — ${plan.price.toLocaleString()} Ks`,
-        callback_data: `plan:${serverId}:${plan.id}`,
-      },
-    ]);
+  // Group plans into 2 columns if names/prices fit well, but plans usually have long names
+  // We'll keep plans 1 per row if price is shown, or 2 per row if concise. Let's do 2.
+  for (let i = 0; i < plans.length; i += 2) {
+    const row = [];
+    const p1 = plans[i];
+    row.push({
+      text: `📅 ${p1.months}M - ${(p1.price/1000)}K Ks`,
+      callback_data: `plan:${serverId}:${p1.id}`,
+    });
+
+    if (i + 1 < plans.length) {
+      const p2 = plans[i + 1];
+      row.push({
+        text: `📅 ${p2.months}M - ${(p2.price/1000)}K Ks`,
+        callback_data: `plan:${serverId}:${p2.id}`,
+      });
+    }
+    keyboard.push(row);
   }
 
   keyboard.push([{ text: '◀️ နောက်သို့', callback_data: `server_${serverId}` }]);

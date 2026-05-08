@@ -362,9 +362,10 @@ async function notifyBotUser(
     if (!user?.telegramId) return;
 
     if (action === 'approved') {
+      const typeText = order.orderType === 'vpn' ? 'VPN Key' : 'Product Keys';
       await sendBotMessage(
         user.telegramId,
-        `✅ Order ${order.orderNumber} အတည်ပြုပြီးပါပြီ!\n\n🔑 VPN Key ကို အောက်မှာ ကြည့်ပါ 👇`
+        `✅ Order ${order.orderNumber} အတည်ပြုပြီးပါပြီ!\n\n🔑 ${typeText} ကို အောက်မှာ ကြည့်ပါ 👇`
       );
 
       // Send key details if VPN order

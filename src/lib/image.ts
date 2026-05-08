@@ -1,11 +1,16 @@
 export function normalizeImageSrc(image?: string | null): string | undefined {
   if (!image) return undefined;
 
-  const decoded = image
-    .replace(/&#x2f;|&#47;/gi, '/')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#x27;|&#39;/gi, "'");
+  // Decode entities in two passes to handle values like "&amp;#x2F;uploads..."
+  // where the first pass turns it into "&#x2F;uploads..." and the second into "/uploads...".
+  let decoded = image;
+  for (let i = 0; i < 2; i++) {
+    decoded = decoded
+      .replace(/&amp;/gi, '&')
+      .replace(/&#x2f;|&#47;/gi, '/')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#x27;|&#39;/gi, "'");
+  }
 
   const trimmed = decoded.trim();
   if (!trimmed) return undefined;

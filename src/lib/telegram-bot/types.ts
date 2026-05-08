@@ -106,4 +106,5 @@ export interface BotContext {
   callbackQueryId?: string;
   callbackData?: string;
   isAdmin: boolean;
+  lang?: 'en' | 'my';
 }

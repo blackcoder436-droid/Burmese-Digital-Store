@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
  * Set or delete the webhook
  *
  * Body:
- *   { "action": "set" }    → sets webhook to {APP_URL}/api/telegram/webhook
+ *   { "action": "set" }    → sets webhook to {APP_URL}/api/telegram/bot/webhook
  *   { "action": "delete" } → deletes webhook
  */
 export async function POST(request: NextRequest) {
