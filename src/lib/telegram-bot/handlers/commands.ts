@@ -79,21 +79,25 @@ export async function findOrCreateTelegramUser(
 
   // Try to find by telegramId
   let user = await User.findOne({ telegramId });
+  
+  // Format the name to pass the 'minlength: 2' mongoose validation
+  let validName = [firstName, lastName].filter(Boolean).join(' ').trim();
+  if (validName.length === 1) validName += '.';
+  const fullName = validName || `TG_${telegramId}`;
+
   if (user) {
     // Update username/name if changed
     const updates: Record<string, unknown> = {};
-    const fullName = [firstName, lastName].filter(Boolean).join(' ');
     if (user.telegramUsername !== username) updates.telegramUsername = username || null;
-    if (user.name !== fullName && fullName) updates.name = fullName;
+    if (user.name !== fullName) updates.name = fullName;
 
     if (Object.keys(updates).length > 0) {
-      await User.updateOne({ _id: user._id }, { $set: updates });
+      await User.updateOne({ _id: user._id }, { $set: updates }, { runValidators: true }).catch(err => log.warn('Failed to update TG user info', { err }));
     }
     return user;
   }
 
   // Create new user for Telegram
-  const fullName = [firstName, lastName].filter(Boolean).join(' ') || `TG_${telegramId}`;
   const placeholderEmail = `tg_${telegramId}@telegram.bot`;
   const referralCode = generateReferralCode();
 
