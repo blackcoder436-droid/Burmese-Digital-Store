@@ -143,24 +143,12 @@ export function planKeyboard(
 ): InlineKeyboardMarkup {
   const keyboard: InlineKeyboard = [];
 
-  // Group plans into 2 columns if names/prices fit well, but plans usually have long names
-  // We'll keep plans 1 per row if price is shown, or 2 per row if concise. Let's do 2.
-  for (let i = 0; i < plans.length; i += 2) {
-    const row = [];
-    const p1 = plans[i];
-    row.push({
-      text: `📅 ${p1.months}M - ${(p1.price/1000)}K Ks`,
-      callback_data: `plan:${serverId}:${p1.id}`,
-    });
-
-    if (i + 1 < plans.length) {
-      const p2 = plans[i + 1];
-      row.push({
-        text: `📅 ${p2.months}M - ${(p2.price/1000)}K Ks`,
-        callback_data: `plan:${serverId}:${p2.id}`,
-      });
-    }
-    keyboard.push(row);
+  // Show one plan per row (single column) for better visibility
+  for (const plan of plans) {
+    keyboard.push([{
+      text: `📅 ${plan.months} Month${plan.months > 1 ? 's' : ''} - ${plan.price.toLocaleString()} Ks`,
+      callback_data: `plan:${serverId}:${plan.id}`,
+    }]);
   }
 
   keyboard.push([{ text: '◀️ နောက်သို့', callback_data: `server_${serverId}` }]);
