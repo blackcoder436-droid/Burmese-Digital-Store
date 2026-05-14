@@ -20,7 +20,7 @@ export interface IVpnPlanData {
 }
 
 export interface IVpnKeyData {
-  serverId?: string;
+  serverId: string;
   clientEmail: string;
   clientUUID: string;
   subId: string;
@@ -29,10 +29,6 @@ export interface IVpnKeyData {
   protocol: string;
   expiryTime: number; // unix ms
   provisionedAt?: Date;
-}
-
-export interface IVpnKeyEntry extends IVpnKeyData {
-  serverId: string;
 }
 
 export type VpnProvisionStatus = 'pending' | 'provisioned' | 'failed' | 'revoked';
@@ -70,7 +66,7 @@ export interface IOrderDocument extends Document {
   // VPN-specific fields
   vpnPlan?: IVpnPlanData;
   vpnKey?: IVpnKeyData;
-  vpnKeys?: IVpnKeyEntry[];
+  vpnKeys?: IVpnKeyData[];
   vpnCombinedSubLink?: string;
   vpnSubToken?: string;
   vpnProvisionStatus?: VpnProvisionStatus;

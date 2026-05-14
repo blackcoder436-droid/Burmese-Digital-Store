@@ -104,7 +104,9 @@ export default function AdminServersPage() {
       if (data.success && data.data?.settings) {
         const settings = data.data.settings;
         setProvisioningMode(settings.vpnProvisioningMode || 'single');
-        setProvisioningServers((settings.vpnProvisioningServerIds || []).join(', '));
+        if (Array.isArray(settings.vpnProvisioningServerIds)) {
+          setProvisioningServers(settings.vpnProvisioningServerIds.join(', '));
+        }
       }
     } catch {
       // Ignore settings load errors

@@ -172,7 +172,7 @@ export async function approveOrder(
           clientEmail: result.primary.clientEmail,
           clientUUID: result.primary.clientUUID,
           subId: result.primary.subId,
-          subLink: result.combinedSubLink,
+          subLink: result.primary.subLink,
           configLink: result.primary.configLink,
           protocol: result.primary.protocol,
           expiryTime: result.primary.expiryTime,

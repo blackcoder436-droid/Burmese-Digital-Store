@@ -6,6 +6,8 @@ import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
 import { sanitizeString } from '@/lib/security';
 
+const MAX_PROVISIONING_SERVERS = 50;
+
 // ==========================================
 // Admin Settings API - Burmese Digital Store
 // GET: Retrieve settings, PATCH: Update settings
@@ -65,7 +67,7 @@ export async function PATCH(request: NextRequest) {
       const ids = body.vpnProvisioningServerIds
         .map((id: unknown) => sanitizeString(String(id || '')).toLowerCase())
         .filter((id: string) => /^[a-z0-9_-]+$/.test(id));
-      settings.vpnProvisioningServerIds = Array.from(new Set(ids)).slice(0, 50);
+      settings.vpnProvisioningServerIds = Array.from(new Set(ids)).slice(0, MAX_PROVISIONING_SERVERS);
       changes.push(`VPN provisioning server group updated`);
     }
 

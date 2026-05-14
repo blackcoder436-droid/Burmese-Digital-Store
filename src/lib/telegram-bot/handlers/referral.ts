@@ -245,6 +245,7 @@ export async function handleClaimFreeMonth(
         protocol: 'trojan',
       },
       vpnKey: {
+        serverId: server.id,
         clientEmail: result.clientEmail,
         clientUUID: result.clientUUID,
         subId: result.subId,

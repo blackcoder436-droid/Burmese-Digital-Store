@@ -83,9 +83,7 @@ export async function GET(
     }
 
     const storedLinks = Array.isArray(order.vpnKeys) ? order.vpnKeys.map((k) => k.subLink).filter(Boolean) : [];
-    const fallbackLink = order.vpnKey?.subLink && order.vpnKey.subLink !== order.vpnCombinedSubLink
-      ? [order.vpnKey.subLink]
-      : [];
+    const fallbackLink = order.vpnKey?.subLink ? [order.vpnKey.subLink] : [];
     const subLinks = [...storedLinks, ...fallbackLink].filter((link) => !link.includes('/api/vpn/sub/'));
 
     const safeLinks = subLinks.filter((link) => {

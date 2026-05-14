@@ -41,7 +41,7 @@ export async function resolveProvisioningServers(
     const enabled = await getEnabledServers();
     const ids = enabled.map((s) => s.id);
     const merged = Array.from(new Set([...ids, selectedServerId].filter(Boolean)));
-    return { mode, serverIds: merged.length > 0 ? merged : [selectedServerId] };
+    return { mode, serverIds: merged };
   }
 
   if (mode === 'server-group') {
@@ -51,7 +51,7 @@ export async function resolveProvisioningServers(
       .map((id) => String(id).toLowerCase())
       .filter((id) => enabledIds.has(id));
     const merged = Array.from(new Set([...groupIds, selectedServerId].filter(Boolean)));
-    return { mode, serverIds: merged.length > 0 ? merged : [selectedServerId] };
+    return { mode, serverIds: merged };
   }
 
   return { mode: 'single', serverIds: [selectedServerId] };
