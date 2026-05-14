@@ -80,6 +80,7 @@ class XuiSession {
   private baseUrl: string;
   private cookies: string = '';
   private loggedIn: boolean = false;
+  private csrfToken: string | null = null;
 
   constructor(server: VpnServer) {
     this.server = server;
@@ -110,6 +111,17 @@ class XuiSession {
       headers['Cookie'] = this.cookies;
     }
 
+    const method = (options.method || 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || method === 'TRACE') {
+      headers['X-Requested-With'] = 'XMLHttpRequest';
+    } else {
+      const csrfToken = await this.getCsrfToken();
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+      headers['X-Requested-With'] = 'XMLHttpRequest';
+    }
+
     try {
       const requestOptions: RequestInit & { dispatcher?: Agent } = {
         ...options,
@@ -123,6 +135,11 @@ class XuiSession {
 
       const response = await fetch(url, requestOptions);
       clearTimeout(timeout);
+
+      if (response.status === 403 && retries > 0 && method !== 'GET' && method !== 'HEAD') {
+        this.csrfToken = null;
+        return this.request(urlPath, options, retries - 1);
+      }
 
       if (response.status >= 500 && retries > 0) {
         await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS * (MAX_RETRIES - retries + 1)));
@@ -145,6 +162,26 @@ class XuiSession {
     }
   }
 
+  private async getCsrfToken(): Promise<string | null> {
+    if (this.csrfToken) return this.csrfToken;
+
+    try {
+      const res = await this.request('/csrf-token', { method: 'GET' });
+      const result = (await res.json()) as { success?: boolean; obj?: string };
+      if (result.success && typeof result.obj === 'string' && result.obj) {
+        this.csrfToken = result.obj;
+        return this.csrfToken;
+      }
+    } catch (error: unknown) {
+      log.warn('Failed to load XUI CSRF token', {
+        server: this.server.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return null;
+  }
+
   // ---- Login ----
   async login(): Promise<boolean> {
     if (this.loggedIn) return true;
@@ -154,30 +191,56 @@ class XuiSession {
     }
 
     try {
-      const body = new URLSearchParams({
+      const body = {
         username: XUI_USERNAME,
         password: XUI_PASSWORD,
-      });
+        twoFactorCode: '',
+      };
 
       const res = await this.request('/login', {
         method: 'POST',
-        body: body.toString(),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: JSON.stringify(body),
+        headers: { 'Content-Type': 'application/json' },
       });
 
       // Capture session cookies
-      const setCookie = res.headers.getSetCookie?.() || [];
+      const setCookie = typeof res.headers.getSetCookie === 'function'
+        ? res.headers.getSetCookie()
+        : res.headers.get('set-cookie')
+          ? [res.headers.get('set-cookie') as string]
+          : [];
       if (setCookie.length > 0) {
         this.cookies = setCookie.map((c) => c.split(';')[0]).join('; ');
       }
 
-      const result: XuiLoginResult = await res.json();
+      const text = await res.text();
+      if (!text) {
+        log.error('XUI login returned empty response', {
+          server: this.server.id,
+          status: res.status,
+        });
+        return false;
+      }
+
+      let result: XuiLoginResult;
+      try {
+        result = JSON.parse(text) as XuiLoginResult;
+      } catch (error: unknown) {
+        log.error('XUI login returned non-JSON response', {
+          server: this.server.id,
+          status: res.status,
+          bodyPreview: text.slice(0, 200),
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
+
       if (result.success) {
         this.loggedIn = true;
         log.info('Logged in to XUI panel', { server: this.server.id });
         return true;
       } else {
-        log.error('XUI login failed', { server: this.server.id, msg: result.msg });
+        log.error('XUI login failed', { server: this.server.id, status: res.status, msg: result.msg });
         return false;
       }
     } catch (error: unknown) {
@@ -195,7 +258,28 @@ class XuiSession {
 
     try {
       const res = await this.request('/panel/api/inbounds/list');
-      const result: XuiApiResponse = await res.json();
+      const text = await res.text();
+      if (!text) {
+        log.error('XUI getInbounds returned empty response', {
+          server: this.server.id,
+          status: res.status,
+        });
+        return [];
+      }
+
+      let result: XuiApiResponse;
+      try {
+        result = JSON.parse(text) as XuiApiResponse;
+      } catch (error: unknown) {
+        log.error('Error parsing inbounds response', {
+          server: this.server.id,
+          status: res.status,
+          bodyPreview: text.slice(0, 200),
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return [];
+      }
+
       return result.success ? (result.obj as XuiInbound[]) || [] : [];
     } catch (error: unknown) {
       log.error('Error getting inbounds', { error: error instanceof Error ? error.message : String(error) });
@@ -309,15 +393,15 @@ class XuiSession {
       });
 
       // POST addClient
-      const body = new URLSearchParams({
+      const body = JSON.stringify({
         id: String(inboundId),
         settings: JSON.stringify({ clients: [clientSettings] }),
       });
 
       const res = await this.request('/panel/api/inbounds/addClient', {
         method: 'POST',
-        body: body.toString(),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        headers: { 'Content-Type': 'application/json' },
       });
 
       const result: XuiApiResponse = await res.json();
@@ -467,15 +551,15 @@ class XuiSession {
     if (!this.loggedIn && !(await this.login())) return false;
 
     try {
-      const body = new URLSearchParams({
+      const body = JSON.stringify({
         id: String(inboundId),
         settings: JSON.stringify({ clients: [updatedClient] }),
       });
 
       const res = await this.request(`/panel/api/inbounds/updateClient/${encodeURIComponent(clientUUID)}`, {
         method: 'POST',
-        body: body.toString(),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        headers: { 'Content-Type': 'application/json' },
       });
       const result: XuiApiResponse = await res.json();
       if (!result.success) {

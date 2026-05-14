@@ -8,14 +8,14 @@ import { approveOrder, rejectOrder } from '@/lib/order-actions';
 
 const log = createLogger({ route: '/api/telegram/webhook' });
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_VPN_BOT_TOKEN;
 
 /**
  * Verify that the webhook request is from Telegram
  * Uses a secret token set when registering the webhook
  */
 function verifyTelegramRequest(request: NextRequest): boolean {
-  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET || process.env.TELEGRAM_VPN_WEBHOOK_SECRET;
   if (!secret) {
     // If no secret configured, verify by checking bot token presence
     return !!BOT_TOKEN;

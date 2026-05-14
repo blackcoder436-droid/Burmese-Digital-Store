@@ -11,7 +11,7 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger({ module: 'telegram' });
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const BOT_TOKEN = process.env.TELEGRAM_VPN_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
 const CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID; // e.g. -1001234567890
 
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;

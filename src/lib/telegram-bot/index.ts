@@ -470,7 +470,8 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         ctx.firstName,
         ctx.username,
         keyId,
-        protocol
+        protocol,
+        ctx.messageId
       );
     }
     // ---- Referral ----
@@ -485,13 +486,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
     }
     // ---- Admin Approve/Reject (from payment channel) ----
     else if (data.startsWith('bot_approve_')) {
-      const callbackChatType = callback.message?.chat?.type;
-      const isPrivateChat = callbackChatType === 'private';
       if (!ctx.isAdmin) {
-        await answerCallback(ctx.callbackQueryId!, '❌ Admin only');
-        return;
-      }
-      if (!isPrivateChat && !isApproveChannel(ctx.chatId)) {
         await answerCallback(ctx.callbackQueryId!, '❌ Admin only');
         return;
       }
@@ -526,13 +521,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         }
       }
     } else if (data.startsWith('bot_reject_')) {
-      const callbackChatType = callback.message?.chat?.type;
-      const isPrivateChat = callbackChatType === 'private';
       if (!ctx.isAdmin) {
-        await answerCallback(ctx.callbackQueryId!, '❌ Admin only');
-        return;
-      }
-      if (!isPrivateChat && !isApproveChannel(ctx.chatId)) {
         await answerCallback(ctx.callbackQueryId!, '❌ Admin only');
         return;
       }

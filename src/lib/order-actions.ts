@@ -38,7 +38,10 @@ const VPN_BOT_TOKEN = process.env.TELEGRAM_VPN_BOT_TOKEN || process.env.TELEGRAM
  * (Standalone helper so this module doesn't import from telegram-bot/api which uses different module scope)
  */
 async function sendBotMessage(chatId: number | string, text: string): Promise<boolean> {
-  if (!VPN_BOT_TOKEN) return false;
+  if (!VPN_BOT_TOKEN) {
+    log.warn('VPN bot token missing; cannot notify Telegram user', { chatId });
+    return false;
+  }
   try {
     const res = await fetch(`https://api.telegram.org/bot${VPN_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -50,8 +53,16 @@ async function sendBotMessage(chatId: number | string, text: string): Promise<bo
       }),
     });
     const data = await res.json();
-    return data.ok === true;
-  } catch {
+    if (!data.ok) {
+      log.warn('Telegram sendBotMessage failed', { chatId, error: data.description });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    log.error('Telegram sendBotMessage error', {
+      chatId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }
