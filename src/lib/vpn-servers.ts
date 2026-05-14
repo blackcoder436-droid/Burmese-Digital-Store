@@ -12,6 +12,7 @@ export interface VpnServer {
   flag: string;
   url: string; // panel base URL (e.g. https://jan.burmesedigital.store:8080)
   panelPath: string; // e.g. /mka
+  apiKey?: string; // optional 3x-ui API token for Bearer auth
   domain: string;
   subPort: number;
   trojanPort?: number; // @deprecated — use protocolPorts
@@ -31,6 +32,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     flag: '🇸🇬',
     url: 'https://jan.burmesedigital.store:8080',
     panelPath: '/mka',
+    apiKey: '',
     domain: 'jan.burmesedigital.store',
     subPort: 2096,
     trojanPort: 22716,
@@ -46,6 +48,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     flag: '🇸🇬',
     url: 'https://sg2.burmesedigital.store:8080',
     panelPath: '/mka',
+    apiKey: '',
     domain: 'sg2.burmesedigital.store',
     subPort: 2096,
     protocolPorts: {},
@@ -60,6 +63,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     flag: '🇸🇬',
     url: 'https://sg3.burmesedigital.store:8080',
     panelPath: '/mka',
+    apiKey: '',
     domain: 'sg3.burmesedigital.store',
     subPort: 2096,
     protocolPorts: {},
@@ -74,6 +78,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     flag: '🇺🇸',
     url: 'https://us.burmesedigital.store:8080',
     panelPath: '/mka',
+    apiKey: '',
     domain: 'us.burmesedigital.store',
     subPort: 2096,
     protocolPorts: {},
@@ -88,6 +93,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     flag: '🇸🇬',
     url: 'https://sg4.burmesedigital.store:8080',
     panelPath: '/mka',
+    apiKey: '',
     domain: 'sg4.burmesedigital.store',
     subPort: 2096,
     protocolPorts: { trojan: 24439, vless: 29338, vmess: 19266 },
@@ -102,6 +108,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     flag: '🇺🇸',
     url: 'https://ny.burmesedigital.store:8080',
     panelPath: '/mka',
+    apiKey: '',
     domain: 'ny.burmesedigital.store',
     subPort: 2096,
     protocolPorts: { trojan: 25491, vless: 27314, vmess: 21784 },
@@ -135,6 +142,7 @@ function docToServer(doc: IVpnServerDocument): VpnServer {
     flag: doc.flag,
     url: doc.url,
     panelPath: doc.panelPath,
+    apiKey: (doc as unknown as Record<string, unknown>).apiKey as string || '',
     domain: doc.domain,
     subPort: doc.subPort,
     trojanPort: doc.trojanPort ?? undefined,

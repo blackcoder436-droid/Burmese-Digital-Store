@@ -11,6 +11,7 @@ export interface IVpnServerDocument extends Document {
   flag: string; // emoji flag: 🇸🇬, 🇺🇸, etc.
   url: string; // panel base URL: https://jan.burmesedigital.store:8080
   panelPath: string; // panel path: /mka
+  apiKey?: string; // Optional: 3x-ui API Token / Key for token-based authentication
   domain: string; // connection domain: jan.burmesedigital.store
   subPort: number; // subscription port: 2096
   trojanPort?: number; // @deprecated — use protocolPorts.trojan instead
@@ -57,6 +58,11 @@ const VpnServerSchema: Schema = new Schema(
       required: true,
       trim: true,
       default: '/mka',
+    },
+    apiKey: {
+      type: String,
+      trim: true,
+      default: '',
     },
     domain: {
       type: String,

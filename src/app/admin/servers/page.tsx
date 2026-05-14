@@ -30,6 +30,7 @@ interface VpnServerData {
   flag: string;
   url: string;
   panelPath: string;
+  apiKey?: string;
   domain: string;
   subPort: number;
   trojanPort?: number | null;
@@ -61,6 +62,7 @@ const emptyForm = {
   flag: '🇸🇬',
   url: '',
   panelPath: '/mka',
+  apiKey: '',
   domain: '',
   subPort: 2096,
   trojanPort: '' as string | number,
@@ -141,6 +143,7 @@ export default function AdminServersPage() {
       flag: server.flag,
       url: server.url,
       panelPath: server.panelPath,
+      apiKey: server.apiKey || '',
       domain: server.domain,
       subPort: server.subPort,
       trojanPort: server.trojanPort || '',
@@ -447,6 +450,24 @@ export default function AdminServersPage() {
                   placeholder="/mka"
                   className="input-dark w-full"
                 />
+              </div>
+
+              {/* API Key */}
+              <div>
+                <label className="text-xs font-semibold text-gray-400 block mb-1">
+                  3xUI API Key
+                </label>
+                <input
+                  type="password"
+                  value={form.apiKey || ''}
+                  onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+                  placeholder="Bearer token from 3x-ui Settings → API Token"
+                  className="input-dark w-full"
+                  autoComplete="off"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  If set, the backend will use this token instead of the browser login flow.
+                </p>
               </div>
 
               {/* Domain */}

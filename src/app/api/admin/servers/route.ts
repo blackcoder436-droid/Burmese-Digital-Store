@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
     const flag = (body.flag || '').trim();
     const url = sanitizeUrlString(body.url || '').replace(/\/$/, ''); // strip trailing slash
     const panelPath = sanitizeUrlString(body.panelPath || '/mka');
+    const apiKey = sanitizeString(body.apiKey || '');
     const domain = sanitizeUrlString(body.domain || '');
     const subPort = parseInt(body.subPort) || 2096;
     const trojanPort = body.trojanPort ? parseInt(body.trojanPort) : null;
@@ -137,6 +138,7 @@ export async function POST(request: NextRequest) {
       flag,
       url,
       panelPath,
+      apiKey,
       domain,
       subPort,
       trojanPort,
@@ -258,6 +260,7 @@ export async function PATCH(request: NextRequest) {
       updates.push('panelPath');
     }
     if (body.domain !== undefined) { server.domain = sanitizeUrlString(body.domain); updates.push('domain'); }
+    if (body.apiKey !== undefined) { server.apiKey = sanitizeString(body.apiKey || ''); updates.push('apiKey'); }
     if (body.subPort !== undefined) { server.subPort = parseInt(body.subPort) || 2096; updates.push('subPort'); }
     if (body.trojanPort !== undefined) { server.trojanPort = body.trojanPort ? parseInt(body.trojanPort) : undefined; updates.push('trojanPort'); }
     if (body.protocolPorts !== undefined && typeof body.protocolPorts === 'object') {

@@ -78,6 +78,7 @@ interface ClientStats {
 class XuiSession {
   private server: VpnServer;
   private baseUrl: string;
+  private apiKey: string;
   private cookies: string = '';
   private loggedIn: boolean = false;
   private csrfToken: string | null = null;
@@ -92,6 +93,7 @@ class XuiSession {
     }
 
     this.baseUrl = `${server.url}${server.panelPath}`;
+    this.apiKey = server.apiKey?.trim() || '';
   }
 
   // ---- fetch wrapper with retry + SSL skip ----
@@ -107,25 +109,27 @@ class XuiSession {
     const headers: Record<string, string> = {
       ...(options.headers as Record<string, string> || {}),
     };
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
     if (this.cookies) {
       headers['Cookie'] = this.cookies;
     }
 
     const method = (options.method || 'GET').toUpperCase();
-    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS' || method === 'TRACE') {
-      headers['X-Requested-With'] = 'XMLHttpRequest';
-    } else {
-      const csrfToken = await this.getCsrfToken();
-      if (csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
-      }
-      headers['X-Requested-With'] = 'XMLHttpRequest';
-    }
+    headers['X-Requested-With'] = 'XMLHttpRequest';
 
-    try {
+    const sendRequest = async (csrfToken: string | null): Promise<Response> => {
+      const requestHeaders: Record<string, string> = { ...headers };
+      if (csrfToken) {
+        requestHeaders['X-CSRF-Token'] = csrfToken;
+      } else {
+        delete requestHeaders['X-CSRF-Token'];
+      }
+
       const requestOptions: RequestInit & { dispatcher?: Agent } = {
         ...options,
-        headers,
+        headers: requestHeaders,
         signal: controller.signal,
       };
 
@@ -133,7 +137,26 @@ class XuiSession {
         requestOptions.dispatcher = tlsAgent;
       }
 
-      const response = await fetch(url, requestOptions);
+      return fetch(url, requestOptions);
+    };
+
+    try {
+      let response = await sendRequest(null);
+
+      if (
+        response.status === 403 &&
+        retries > 0 &&
+        method !== 'GET' &&
+        method !== 'HEAD' &&
+        !this.apiKey
+      ) {
+        this.csrfToken = null;
+        const csrfToken = await this.getCsrfToken();
+        if (csrfToken) {
+          response = await sendRequest(csrfToken);
+        }
+      }
+
       clearTimeout(timeout);
 
       // Automatically capture and store session cookies from any request
@@ -197,15 +220,16 @@ class XuiSession {
   // ---- Login ----
   async login(): Promise<boolean> {
     if (this.loggedIn) return true;
+    if (this.apiKey) {
+      this.loggedIn = true;
+      return true;
+    }
     if (!XUI_USERNAME || !XUI_PASSWORD) {
       log.error('XUI credentials missing');
       return false;
     }
 
     try {
-      // Step 1: Pre-fetch CSRF token to establish the session cookie and token
-      const csrfToken = await this.getCsrfToken();
-
       const body = {
         username: XUI_USERNAME,
         password: XUI_PASSWORD,
@@ -222,25 +246,38 @@ class XuiSession {
         'X-Requested-With': 'XMLHttpRequest'
       };
 
-      if (this.cookies) {
-        reqHeaders['Cookie'] = this.cookies;
-      }
-      if (csrfToken) {
-        reqHeaders['X-CSRF-Token'] = csrfToken;
-      }
+      const sendLogin = async (csrfToken: string | null): Promise<Response> => {
+        const headers = { ...reqHeaders };
+        if (this.cookies) {
+          headers['Cookie'] = this.cookies;
+        }
+        if (csrfToken) {
+          headers['X-CSRF-Token'] = csrfToken;
+        }
 
-      const requestOptions: RequestInit & { dispatcher?: Agent } = {
-        method: 'POST',
-        body: JSON.stringify(body),
-        headers: reqHeaders,
-        signal: controller.signal,
+        const requestOptions: RequestInit & { dispatcher?: Agent } = {
+          method: 'POST',
+          body: JSON.stringify(body),
+          headers,
+          signal: controller.signal,
+        };
+
+        if (tlsAgent) {
+          requestOptions.dispatcher = tlsAgent;
+        }
+
+        return fetch(url, requestOptions);
       };
 
-      if (tlsAgent) {
-        requestOptions.dispatcher = tlsAgent;
+      let res = await sendLogin(null);
+      if (res.status === 403) {
+        this.csrfToken = null;
+        const csrfToken = await this.getCsrfToken();
+        if (csrfToken) {
+          res = await sendLogin(csrfToken);
+        }
       }
 
-      const res = await fetch(url, requestOptions);
       clearTimeout(timeout);
 
       // Cookies are now captured automatically by getCsrfToken and this.request()
@@ -434,7 +471,7 @@ class XuiSession {
       });
 
       // POST addClient
-      const body = JSON.stringify({
+      const body = new URLSearchParams({
         id: String(inboundId),
         settings: JSON.stringify({ clients: [clientSettings] }),
       });
@@ -442,7 +479,7 @@ class XuiSession {
       const res = await this.request('/panel/api/inbounds/addClient', {
         method: 'POST',
         body,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
       const result: XuiApiResponse = await res.json();
