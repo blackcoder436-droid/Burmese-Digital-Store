@@ -219,9 +219,10 @@ export async function GET(
       doc.text(`Expires: ${new Date(o.vpnKey.expiryTime).toLocaleDateString('en-US', {
         year: 'numeric', month: 'long', day: 'numeric',
       })}`, 50, y);
-      if (o.vpnKey.subLink) {
+      const subLink = o.vpnCombinedSubLink || o.vpnKey.subLink;
+      if (subLink) {
         y += 13;
-        doc.text(`Sub Link: ${o.vpnKey.subLink}`, 50, y, { width: 495, lineBreak: true });
+        doc.text(`Sub Link: ${subLink}`, 50, y, { width: 495, lineBreak: true });
       }
     }
 

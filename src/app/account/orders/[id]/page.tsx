@@ -56,6 +56,7 @@ interface OrderDetail {
     expiryTime: number;
     provisionedAt?: string;
   };
+  vpnCombinedSubLink?: string;
   vpnProvisionStatus?: string;
   couponCode?: string;
   discountAmount?: number;
@@ -318,7 +319,13 @@ export default function OrderDetailPage() {
         {/* VPN Key — separate card */}
         {order.status === 'completed' && order.orderType === 'vpn' && order.vpnKey && (
           <div className="scroll-fade mb-4 sm:mb-6" data-delay="150">
-            <VpnKeyDisplay vpnKey={order.vpnKey} vpnPlan={order.vpnPlan} />
+            <VpnKeyDisplay
+              vpnKey={{
+                ...order.vpnKey,
+                subLink: order.vpnCombinedSubLink || order.vpnKey.subLink,
+              }}
+              vpnPlan={order.vpnPlan}
+            />
           </div>
         )}
       </div>

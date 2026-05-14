@@ -5,7 +5,7 @@ import Product from '@/models/Product';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
-import { provisionVpnKey, revokeVpnKey } from '@/lib/xui';
+import { provisionMultiServerKeys, revokeProvisionedKeys } from '@/lib/vpn-provisioning';
 import { getPlan } from '@/lib/vpn-plans';
 import { getServer } from '@/lib/vpn-servers';
 import User from '@/models/User';
@@ -200,7 +200,10 @@ export async function PATCH(request: NextRequest) {
       order.vpnPlan?.serverId
     ) {
       try {
-        const revoked = await revokeVpnKey(order.vpnPlan.serverId, order.vpnKey.clientEmail);
+        const keysToRevoke = order.vpnKeys && order.vpnKeys.length > 0
+          ? order.vpnKeys.map((k) => ({ serverId: k.serverId, clientEmail: k.clientEmail }))
+          : [{ serverId: order.vpnPlan.serverId, clientEmail: order.vpnKey.clientEmail }];
+        const revoked = await revokeProvisionedKeys(keysToRevoke);
         if (revoked) {
           order.vpnProvisionStatus = 'revoked';
           log.info('VPN key revoked on refund', { orderId: order._id });
@@ -340,14 +343,14 @@ export async function PUT(request: NextRequest) {
 
       log.info('Retrying VPN provision', { orderId: order._id, serverId: vpnPlan.serverId });
 
-      const result = await provisionVpnKey({
+      const result = await provisionMultiServerKeys({
         serverId: vpnPlan.serverId,
         username,
         userId: order.user.toString(),
         devices: plan.devices,
         expiryDays: plan.expiryDays,
         dataLimitGB: plan.dataLimitGB,
-        protocol: 'trojan',
+        protocol: vpnPlan.protocol || 'trojan',
       });
 
       if (!result) {
@@ -369,15 +372,29 @@ export async function PUT(request: NextRequest) {
       }
 
       order.vpnKey = {
-        clientEmail: result.clientEmail,
-        clientUUID: result.clientUUID,
-        subId: result.subId,
-        subLink: result.subLink,
-        configLink: result.configLink,
-        protocol: result.protocol,
-        expiryTime: result.expiryTime,
+        serverId: result.primary.serverId,
+        clientEmail: result.primary.clientEmail,
+        clientUUID: result.primary.clientUUID,
+        subId: result.primary.subId,
+        subLink: result.combinedSubLink,
+        configLink: result.primary.configLink,
+        protocol: result.primary.protocol,
+        expiryTime: result.primary.expiryTime,
         provisionedAt: new Date(),
       };
+      order.vpnKeys = result.keys.map((key) => ({
+        serverId: key.serverId,
+        clientEmail: key.clientEmail,
+        clientUUID: key.clientUUID,
+        subId: key.subId,
+        subLink: key.subLink,
+        configLink: key.configLink,
+        protocol: key.protocol,
+        expiryTime: key.expiryTime,
+        provisionedAt: key.provisionedAt,
+      }));
+      order.vpnCombinedSubLink = result.combinedSubLink;
+      order.vpnSubToken = result.subToken;
       order.vpnProvisionStatus = 'provisioned';
       order.status = 'completed';
       await order.save();
@@ -403,7 +420,7 @@ export async function PUT(request: NextRequest) {
           action: 'vpn_provisioned',
           target: `VPN Order #${order._id.toString().slice(-8)} — ${server.name}`,
           details: `Retry successful: ${plan.name}`,
-          metadata: { orderId: order._id, serverId: vpnPlan.serverId, clientEmail: result.clientEmail },
+          metadata: { orderId: order._id, serverId: vpnPlan.serverId, clientEmail: result.primary.clientEmail },
         });
       } catch { /* */ }
 
@@ -423,7 +440,10 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      const revoked = await revokeVpnKey(order.vpnPlan!.serverId, order.vpnKey.clientEmail);
+      const keysToRevoke = order.vpnKeys && order.vpnKeys.length > 0
+        ? order.vpnKeys.map((k) => ({ serverId: k.serverId, clientEmail: k.clientEmail }))
+        : [{ serverId: order.vpnPlan!.serverId, clientEmail: order.vpnKey.clientEmail }];
+      const revoked = await revokeProvisionedKeys(keysToRevoke);
       if (!revoked) {
         return NextResponse.json(
           { success: false, error: 'Failed to revoke key from panel' },

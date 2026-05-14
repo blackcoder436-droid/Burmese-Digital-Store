@@ -234,6 +234,11 @@ export async function PATCH(request: NextRequest) {
         { 'vpnKey.serverId': serverId },
         { $set: { 'vpnKey.serverId': newId } }
       );
+      await Order.updateMany(
+        { 'vpnKeys.serverId': serverId },
+        { $set: { 'vpnKeys.$[elem].serverId': newId } },
+        { arrayFilters: [{ 'elem.serverId': serverId }] }
+      );
       server.serverId = newId;
       updates.push(`serverId: ${serverId} → ${newId}`);
     }

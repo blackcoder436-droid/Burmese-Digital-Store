@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
         .skip((page - 1) * limit)
         .limit(limit)
         .select(
-          'user vpnPlan vpnKey vpnProvisionStatus status totalAmount createdAt'
+          'user vpnPlan vpnKey vpnKeys vpnCombinedSubLink vpnProvisionStatus status totalAmount createdAt'
         )
         .lean(),
       Order.countDocuments(query),

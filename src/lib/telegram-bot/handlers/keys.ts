@@ -89,7 +89,8 @@ export async function handleMyKeys(
       text += `${statusIcon} <b>${server?.flag || ''} ${server?.name || 'Unknown'}</b>\n`;
       text += `⚙️ ${order.vpnKey.protocol.toUpperCase()} | 📱 ${order.vpnPlan.devices}D\n`;
       text += `📅 ${expiryDate} (${daysLeft} ရက်ကျန်)\n`;
-      text += `🔗 Sub: <code>${order.vpnKey.subLink}</code>\n\n`;
+      const subLink = order.vpnCombinedSubLink || order.vpnKey.subLink;
+      text += `🔗 Sub: <code>${subLink}</code>\n\n`;
 
       keyboard.push([
         {
@@ -139,6 +140,7 @@ export async function handleViewKey(
       minute: '2-digit',
     });
 
+    const subLink = order.vpnCombinedSubLink || order.vpnKey.subLink;
     const text =
       `🔑 <b>Key Details</b>\n\n` +
       `📦 Order: ${order.orderNumber}\n` +
@@ -149,7 +151,7 @@ export async function handleViewKey(
       `📅 Expiry: ${expiryDate}\n\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
       `🔗 <b>Subscription Link:</b>\n` +
-      `<code>${order.vpnKey.subLink}</code>\n\n` +
+      `<code>${subLink}</code>\n\n` +
       `🔑 <b>Config Link:</b>\n` +
       `<code>${order.vpnKey.configLink}</code>\n` +
       `━━━━━━━━━━━━━━━━━━`;

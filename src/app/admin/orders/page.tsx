@@ -47,6 +47,8 @@ interface Order {
   deliveredKeys: any[];
   vpnPlan?: { serverId: string; planId: string; devices: number; months: number };
   vpnKey?: { clientEmail: string; subLink: string; configLink: string; protocol: string; expiryTime: number };
+  vpnCombinedSubLink?: string;
+  vpnKeys?: { serverId: string; subLink: string }[];
   vpnProvisionStatus?: string;
   adminNote: string;
   createdAt: string;
@@ -583,11 +585,33 @@ export default function AdminOrdersPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">Sub: </span>
-                        <code className="text-cyan-400 font-mono text-[10px] truncate max-w-[300px] block">{selectedOrder.vpnKey.subLink}</code>
-                        <button onClick={() => copyText(selectedOrder.vpnKey!.subLink, 'admin-sub')} className="shrink-0 p-1 hover:bg-cyan-500/10 rounded text-gray-400 hover:text-cyan-400">
+                        <code className="text-cyan-400 font-mono text-[10px] truncate max-w-[300px] block">
+                          {selectedOrder.vpnCombinedSubLink || selectedOrder.vpnKey.subLink}
+                        </code>
+                        <button
+                          onClick={() => copyText(selectedOrder.vpnCombinedSubLink || selectedOrder.vpnKey!.subLink, 'admin-sub')}
+                          className="shrink-0 p-1 hover:bg-cyan-500/10 rounded text-gray-400 hover:text-cyan-400"
+                        >
                           {copiedField === 'admin-sub' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
                       </div>
+                      {selectedOrder.vpnKeys && selectedOrder.vpnKeys.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-gray-500">Server Subs:</span>
+                          {selectedOrder.vpnKeys.map((key) => (
+                            <div key={key.serverId} className="flex items-center gap-2">
+                              <span className="text-[10px] text-gray-400 uppercase">{key.serverId}</span>
+                              <code className="text-[10px] text-cyan-300 font-mono truncate max-w-[240px] block">{key.subLink}</code>
+                              <button
+                                onClick={() => copyText(key.subLink, `admin-sub-${key.serverId}`)}
+                                className="shrink-0 p-1 hover:bg-cyan-500/10 rounded text-gray-400 hover:text-cyan-400"
+                              >
+                                {copiedField === `admin-sub-${key.serverId}` ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div>
                         <span className="text-gray-500">Expiry: </span>
                         <span className="text-white">{new Date(selectedOrder.vpnKey.expiryTime).toLocaleDateString()}</span>

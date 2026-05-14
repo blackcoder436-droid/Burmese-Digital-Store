@@ -87,11 +87,58 @@ export default function AdminServersPage() {
   const [totalEnabled, setTotalEnabled] = useState(0);
   const [totalDisabled, setTotalDisabled] = useState(0);
   const [healthData, setHealthData] = useState<Record<string, { online: boolean; latencyMs: number | null }>>({});
+  const [provisioningMode, setProvisioningMode] = useState<'single' | 'all-enabled' | 'server-group'>('single');
+  const [provisioningServers, setProvisioningServers] = useState('');
+  const [savingProvisioning, setSavingProvisioning] = useState(false);
 
   useEffect(() => {
     fetchServers();
     fetchHealth();
+    fetchProvisioningSettings();
   }, []);
+
+  async function fetchProvisioningSettings() {
+    try {
+      const res = await fetch('/api/admin/settings');
+      const data = await res.json();
+      if (data.success && data.data?.settings) {
+        const settings = data.data.settings;
+        setProvisioningMode(settings.vpnProvisioningMode || 'single');
+        setProvisioningServers((settings.vpnProvisioningServerIds || []).join(', '));
+      }
+    } catch {
+      // Ignore settings load errors
+    }
+  }
+
+  async function saveProvisioningSettings() {
+    setSavingProvisioning(true);
+    try {
+      const ids = provisioningServers
+        .split(/[,\s]+/)
+        .map((id) => id.trim().toLowerCase())
+        .filter(Boolean);
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vpnProvisioningMode: provisioningMode,
+          vpnProvisioningServerIds: ids,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('VPN provisioning settings updated');
+        setProvisioningServers((data.data?.settings?.vpnProvisioningServerIds || ids).join(', '));
+      } else {
+        toast.error(data.error || 'Failed to update settings');
+      }
+    } catch {
+      toast.error('Failed to update settings');
+    } finally {
+      setSavingProvisioning(false);
+    }
+  }
 
   async function fetchHealth() {
     try {
@@ -327,7 +374,7 @@ export default function AdminServersPage() {
             </button>
           )}
           <button
-            onClick={() => { fetchServers(); fetchHealth(); }}
+            onClick={() => { fetchServers(); fetchHealth(); fetchProvisioningSettings(); }}
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-400 hover:text-white bg-dark-800 hover:bg-dark-700 border border-dark-600 rounded-xl transition-all"
           >
             <RefreshCw className="w-4 h-4" />
@@ -355,6 +402,52 @@ export default function AdminServersPage() {
         <div className="card-dark p-4">
           <p className="text-xs text-gray-500 mb-1">{t('admin.serversPage.disabled')}</p>
           <p className="text-2xl font-bold text-red-400">{totalDisabled}</p>
+        </div>
+      </div>
+
+      {/* VPN Provisioning Strategy */}
+      <div className="card-dark p-4 border border-purple-500/10">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-white">VPN Provisioning Strategy</h2>
+            <p className="text-xs text-gray-500">
+              Choose which servers will be used when provisioning new VPN orders.
+            </p>
+          </div>
+          <button
+            onClick={saveProvisioningSettings}
+            disabled={savingProvisioning}
+            className="flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-lg text-purple-300 transition-all disabled:opacity-50"
+          >
+            {savingProvisioning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            {t('common.save')}
+          </button>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-semibold text-gray-400 block mb-1">Mode</label>
+            <select
+              value={provisioningMode}
+              onChange={(e) => setProvisioningMode(e.target.value as 'single' | 'all-enabled' | 'server-group')}
+              className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+            >
+              <option value="single">Single server (user selection)</option>
+              <option value="all-enabled">All enabled servers</option>
+              <option value="server-group">Server group</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-400 block mb-1">
+              Server group IDs (comma-separated)
+            </label>
+            <input
+              value={provisioningServers}
+              onChange={(e) => setProvisioningServers(e.target.value)}
+              disabled={provisioningMode !== 'server-group'}
+              placeholder="sg1, sg2, sg3"
+              className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/30 disabled:opacity-60"
+            />
+          </div>
         </div>
       </div>
 

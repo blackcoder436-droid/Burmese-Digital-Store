@@ -20,7 +20,7 @@ import Order from '@/models/Order';
 import Product from '@/models/Product';
 import User from '@/models/User';
 import { createNotification } from '@/models/Notification';
-import { provisionVpnKey, revokeVpnKey } from '@/lib/xui';
+import { provisionMultiServerKeys, revokeProvisionedKeys } from '@/lib/vpn-provisioning';
 import { getPlan } from '@/lib/vpn-plans';
 import { getServer } from '@/lib/vpn-servers';
 import { releaseFromQuarantine, deleteFromQuarantine } from '@/lib/quarantine';
@@ -145,7 +145,7 @@ export async function approveOrder(
           source: ctx.source,
         });
 
-        const result = await provisionVpnKey({
+        const result = await provisionMultiServerKeys({
           serverId: order.vpnPlan.serverId,
           username,
           userId: order.user.toString(),
@@ -168,15 +168,29 @@ export async function approveOrder(
         }
 
         order.vpnKey = {
-          clientEmail: result.clientEmail,
-          clientUUID: result.clientUUID,
-          subId: result.subId,
-          subLink: result.subLink,
-          configLink: result.configLink,
-          protocol: result.protocol,
-          expiryTime: result.expiryTime,
+          serverId: result.primary.serverId,
+          clientEmail: result.primary.clientEmail,
+          clientUUID: result.primary.clientUUID,
+          subId: result.primary.subId,
+          subLink: result.combinedSubLink,
+          configLink: result.primary.configLink,
+          protocol: result.primary.protocol,
+          expiryTime: result.primary.expiryTime,
           provisionedAt: new Date(),
         };
+        order.vpnKeys = result.keys.map((key) => ({
+          serverId: key.serverId,
+          clientEmail: key.clientEmail,
+          clientUUID: key.clientUUID,
+          subId: key.subId,
+          subLink: key.subLink,
+          configLink: key.configLink,
+          protocol: key.protocol,
+          expiryTime: key.expiryTime,
+          provisionedAt: key.provisionedAt,
+        }));
+        order.vpnCombinedSubLink = result.combinedSubLink;
+        order.vpnSubToken = result.subToken;
         order.vpnProvisionStatus = 'provisioned';
         order.status = 'completed';
         if (ctx.adminNote) order.adminNote = ctx.adminNote;
@@ -301,7 +315,10 @@ export async function rejectOrder(
       order.vpnPlan?.serverId
     ) {
       try {
-        const revoked = await revokeVpnKey(order.vpnPlan.serverId, order.vpnKey.clientEmail);
+        const keysToRevoke = order.vpnKeys && order.vpnKeys.length > 0
+          ? order.vpnKeys.map((k) => ({ serverId: k.serverId, clientEmail: k.clientEmail }))
+          : [{ serverId: order.vpnPlan.serverId, clientEmail: order.vpnKey.clientEmail }];
+        const revoked = await revokeProvisionedKeys(keysToRevoke);
         if (revoked) {
           order.vpnProvisionStatus = 'revoked';
           log.info('VPN key revoked on reject', { orderId: order._id, clientEmail: order.vpnKey.clientEmail });
@@ -386,13 +403,14 @@ async function notifyBotUser(
         const expiryDate = new Date(order.vpnKey.expiryTime).toLocaleDateString('en-GB', {
           year: 'numeric', month: 'short', day: 'numeric',
         });
+        const subLink = order.vpnCombinedSubLink || order.vpnKey.subLink;
 
         const keyMsg =
           `🔑 <b>${plan?.name || 'VPN Key'}</b>\n\n` +
           `🌐 Server: ${server ? `${server.flag} ${server.name}` : 'Unknown'}\n` +
           `⚙️ Protocol: ${order.vpnKey.protocol?.toUpperCase()}\n` +
           `📅 Expires: ${expiryDate}\n\n` +
-          `📋 <b>Subscription Link:</b>\n<code>${order.vpnKey.subLink}</code>\n\n` +
+          `📋 <b>Subscription Link:</b>\n<code>${subLink}</code>\n\n` +
           `⚙️ <b>Config Link:</b>\n<code>${order.vpnKey.configLink}</code>\n\n` +
           `📲 V2RayNG/Hiddify app မှာ Sub Link ကို add ပါ`;
 

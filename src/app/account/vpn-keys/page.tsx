@@ -22,6 +22,7 @@ interface VpnOrder {
     expiryTime: number;
     provisionedAt?: string;
   };
+  vpnCombinedSubLink?: string;
   vpnProvisionStatus?: string;
   createdAt: string;
 }
@@ -136,7 +137,13 @@ export default function VpnKeysPage() {
                   {/* VPN Key Display */}
                   {order.vpnKey && (
                     <div className="p-5">
-                      <VpnKeyDisplay vpnKey={order.vpnKey} vpnPlan={order.vpnPlan} />
+                      <VpnKeyDisplay
+                        vpnKey={{
+                          ...order.vpnKey,
+                          subLink: order.vpnCombinedSubLink || order.vpnKey.subLink,
+                        }}
+                        vpnPlan={order.vpnPlan}
+                      />
                     </div>
                   )}
                 </div>

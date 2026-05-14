@@ -53,6 +53,22 @@ export async function PATCH(request: NextRequest) {
       settings.ocrEnabled = body.ocrEnabled;
     }
 
+    if (typeof body.vpnProvisioningMode === 'string') {
+      const mode = sanitizeString(body.vpnProvisioningMode).toLowerCase();
+      if (['single', 'all-enabled', 'server-group'].includes(mode)) {
+        settings.vpnProvisioningMode = mode as typeof settings.vpnProvisioningMode;
+        changes.push(`VPN provisioning mode: ${mode}`);
+      }
+    }
+
+    if (Array.isArray(body.vpnProvisioningServerIds)) {
+      const ids = body.vpnProvisioningServerIds
+        .map((id: unknown) => sanitizeString(String(id || '')).toLowerCase())
+        .filter((id: string) => /^[a-z0-9_-]+$/.test(id));
+      settings.vpnProvisioningServerIds = Array.from(new Set(ids)).slice(0, 50);
+      changes.push(`VPN provisioning server group updated`);
+    }
+
     // Update payment accounts if provided
     if (Array.isArray(body.paymentAccounts)) {
       const validMethods = ['kpay', 'wave', 'uabpay', 'ayapay'];

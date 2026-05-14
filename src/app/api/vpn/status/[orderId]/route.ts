@@ -45,7 +45,7 @@ export async function GET(
       _id: orderId,
       user: user.userId,
       orderType: 'vpn',
-    }).select('vpnPlan vpnKey vpnProvisionStatus status createdAt');
+    }).select('vpnPlan vpnKey vpnProvisionStatus status createdAt vpnCombinedSubLink');
 
     if (!order) {
       return NextResponse.json(
@@ -64,8 +64,9 @@ export async function GET(
 
     // If provisioned, include key details + live traffic stats
     if (order.vpnProvisionStatus === 'provisioned' && order.vpnKey) {
+      const subLink = order.vpnCombinedSubLink || order.vpnKey.subLink;
       result.vpnKey = {
-        subLink: order.vpnKey.subLink,
+        subLink,
         configLink: order.vpnKey.configLink,
         protocol: order.vpnKey.protocol,
         expiryTime: order.vpnKey.expiryTime,

@@ -20,6 +20,7 @@ export interface IVpnPlanData {
 }
 
 export interface IVpnKeyData {
+  serverId?: string;
   clientEmail: string;
   clientUUID: string;
   subId: string;
@@ -28,6 +29,10 @@ export interface IVpnKeyData {
   protocol: string;
   expiryTime: number; // unix ms
   provisionedAt?: Date;
+}
+
+export interface IVpnKeyEntry extends IVpnKeyData {
+  serverId: string;
 }
 
 export type VpnProvisionStatus = 'pending' | 'provisioned' | 'failed' | 'revoked';
@@ -65,6 +70,9 @@ export interface IOrderDocument extends Document {
   // VPN-specific fields
   vpnPlan?: IVpnPlanData;
   vpnKey?: IVpnKeyData;
+  vpnKeys?: IVpnKeyEntry[];
+  vpnCombinedSubLink?: string;
+  vpnSubToken?: string;
   vpnProvisionStatus?: VpnProvisionStatus;
   adminNote?: string;
   couponCode?: string;
@@ -163,6 +171,7 @@ const OrderSchema: Schema = new Schema(
       protocol: String,
     },
     vpnKey: {
+      serverId: String,
       clientEmail: String,
       clientUUID: String,
       subId: String,
@@ -171,6 +180,27 @@ const OrderSchema: Schema = new Schema(
       protocol: String,
       expiryTime: Number,
       provisionedAt: Date,
+    },
+    vpnKeys: [
+      {
+        serverId: String,
+        clientEmail: String,
+        clientUUID: String,
+        subId: String,
+        subLink: String,
+        configLink: String,
+        protocol: String,
+        expiryTime: Number,
+        provisionedAt: Date,
+      },
+    ],
+    vpnCombinedSubLink: {
+      type: String,
+      default: null,
+    },
+    vpnSubToken: {
+      type: String,
+      default: null,
     },
     vpnProvisionStatus: {
       type: String,
@@ -280,6 +310,8 @@ OrderSchema.index({ requiresManualReview: 1, status: 1 });
 // Database indexing audit (2026-02-19)
 OrderSchema.index({ orderType: 1, vpnProvisionStatus: 1 }); // VPN keys admin page
 OrderSchema.index({ 'vpnPlan.serverId': 1 }, { sparse: true }); // VPN keys server filter
+OrderSchema.index({ 'vpnKeys.serverId': 1 }, { sparse: true });
+OrderSchema.index({ vpnSubToken: 1 }, { sparse: true });
 OrderSchema.index({ orderType: 1, status: 1, vpnProvisionStatus: 1, 'vpnKey.expiryTime': 1 }); // VPN expiry reminders cron
 OrderSchema.index({ status: 1, paymentExpiresAt: 1 }); // expireOverdueOrders batch
 OrderSchema.index({ createdAt: -1 }); // Analytics date-range aggregations

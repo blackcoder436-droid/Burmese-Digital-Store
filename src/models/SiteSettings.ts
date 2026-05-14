@@ -27,6 +27,9 @@ export interface ISiteSettingsDocument extends Document {
   highAmountThreshold: number;
   requireManualReviewForNewUsers: boolean;
   autoExpireEnabled: boolean;
+  // VPN provisioning strategy
+  vpnProvisioningMode: 'single' | 'all-enabled' | 'server-group';
+  vpnProvisioningServerIds: string[];
   // Bot feature flags
   featureFlags: IFeatureFlag[];
   // Auto-approve settings
@@ -95,6 +98,16 @@ const SiteSettingsSchema: Schema = new Schema(
     autoExpireEnabled: {
       type: Boolean,
       default: true, // Auto-expire orders past payment window
+    },
+    // VPN provisioning strategy (single server vs multi-server)
+    vpnProvisioningMode: {
+      type: String,
+      enum: ['single', 'all-enabled', 'server-group'],
+      default: 'single',
+    },
+    vpnProvisioningServerIds: {
+      type: [String],
+      default: [],
     },
     // Bot feature flags
     featureFlags: {
