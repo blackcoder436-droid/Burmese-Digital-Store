@@ -191,17 +191,34 @@ class XuiSession {
     }
 
     try {
-      const body = {
-        username: XUI_USERNAME,
-        password: XUI_PASSWORD,
-        twoFactorCode: '',
+      const formBody = new URLSearchParams();
+      formBody.append('username', XUI_USERNAME);
+      formBody.append('password', XUI_PASSWORD);
+
+      // Disable getCsrfToken for login since we don't have cookies yet, 
+      // avoiding unnecessary loops or 403 on fetching CSRF token unauthorized.
+      const url = `${this.baseUrl}/login`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      const reqHeaders: Record<string, string> = {
+        'Accept': 'application/json, text/plain, */*',
+        'X-Requested-With': 'XMLHttpRequest'
       };
 
-      const res = await this.request('/login', {
+      const requestOptions: RequestInit & { dispatcher?: Agent } = {
         method: 'POST',
-        body: JSON.stringify(body),
-        headers: { 'Content-Type': 'application/json' },
-      });
+        body: formBody,
+        headers: reqHeaders,
+        signal: controller.signal,
+      };
+
+      if (tlsAgent) {
+        requestOptions.dispatcher = tlsAgent;
+      }
+
+      const res = await fetch(url, requestOptions);
+      clearTimeout(timeout);
 
       // Capture session cookies
       const setCookie = typeof res.headers.getSetCookie === 'function'
