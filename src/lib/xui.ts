@@ -136,6 +136,18 @@ class XuiSession {
       const response = await fetch(url, requestOptions);
       clearTimeout(timeout);
 
+      // Automatically capture and store session cookies from any request
+      const setCookie = typeof response.headers.getSetCookie === 'function'
+        ? response.headers.getSetCookie()
+        : response.headers.get('set-cookie')
+          ? [response.headers.get('set-cookie') as string]
+          : [];
+      if (setCookie.length > 0) {
+        // Simple cookie extraction, dropping attributes for ease
+        const newCookies = setCookie.map((c) => c.split(';')[0]).join('; ');
+        this.cookies = newCookies;
+      }
+
       if (response.status === 403 && retries > 0 && method !== 'GET' && method !== 'HEAD') {
         this.csrfToken = null;
         return this.request(urlPath, options, retries - 1);
@@ -191,24 +203,35 @@ class XuiSession {
     }
 
     try {
-      const formBody = new URLSearchParams();
-      formBody.append('username', XUI_USERNAME);
-      formBody.append('password', XUI_PASSWORD);
+      // Step 1: Pre-fetch CSRF token to establish the session cookie and token
+      const csrfToken = await this.getCsrfToken();
 
-      // Disable getCsrfToken for login since we don't have cookies yet, 
-      // avoiding unnecessary loops or 403 on fetching CSRF token unauthorized.
+      const body = {
+        username: XUI_USERNAME,
+        password: XUI_PASSWORD,
+        twoFactorCode: '' // Optional for most setups
+      };
+
       const url = `${this.baseUrl}/login`;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
       const reqHeaders: Record<string, string> = {
         'Accept': 'application/json, text/plain, */*',
+        'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest'
       };
 
+      if (this.cookies) {
+        reqHeaders['Cookie'] = this.cookies;
+      }
+      if (csrfToken) {
+        reqHeaders['X-CSRF-Token'] = csrfToken;
+      }
+
       const requestOptions: RequestInit & { dispatcher?: Agent } = {
         method: 'POST',
-        body: formBody,
+        body: JSON.stringify(body),
         headers: reqHeaders,
         signal: controller.signal,
       };
@@ -220,7 +243,8 @@ class XuiSession {
       const res = await fetch(url, requestOptions);
       clearTimeout(timeout);
 
-      // Capture session cookies
+      // Cookies are now captured automatically by getCsrfToken and this.request()
+      // Or we capture it here directly since we bypassed this.request for login
       const setCookie = typeof res.headers.getSetCookie === 'function'
         ? res.headers.getSetCookie()
         : res.headers.get('set-cookie')
