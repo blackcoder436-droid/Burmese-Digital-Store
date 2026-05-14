@@ -425,12 +425,13 @@ class XuiSession {
       };
       const protoCode = protoCodes[inboundProtocol] || 'VPN';
 
-      // Client name format: username - {devices}D / Web ({protocol}) Key{N}
-      // Append Key number to avoid 3xUI duplicate email errors
+      // Client name format: username - {devices}D - Web {protocol} - Key{N}
+      // Avoid slashes because 3xUI panel might struggle to delete them via URL params
       const deviceLabel = `${devices}D`;
-      const baseName = username
-        ? `${username} - ${deviceLabel} / Web (${protoCode})`
-        : `User_${userId} - ${deviceLabel} / Web (${protoCode})`;
+      const safeUsername = username ? username.replace(/[/\\?%*:|"<>]/g, '') : '';
+      const baseName = safeUsername
+        ? `${safeUsername} - ${deviceLabel} - Web ${protoCode}`
+        : `User_${userId} - ${deviceLabel} - Web ${protoCode}`;
 
       // Count existing clients with same base name across all inbounds
       const allInbounds = await this.getInbounds();
