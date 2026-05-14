@@ -136,7 +136,7 @@ export default function VpnKeysPage() {
                   {/* VPN Key Display */}
                   {order.vpnKey && (
                     <div className="p-5">
-                      <VpnKeyDisplay vpnKey={order.vpnKey} vpnPlan={order.vpnPlan} />
+                      <VpnKeyDisplay vpnKey={order.vpnKey} vpnPlan={order.vpnPlan} multiSubToken={order.multiSubToken} />
                     </div>
                   )}
                 </div>

@@ -44,6 +44,16 @@ export interface IVerificationChecklist {
   completedBy?: mongoose.Types.ObjectId;
 }
 
+export interface IVpnKeyItem {
+  serverId: string;
+  clientEmail?: string;
+  clientUUID?: string;
+  subId: string;
+  subLink: string;
+  configLink: string;
+  protocol: string;
+}
+
 export interface IOrderDocument extends Document {
   orderNumber: string; // Human-readable: BD-000001
   user: mongoose.Types.ObjectId;
@@ -65,6 +75,8 @@ export interface IOrderDocument extends Document {
   // VPN-specific fields
   vpnPlan?: IVpnPlanData;
   vpnKey?: IVpnKeyData;
+  vpnKeys?: IVpnKeyItem[]; // Multi-server support
+  multiSubToken?: string; // Token for the aggregated subscription link
   vpnProvisionStatus?: VpnProvisionStatus;
   adminNote?: string;
   couponCode?: string;
@@ -171,6 +183,21 @@ const OrderSchema: Schema = new Schema(
       protocol: String,
       expiryTime: Number,
       provisionedAt: Date,
+    },
+    vpnKeys: [
+      {
+        serverId: String,
+        clientEmail: String,
+        clientUUID: String,
+        subId: String,
+        subLink: String,
+        configLink: String,
+        protocol: String,
+      }
+    ],
+    multiSubToken: {
+      type: String,
+      index: { unique: true, sparse: true },
     },
     vpnProvisionStatus: {
       type: String,

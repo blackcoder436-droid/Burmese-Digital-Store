@@ -20,9 +20,10 @@ interface VpnKeyProps {
     devices: number;
     months: number;
   };
+  multiSubToken?: string;
 }
 
-export default function VpnKeyDisplay({ vpnKey, vpnPlan }: VpnKeyProps) {
+export default function VpnKeyDisplay({ vpnKey, vpnPlan, multiSubToken }: VpnKeyProps) {
   const { t } = useLanguage();
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
@@ -59,6 +60,10 @@ export default function VpnKeyDisplay({ vpnKey, vpnPlan }: VpnKeyProps) {
   const now = new Date();
   const daysLeft = Math.max(0, Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
   const isExpired = daysLeft === 0;
+
+  // Compute sublink: prefer aggregated link if available
+  const appUrl = (typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL) || 'https://burmesedigital.store';
+  const displaySubLink = multiSubToken ? `${appUrl}/api/vpn/sub/${multiSubToken}` : vpnKey.subLink;
 
   const serverNames: Record<string, string> = {
     sg1: '🇸🇬 Singapore 1',
@@ -150,11 +155,11 @@ export default function VpnKeyDisplay({ vpnKey, vpnPlan }: VpnKeyProps) {
       <div className="p-3 sm:p-4 bg-dark-900 border border-dark-600/50 rounded-lg">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wider">
-            {t('components.vpnKey.subscriptionLink')}
+            {multiSubToken ? 'MULTI-SERVER SUBSCRIPTION LINK' : t('components.vpnKey.subscriptionLink')}
           </span>
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => copyToClipboard(vpnKey.subLink, 'sub')}
+              onClick={() => copyToClipboard(displaySubLink, 'sub')}
               className="flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs font-medium bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-md text-cyan-300 transition-all"
             >
               {copiedField === 'sub' ? (
@@ -164,7 +169,7 @@ export default function VpnKeyDisplay({ vpnKey, vpnPlan }: VpnKeyProps) {
               )}
             </button>
             <a
-              href={vpnKey.subLink}
+              href={displaySubLink}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs font-medium bg-dark-800 hover:bg-dark-700 border border-dark-600 rounded-md text-gray-300 transition-all"
@@ -175,7 +180,7 @@ export default function VpnKeyDisplay({ vpnKey, vpnPlan }: VpnKeyProps) {
           </div>
         </div>
         <code className="text-xs sm:text-sm text-cyan-400 font-mono break-all leading-relaxed block">
-          {vpnKey.subLink}
+          {displaySubLink}
         </code>
       </div>
 

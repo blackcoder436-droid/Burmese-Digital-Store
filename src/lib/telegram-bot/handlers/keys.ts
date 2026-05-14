@@ -85,11 +85,14 @@ export async function handleMyKeys(
       );
 
       const statusIcon = daysLeft <= 3 ? '🔴' : daysLeft <= 7 ? '🟡' : '🟢';
+      
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://burmesedigital.store';
+      const displaySubLink = order.multiSubToken ? `${appUrl}/api/vpn/sub/${order.multiSubToken}` : order.vpnKey.subLink;
 
-      text += `${statusIcon} <b>${server?.flag || ''} ${server?.name || 'Unknown'}</b>\n`;
+      text += `${statusIcon} <b>${order.multiSubToken ? 'All Enabled Servers' : (server?.flag || '' + ' ' + (server?.name || 'Unknown'))}</b>\n`;
       text += `⚙️ ${order.vpnKey.protocol.toUpperCase()} | 📱 ${order.vpnPlan.devices}D\n`;
       text += `📅 ${expiryDate} (${daysLeft} ရက်ကျန်)\n`;
-      text += `🔗 Sub: <code>${order.vpnKey.subLink}</code>\n\n`;
+      text += `🔗 Sub: <code>${displaySubLink}</code>\n\n`;
 
       keyboard.push([
         {
@@ -294,7 +297,8 @@ export async function handleExProtoSelect(
   firstName: string,
   username: string | undefined,
   orderId: string,
-  newProtocol: string
+  newProtocol: string,
+  messageId: number
 ): Promise<void> {
   try {
     await connectDB();

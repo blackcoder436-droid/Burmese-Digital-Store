@@ -20,9 +20,9 @@ import Order from '@/models/Order';
 import Product from '@/models/Product';
 import User from '@/models/User';
 import { createNotification } from '@/models/Notification';
-import { provisionVpnKey, revokeVpnKey } from '@/lib/xui';
+import { provisionVpnKey, revokeVpnKey, VpnProvisionResult } from '@/lib/xui';
 import { getPlan } from '@/lib/vpn-plans';
-import { getServer } from '@/lib/vpn-servers';
+import { getServer, getEnabledServers } from '@/lib/vpn-servers';
 import { releaseFromQuarantine, deleteFromQuarantine } from '@/lib/quarantine';
 import { logActivity, type ActivityAction } from '@/models/ActivityLog';
 import { createLogger } from '@/lib/logger';
@@ -128,10 +128,11 @@ export async function approveOrder(
         await order.save();
       } else {
         const plan = getPlan(order.vpnPlan.planId);
-        const server = await getServer(order.vpnPlan.serverId);
+        const server = await getServer(order.vpnPlan.serverId); // fallback/primary server
+        const enabledServers = await getEnabledServers();
 
-        if (!plan || !server) {
-          return { success: false, error: 'Invalid VPN plan or server configuration' };
+        if (!plan || !server || enabledServers.length === 0) {
+          return { success: false, error: 'Invalid VPN plan or no enabled servers' };
         }
 
         const user = await User.findById(order.user)
@@ -139,44 +140,75 @@ export async function approveOrder(
           .lean() as { name?: string; email?: string; telegramUsername?: string } | null;
         const username = user?.telegramUsername || user?.name || user?.email?.split('@')[0] || '';
 
-        log.info('Provisioning VPN key', {
+        log.info('Provisioning VPN key across multiple servers', {
           orderId: order._id,
-          serverId: order.vpnPlan.serverId,
+          primaryServer: order.vpnPlan.serverId,
+          servers: enabledServers.map((s) => s.id),
           source: ctx.source,
         });
 
-        const result = await provisionVpnKey({
-          serverId: order.vpnPlan.serverId,
-          username,
-          userId: order.user.toString(),
-          devices: plan.devices,
-          expiryDays: plan.expiryDays,
-          dataLimitGB: plan.dataLimitGB,
-          protocol: order.vpnPlan.protocol || 'trojan',
-        });
+        const vpnKeysArr = [];
+        let firstResult: VpnProvisionResult | null = null;
+        let anySuccess = false;
 
-        if (!result) {
+        for (const srv of enabledServers) {
+          try {
+            const result = await provisionVpnKey({
+              serverId: srv.id,
+              username,
+              userId: order.user.toString(),
+              devices: plan.devices,
+              expiryDays: plan.expiryDays,
+              dataLimitGB: plan.dataLimitGB,
+              protocol: order.vpnPlan.protocol || 'trojan',
+            });
+
+            if (result) {
+              anySuccess = true;
+              if (!firstResult) firstResult = result;
+              vpnKeysArr.push({
+                serverId: srv.id,
+                clientEmail: result.clientEmail,
+                clientUUID: result.clientUUID,
+                subId: result.subId,
+                subLink: result.subLink,
+                configLink: result.configLink,
+                protocol: result.protocol,
+              });
+            }
+          } catch (err) {
+            log.error(`Failed to provision VPN on server ${srv.id}`, { orderId: order._id, err });
+          }
+        }
+
+        if (!anySuccess || !firstResult) {
           order.vpnProvisionStatus = 'failed';
           await order.save();
 
           logActivitySafe(ctx.adminId, 'vpn_provision_failed', `VPN Order #${order._id.toString().slice(-8)}`, {
-            details: `Failed to provision (${ctx.source})`,
-            metadata: { orderId: order._id, serverId: order.vpnPlan.serverId },
+            details: `Failed to provision (${ctx.source}) on all servers`,
+            metadata: { orderId: order._id },
           });
 
-          return { success: false, error: 'VPN key provisioning failed. Check server connectivity.' };
+          return { success: false, error: 'VPN key provisioning failed on all servers. Check server connectivity.' };
         }
 
+        // Generate a cryptographically random token for the multi-server subscription link
+        const crypto = await import('crypto');
+        const token = crypto.randomBytes(16).toString('hex');
+
         order.vpnKey = {
-          clientEmail: result.clientEmail,
-          clientUUID: result.clientUUID,
-          subId: result.subId,
-          subLink: result.subLink,
-          configLink: result.configLink,
-          protocol: result.protocol,
-          expiryTime: result.expiryTime,
+          clientEmail: firstResult.clientEmail,
+          clientUUID: firstResult.clientUUID,
+          subId: firstResult.subId,
+          subLink: firstResult.subLink,
+          configLink: firstResult.configLink,
+          protocol: firstResult.protocol,
+          expiryTime: firstResult.expiryTime,
           provisionedAt: new Date(),
         };
+        order.vpnKeys = vpnKeysArr;
+        order.multiSubToken = token;
         order.vpnProvisionStatus = 'provisioned';
         order.status = 'completed';
         if (ctx.adminNote) order.adminNote = ctx.adminNote;
@@ -294,20 +326,32 @@ export async function rejectOrder(
     }
 
     // ── Revoke VPN key if provisioned ──
-    if (
-      order.orderType === 'vpn' &&
-      order.vpnProvisionStatus === 'provisioned' &&
-      order.vpnKey?.clientEmail &&
-      order.vpnPlan?.serverId
-    ) {
+    if (order.orderType === 'vpn' && order.vpnProvisionStatus === 'provisioned') {
       try {
-        const revoked = await revokeVpnKey(order.vpnPlan.serverId, order.vpnKey.clientEmail);
-        if (revoked) {
-          order.vpnProvisionStatus = 'revoked';
-          log.info('VPN key revoked on reject', { orderId: order._id, clientEmail: order.vpnKey.clientEmail });
+        if (order.vpnKeys && order.vpnKeys.length > 0) {
+          // Multi-server revoke
+          let anyRevoked = false;
+          for (const key of order.vpnKeys) {
+            try {
+              const success = await revokeVpnKey(key.serverId, key.clientEmail || order.vpnKey!.clientEmail);
+              if (success) anyRevoked = true;
+            } catch (err) {
+              log.error(`Failed to revoke VPN key on ${key.serverId}`, { orderId: order._id, err });
+            }
+          }
+          if (anyRevoked) {
+            order.vpnProvisionStatus = 'revoked';
+          }
+        } else if (order.vpnKey?.clientEmail && order.vpnPlan?.serverId) {
+          // Fallback traditional single-server revoke
+          const revoked = await revokeVpnKey(order.vpnPlan.serverId, order.vpnKey.clientEmail);
+          if (revoked) {
+            order.vpnProvisionStatus = 'revoked';
+            log.info('VPN key revoked on reject', { orderId: order._id, clientEmail: order.vpnKey.clientEmail });
+          }
         }
       } catch (err) {
-        log.error('Failed to revoke VPN key', {
+        log.error('Failed to revoke VPN keys', {
           orderId: order._id,
           error: err instanceof Error ? err.message : String(err),
         });
@@ -386,22 +430,21 @@ async function notifyBotUser(
         const expiryDate = new Date(order.vpnKey.expiryTime).toLocaleDateString('en-GB', {
           year: 'numeric', month: 'short', day: 'numeric',
         });
+          
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://burmesedigital.store';
+          const multiSubUrl = order.multiSubToken ? `${appUrl}/api/vpn/sub/${order.multiSubToken}` : order.vpnKey.subLink;
 
-        const keyMsg =
-          `🔑 <b>${plan?.name || 'VPN Key'}</b>\n\n` +
-          `🌐 Server: ${server ? `${server.flag} ${server.name}` : 'Unknown'}\n` +
-          `⚙️ Protocol: ${order.vpnKey.protocol?.toUpperCase()}\n` +
-          `📅 Expires: ${expiryDate}\n\n` +
-          `📋 <b>Subscription Link:</b>\n<code>${order.vpnKey.subLink}</code>\n\n` +
-          `⚙️ <b>Config Link:</b>\n<code>${order.vpnKey.configLink}</code>\n\n` +
-          `📲 V2RayNG/Hiddify app မှာ Sub Link ကို add ပါ`;
-
-        await sendBotMessage(user.telegramId, keyMsg);
-      }
-
-      // Send product keys if product order
-      if (order.deliveredKeys && order.deliveredKeys.length > 0) {
-        let keyMsg = `🔑 <b>Your Product Keys</b>\n\n`;
+          const keyMsg =
+            `🔑 <b>${plan?.name || 'VPN Key'}</b>\n\n` +
+            `🌐 Server: ${order.multiSubToken ? 'All Enabled Servers' : (server ? `${server.flag} ${server.name}` : 'Unknown')}\n` +
+            `⚙️ Protocol: ${order.vpnKey.protocol?.toUpperCase()}\n` +
+            `📅 Expires: ${expiryDate}\n\n` +
+            `📋 <b>Subscription Link (Multi-Server):</b>\n<code>${multiSubUrl}</code>\n\n` +
+            `⚙️ <b>Fallback Config Link:</b>\n<code>${order.vpnKey.configLink}</code>\n\n` +
+            `📲 V2RayNG/Hiddify app မှာ Sub Link ကို add ပါ`;
+          await sendBotMessage(user.telegramId, keyMsg);
+        } else if (order.deliveredKeys?.length > 0) {
+          let keyMsg = `🔑 <b>Your Product Keys</b>\n\n`;
         for (const key of order.deliveredKeys) {
           if (key.serialKey) keyMsg += `Serial: <code>${key.serialKey}</code>\n`;
           if (key.loginEmail) keyMsg += `Email: <code>${key.loginEmail}</code>\n`;
