@@ -101,15 +101,23 @@ export default function MigratePage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      // Fallback for older browsers
+      // Fallback: document.execCommand is deprecated but still supported in most browsers
+      // when the Clipboard API is unavailable (e.g. HTTP context, older iOS Safari).
       const el = document.createElement('textarea');
       el.value = upgradeResult.subLink;
       document.body.appendChild(el);
       el.select();
-      document.execCommand('copy');
+      document.execCommand('copy'); // eslint-disable-line @typescript-eslint/no-deprecated
       document.body.removeChild(el);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleCheck();
     }
   };
 
@@ -195,7 +203,7 @@ export default function MigratePage() {
               placeholder="https://burmesedigital.store/api/vpn/sub/..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCheck(); } }}
+              onKeyDown={handleTextareaKeyDown}
             />
             <button
               onClick={handleCheck}
