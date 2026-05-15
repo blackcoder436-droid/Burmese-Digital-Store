@@ -28,14 +28,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing oldKey in request body' }, { status: 400 });
     }
 
-    // Extract token from URL or bare string
+    // Extract token from URL or bare string. Support 3x-UI `/sub/{id}` links.
     let token = oldKeyInput;
-    const subLinkMatch = oldKeyInput.match(/\/api\/vpn\/sub\/([a-f0-9]+)/i);
+    const subLinkMatch = oldKeyInput.match(/\/(?:api\/vpn\/)?sub\/([a-z0-9]+)/i);
     if (subLinkMatch) {
       token = subLinkMatch[1];
     }
 
-    if (!token || !/^[a-f0-9]{16,64}$/i.test(token)) {
+    if (!token || !/^[a-z0-9]{8,64}$/i.test(token)) {
       return NextResponse.json(
         { error: 'Invalid key format. Please provide a valid sub-link or token.' },
         { status: 400 }
