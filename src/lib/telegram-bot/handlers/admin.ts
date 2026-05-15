@@ -957,3 +957,93 @@ async function createAdminKey(
     });
   }
 }
+
+export async function handleAdminKeygenCommand(chatId: number, text: string): Promise<void> {
+  const parts = text.split(' ');
+  const name = parts[1];
+  const paramDays = Number(parts[2]);
+  const days = Number.isNaN(paramDays) ? 30 : paramDays;
+  const paramLimit = Number(parts[3]);
+  const limitIp = Number.isNaN(paramLimit) ? 2 : paramLimit;
+  const protocol = parts[4] || 'vless';
+
+  if (!name) {
+    await sendMessage(chatId, '❌ Format လွဲနေပါသည်။\n\n<b>Usage:</b>\n/keygen &lt;Name&gt; &lt;Days&gt; &lt;DeviceLimit&gt; [Protocol]\n\n<b>Example:</b>\n/keygen VIP-Aung 30 2', {
+      parse_mode: 'HTML'
+    });
+    return;
+  }
+
+  await sendMessage(chatId, '⚙️ Generating multi-server key...');
+
+  try {
+    const mongoClient = (await import('@/lib/mongodb')).default;
+    const db = (await mongoClient).db();
+    
+    // dynamically import vpn-servers to avoid top-level issues if undefined
+    const { getActiveServers, generateVpnUrl } = await import('@/lib/vpn-servers');
+
+    const activeServers = await getActiveServers();
+    if (activeServers.length === 0) {
+      await sendMessage(chatId, '❌ No active VPN servers available.');
+      return;
+    }
+
+    const multiServerLinks = [];
+    const expiryTime = new Date().getTime() + (days * 24 * 60 * 60 * 1000);
+    const { v4: uuidv4 } = await import('uuid');
+    const token = uuidv4();
+    const prefix = name;
+
+    for (const server of activeServers) {
+      try {
+        const result = await generateVpnUrl({
+          name: `${prefix}-${server.country}`,
+          protocol: protocol,
+          days: days,
+          limitIp: limitIp,
+          serverName: server.name 
+        });
+
+        if (result && result.subLink) {
+          multiServerLinks.push({
+            server: server.name,
+            subLink: result.subLink,
+            configLink: result.configLink
+          });
+        }
+      } catch (err: any) {
+        console.error('Target server failed', err.message);
+      }
+    }
+
+    if (multiServerLinks.length === 0) {
+      await sendMessage(chatId, '❌ Failed to provision on any server.');
+      return;
+    }
+
+    const newKey = {
+      token, name: prefix, type: 'premium', status: 'active',
+      duration: days * 24 * 60 * 60 * 1000, deviceLimit: limitIp, protocol, dataLimit: 0,
+      createdAt: new Date(), expiresAt: new Date(expiryTime), subLinks: multiServerLinks, createdBy: 'admin'
+    };
+
+    await db.collection('vpn_keys').insertOne(newKey);
+
+    let msg = `✅ <b>Key Created Successfully</b>\n\n`;
+    msg += `👤 <b>Name:</b> ${prefix}\n`;
+    msg += `⏱ <b>Duration:</b> ${days} Days\n`;
+    msg += `📱 <b>Limit:</b> ${limitIp} Devices\n`;
+    msg += `\n🔗 <b>Subscription Links:</b>\n`;
+    
+    for (const link of multiServerLinks) {
+       msg += `\n🌍 <b>${link.server}</b>:\n<code>${link.subLink}</code>\n`;
+    }
+
+    await sendMessage(chatId, msg, { parse_mode: 'HTML' });
+
+  } catch (error) {
+    console.error('Bot Keygen error:', error);
+    await sendMessage(chatId, '❌ Internal error generating key.');
+  }
+}
