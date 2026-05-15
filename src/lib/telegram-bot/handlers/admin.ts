@@ -777,12 +777,15 @@ export async function handleAdminKeyType(
   keyType: string,
   messageId?: number
 ): Promise<void> {
+  const { getEnabledServers } = await import('@/lib/vpn-servers');
+  const servers = await getEnabledServers();
   const label = keyType === 'test' ? '🧪 Test Key' : '🔑 Sell Key';
+  
   await editOrSend(
     chatId,
     messageId,
-    `${label}\n\nProtocol ရွေးပါ:`,
-    adminCreateKeyProtocolKeyboard(keyType, 'all')
+    `${label}\n\nServer ရွေးပါ:`,
+    adminCreateKeyServerKeyboard(servers, keyType)
   );
 }
 
@@ -795,6 +798,18 @@ export async function handleAdminKeyServer(
   serverId: string,
   messageId?: number
 ): Promise<void> {
+
+  if (serverId === 'all') {
+    await editOrSend(
+      chatId,
+      messageId,
+      `📡 🌐 All Servers (Multi-server)\n\nProtocol ရွေးပါ:`,
+      adminCreateKeyProtocolKeyboard('all', keyType, ['vless', 'vmess', 'trojan', 'shadowsocks'])
+    );
+    return;
+  }
+
+  const { getServer } = await import('@/lib/vpn-servers');
   const server = await getServer(serverId);
   if (!server) {
     await editOrSend(chatId, messageId, '❌ Server မတွေ့ပါ');
@@ -874,44 +889,47 @@ async function createAdminKey(
   chatId: number,
   messageId: number | undefined,
   keyType: string,
-  _serverId: string,
+  serverId: string,
   protocol: string,
   devices: number,
   expiryDays: number,
   dataLimitGB: number
 ): Promise<void> {
-  await editOrSend(chatId, messageId, '⏳ Multi-server Key ဖန်တီးနေပါသည်...');
+  await editOrSend(chatId, messageId, '⏳ Key ဖန်တီးနေပါသည်...');
 
   try {
-    const activeServers = Object.values(Object.values(await getAllServers()));
-    if (activeServers.length === 0) {
+    const { getEnabledServers, getServer } = await import('@/lib/vpn-servers');
+    const { provisionVpnKey } = await import('@/lib/xui');
+    const crypto = await import('crypto');
+
+    let targetServers: any[] = [];
+    if (serverId === 'all') {
+      targetServers = await getEnabledServers();
+    } else {
+      const singleServer = await getServer(serverId);
+      if (singleServer) targetServers = [singleServer];
+    }
+
+    if (!targetServers || targetServers.length === 0) {
       await sendMessage(chatId, '❌ Active server မရှိပါ', { replyMarkup: adminPanelKeyboard() });
       return;
     }
 
-    const { randomBytes } = await import('crypto');
     const label = keyType === 'test' ? 'test' : 'admin';
-    const username = `${label}_${randomBytes(4).toString('hex')}`;
+    const username = `${label}_${crypto.randomBytes(4).toString('hex')}`;
     const links: string[] = [];
     let errCount = 0;
     
-    for (const server of activeServers) {
+    const token = crypto.randomBytes(16).toString('hex');
+    const subLink = `https://burmesedigital.store/api/vpn/sub/${token}`;
+
+    for (const server of targetServers) {
       try {
-        const res = await provisionVpnKey({
-          serverId: server.id,
-          username,
-          userId: `admin_bot_${chatId}`,
-          devices,
-          expiryDays,
-          dataLimitGB,
-          protocol,
-        });
-        if (res && res.subLink) {
-          links.push(`💻 <b>${server.name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</b>: \n<code>${res.subLink}</code>`);
-        } else if (res && res.subLink) {
-          links.push(`💻 <b>${server.name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</b>: \n<code>${res.subLink}</code>`);
+        const result = await provisionVpnKey({ serverId: server.id, userId: 'admin_bot_' + chatId, devices, expiryDays, dataLimitGB, protocol, username });
+        if (result && result.success) {
+           links.push(`💻 <b>${server.flag || '🏳️'} ${server.name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</b>`);
         } else {
-          errCount++;
+           errCount++;
         }
       } catch (e) {
         errCount++;
@@ -930,7 +948,7 @@ async function createAdminKey(
     const dummyExpiryDate = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB');
 
     const resultMsg = [
-      `✅ <b>${typeLabel} (Multi-Server)</b>`,
+      `✅ <b>${typeLabel} ${serverId === 'all' ? '(Multi-Server)' : ''}</b>`,
       ``,
       `👤 Name: <code>${username}</code>`,
       `📱 Devices: <b>${devices}</b>`,
@@ -938,13 +956,33 @@ async function createAdminKey(
       `📅 Expiry: <b>${dummyExpiryDate}</b>`,
       `🌍 Data: <b>${dataLabel}</b>`,
       ``,
-      `🔗 <b>Subscription Links:</b>`,
+      `🔗 <b>Subscription Link</b>:`,
+      `<code>${subLink}</code>`,
+      ``,
       ...links,
     ];
 
     if (errCount > 0) {
       resultMsg.push(``, `⚠️ <i>${errCount} server(s) failed.</i>`);
     }
+
+    const { default: clientPromise } = await import('@/lib/mongodb');
+    const mongoose = await import('mongoose');
+    const db = mongoose.connection.getClient().db();
+    const expiryTime = Date.now() + (Number(expiryDays) || 30) * 24 * 60 * 60 * 1000;
+    await db.collection('vpn_keys').insertOne({
+      userId: 'admin_bot_' + chatId,
+      token: token,
+      username,
+      keyType,
+      protocol,
+      devices,
+      expiryDays,
+      expiryTime,
+      dataLimitGB,
+      createdAt: new Date(),
+      status: 'active'
+    });
 
     await sendMessage(chatId, resultMsg.join('\n'), {
       parseMode: 'HTML',
@@ -962,91 +1000,20 @@ async function createAdminKey(
 
 export async function handleAdminKeygenCommand(chatId: number, text: string): Promise<void> {
   const parts = text.split(' ');
-  const name = parts[1];
-  const paramDays = Number(parts[2]);
-  const days = Number.isNaN(paramDays) ? 30 : paramDays;
-  const paramLimit = Number(parts[3]);
-  const limitIp = Number.isNaN(paramLimit) ? 2 : paramLimit;
-  const protocol = parts[4] || 'vless';
-
-  if (!name) {
-    await sendMessage(chatId, '❌ Format လွဲနေပါသည်။\n\n<b>Usage:</b>\n/keygen &lt;Name&gt; &lt;Days&gt; &lt;DeviceLimit&gt; [Protocol]\n\n<b>Example:</b>\n/keygen VIP-Aung 30 2', {
-      parseMode: 'HTML'
-    });
+  if (parts.length < 6) {
+    await sendMessage(
+      chatId,
+      '❌ Invalid command. Usage:\n<code>/admin keygen test|sell vless|vmess|trojan <devices> <expiry_days> [dataLimitGB]</code>',
+      { parseMode: 'HTML' }
+    );
     return;
   }
 
-  await sendMessage(chatId, '⚙️ Generating multi-server key...');
+  const keyType = parts[2];
+  const protocol = parts[3];
+  const devices = parseInt(parts[4]);
+  const expiryDays = parseInt(parts[5]);
+  const dataLimitGB = parts.length > 6 ? parseInt(parts[6]) : 0;
 
-  try {
-    const mongoClient = (await import('@/lib/mongodb')).default;
-    const db = mongoClient.connection.db;
-    
-    // dynamically import vpn-servers to avoid top-level issues if undefined
-    const { getActiveServers, generateVpnUrl } = await import('@/lib/vpn-servers');
-
-    const serversMap = await getAllServers();
-    const activeServers = Object.values(serversMap);
-    if (activeServers.length === 0) {
-      await sendMessage(chatId, '❌ No active VPN servers available.');
-      return;
-    }
-
-    const multiServerLinks = [];
-    const expiryTime = new Date().getTime() + (days * 24 * 60 * 60 * 1000);
-    const { v4: uuidv4 } = await import('uuid');
-    const token = uuidv4();
-    const prefix = name;
-
-    for (const server of activeServers) {
-      try {
-        const result = await generateVpnUrl({
-          name: `${prefix}-${server.country}`,
-          protocol: protocol,
-          days: days,
-          limitIp: limitIp,
-          serverName: server.name 
-        });
-
-        if (result && result.subLink) {
-          multiServerLinks.push({
-            server: server.name,
-            subLink: result.subLink,
-            configLink: result.configLink
-          });
-        }
-      } catch (err: any) {
-        console.error('Target server failed', err.message);
-      }
-    }
-
-    if (multiServerLinks.length === 0) {
-      await sendMessage(chatId, '❌ Failed to provision on any server.');
-      return;
-    }
-
-    const newKey = {
-      token, name: prefix, type: 'premium', status: 'active',
-      duration: days * 24 * 60 * 60 * 1000, deviceLimit: limitIp, protocol, dataLimit: 0,
-      createdAt: new Date(), expiresAt: new Date(expiryTime), subLinks: multiServerLinks, createdBy: 'admin'
-    };
-
-    await db.collection('vpn_keys').insertOne(newKey);
-
-    let msg = `✅ <b>Key Created Successfully</b>\n\n`;
-    msg += `👤 <b>Name:</b> ${prefix}\n`;
-    msg += `⏱ <b>Duration:</b> ${days} Days\n`;
-    msg += `📱 <b>Limit:</b> ${limitIp} Devices\n`;
-    msg += `\n🔗 <b>Subscription Links:</b>\n`;
-    
-    for (const link of multiServerLinks) {
-       msg += `\n🌍 <b>${link.server}</b>:\n<code>${link.subLink}</code>\n`;
-    }
-
-    await sendMessage(chatId, msg, { parseMode: 'HTML' });
-
-  } catch (error) {
-    console.error('Bot Keygen error:', error);
-    await sendMessage(chatId, '❌ Internal error generating key.');
-  }
+  await createAdminKey(chatId, undefined, keyType, 'all', protocol, devices, expiryDays, dataLimitGB);
 }

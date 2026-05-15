@@ -1,79 +1,160 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import connectDB from '@/lib/mongodb';
-import { getEnabledServers } from '@/lib/vpn-servers';
+import { getEnabledServers, getServer } from '@/lib/vpn-servers';
 import { provisionVpnKey } from '@/lib/xui';
 import { logActivity } from '@/models/ActivityLog';
+import crypto from 'crypto';
+
+export async function GET(req: NextRequest) {
+  try {
+    const user = await requireAdmin();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const activeServers = await getEnabledServers();
+    return NextResponse.json({
+      success: true,
+      data: { servers: activeServers }
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Authenticate Admin
     const user = await requireAdmin();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await req.json();
-    const { name, protocol = 'vless' } = body;
-    let { days = 30, deviceLimit = 2 } = body;
+    const { serverId = 'all', protocol = 'vless', username, devices = 2, expiryDays = 30, expiryDate, dataLimitGB = 0 } = body;
 
-    days = Number(days);
-    deviceLimit = Number(deviceLimit);
+    // expiryDate takes precedence if provided (ISO date string or timestamp)
+    let days = Number(expiryDays) || 30;
+    let expiryTimeMs: number | undefined;
+    if (expiryDate) {
+      const parsed = typeof expiryDate === 'number' ? new Date(expiryDate) : new Date(String(expiryDate));
+      if (!isNaN(parsed.getTime())) {
+        expiryTimeMs = parsed.getTime();
+        const msRemaining = expiryTimeMs - Date.now();
+        if (msRemaining > 0) days = Math.max(1, Math.ceil(msRemaining / (24 * 60 * 60 * 1000)));
+      }
+    }
+    const deviceLimit = Number(devices) || 2;
+    const limitGB = Number(dataLimitGB) || 0;
 
-    if (!name) {
-      return NextResponse.json({ error: 'Key name is required' }, { status: 400 });
+    if (!username) {
+      return NextResponse.json({ error: 'Key name (username) is required' }, { status: 400 });
     }
 
     await connectDB();
 
-    // 2. Provision Keys on ALL active servers
-    const activeServers = await getEnabledServers();
-    if (activeServers.length === 0) {
+    let targetServers: any[] = [];
+    if (serverId === 'all') {
+      targetServers = await getEnabledServers();
+    } else {
+      const s = await getServer(serverId);
+      if (s) targetServers = [s];
+    }
+
+    if (targetServers.length === 0) {
       return NextResponse.json({ error: 'No active VPN servers available' }, { status: 503 });
     }
 
     const multiServerLinks: string[] = [];
-    const sanitizedName = name.replace(/\s+/g, '-').slice(0, 20);
-    const prefix = `web_${crypto.randomUUID().slice(0, 4)}_${sanitizedName}`;
+    const serverSubLinks: string[] = [];
+    const serverConfigLinks: string[] = [];
+    const sanitizedName = username.replace(/\s+/g, '-').slice(0, 20);
+    const prefix = `web_${crypto.randomBytes(2).toString('hex')}_${sanitizedName}`;
 
-    for (const server of activeServers) {
+    const token = crypto.randomBytes(16).toString('hex');
+    const masterSubLink = `https://burmesedigital.store/api/vpn/sub/${token}`;
+
+    // Run in parallel to reduce loading time
+    const provisionPromises = targetServers.map(async (server) => {
       try {
-        const username = prefix + '_' + server.name.replace(/\s+/g, '-');
+        const finalUsername = serverId === 'all' ? prefix + '_' + server.name.replace(/\s+/g, '-') : prefix;
         
         const keyData = await provisionVpnKey({
           serverId: server.id,
-          username,
-          userId: 'admin_web',
+          userId: (user as any).id?.toString() || 'admin_web',
           devices: deviceLimit,
           expiryDays: days,
-          dataLimitGB: 0,
-          protocol
+          dataLimitGB: limitGB,
+          protocol,
+          username: finalUsername
         });
 
-        if (keyData && keyData.subLink) {
-          multiServerLinks.push(keyData.subLink);
+        if (keyData && keyData.success) {
+           return { serverName: server.name, subLink: keyData.subLink, configLink: keyData.configLink };
         }
+        return null;
       } catch (err) {
         console.error(`Failed to provision key on server ${server.id}:`, err);
-        // Continue with other servers even if one fails
+        return null;
       }
-    }
+    });
+
+    const results = await Promise.all(provisionPromises);
+    
+    // Process results
+     for (const res of results) {
+       if (res) {
+         multiServerLinks.push(res.serverName);
+         serverSubLinks.push(res.subLink);
+         if (res.configLink) serverConfigLinks.push(res.configLink);
+       }
+     }
 
     if (multiServerLinks.length === 0) {
       return NextResponse.json({ error: 'Failed to provision keys on any active server' }, { status: 500 });
     }
 
-    // 3. Log Activity
-    await logActivity({
-      admin: user.id || 'unknown',
-      action: 'vpn_key_generated' as any,
-      details: `Admin via Web generated multi-server VPN key "${name}" for ${days} days, limit ${deviceLimit} IP. Configured on ${multiServerLinks.length} servers.`
+    const mongoose = await import('mongoose');
+    const db = mongoose.connection.getClient().db();
+    
+    const computedExpiryTimeMs = expiryTimeMs ?? (Date.now() + days * 24 * 60 * 60 * 1000);
+    
+    await db.collection('vpn_keys').insertOne({
+        userId: (user as any).id || 'admin_web',
+        token: token,
+        username: sanitizedName,
+        keyType: body.type || 'admin_web',
+        protocol,
+        devices: deviceLimit,
+        expiryDays: days,
+        expiryTime: computedExpiryTimeMs,
+        dataLimitGB: limitGB,
+        createdAt: new Date(),
+        status: 'active',
+      serverSubLinks, // Saving this so sub route can fetch configs
+      serverConfigLinks // optional: direct config URIs (trojan://, vless://, etc.)
     });
+
+    try {
+      await logActivity({
+        admin: (user as any).id,
+        action: 'vpn_key_generated' as any,
+        target: 'system',
+        details: `Admin via Web generated ${serverId === 'all' ? 'multi-server' : 'single-server'} VPN key "${sanitizedName}" for ${days} days. Configured on ${multiServerLinks.length} servers.`
+      });
+    } catch(err) {
+      console.warn("Could not log activity:", err);
+    }
 
     return NextResponse.json({
       success: true,
       message: `Successfully created key on ${multiServerLinks.length} servers`,
-      subLinks: multiServerLinks
+      data: {
+        username: sanitizedName,
+        subLink: masterSubLink,
+        servers: multiServerLinks,
+        protocol,
+        devices: deviceLimit,
+        expiryDays: days
+      }
     });
   } catch (error: any) {
     console.error('Error creating admin VPN key:', error);

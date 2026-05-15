@@ -93,6 +93,7 @@ export default function AdminVpnKeysPage() {
   const [createUsername, setCreateUsername] = useState('');
   const [createDevices, setCreateDevices] = useState(1);
   const [createExpiryDays, setCreateExpiryDays] = useState(30);
+  const [createExpiryDate, setCreateExpiryDate] = useState('');
   const [createDataLimitGB, setCreateDataLimitGB] = useState(0);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -166,10 +167,11 @@ export default function AdminVpnKeysPage() {
       const res = await fetch('/api/admin/vpn-keys/create');
       const data = await res.json();
       if (data.success) {
-        setAvailableServers(data.data.servers);
-        if (data.data.servers.length > 0 && !createServerId) {
-          setCreateServerId(data.data.servers[0].id);
-          setCreateProtocol(data.data.servers[0].enabledProtocols[0] || 'trojan');
+        const augmentedServers = [{ id: 'all', name: '🌐 All Servers (Multi-server)', flag: '🌐', isOnline: true, enabledProtocols: ['vless', 'vmess', 'trojan'] }, ...data.data.servers];
+          setAvailableServers(augmentedServers as any);
+        if (augmentedServers.length > 0 && !createServerId) {
+          setCreateServerId(augmentedServers[0].id);
+          setCreateProtocol(augmentedServers[0].enabledProtocols[0] || 'trojan');
         }
       }
     } catch (err) {
@@ -186,10 +188,12 @@ export default function AdminVpnKeysPage() {
     if (type === 'test') {
       setCreateDevices(1);
       setCreateExpiryDays(3);
+      setCreateExpiryDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0,10));
       setCreateDataLimitGB(3);
     } else {
       setCreateDevices(1);
       setCreateExpiryDays(30);
+      setCreateExpiryDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0,10));
       setCreateDataLimitGB(0);
     }
 
@@ -218,6 +222,7 @@ export default function AdminVpnKeysPage() {
           username: createUsername.trim(),
           devices: createDevices,
           expiryDays: createExpiryDays,
+          expiryDate: createExpiryDate || undefined,
           dataLimitGB: createDataLimitGB,
         }),
       });
@@ -816,13 +821,19 @@ export default function AdminVpnKeysPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-400 mb-1.5">Expiry (days)</label>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5">Expiry Date</label>
                     <input
-                      type="number"
-                      value={createExpiryDays}
-                      onChange={(e) => setCreateExpiryDays(Number(e.target.value))}
-                      min={1}
-                      max={365}
+                      type="date"
+                      value={createExpiryDate}
+                      onChange={(e) => {
+                        setCreateExpiryDate(e.target.value);
+                        // keep expiryDays in sync for legacy APIs
+                        const d = new Date(e.target.value);
+                        if (!isNaN(d.getTime())) {
+                          const days = Math.max(1, Math.ceil((d.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+                          setCreateExpiryDays(days);
+                        }
+                      }}
                       className="w-full bg-[#12122a] border border-purple-500/10 text-white rounded-xl px-3 py-3 focus:border-purple-500 focus:outline-none"
                     />
                   </div>

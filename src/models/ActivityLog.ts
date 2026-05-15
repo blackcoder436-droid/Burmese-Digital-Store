@@ -44,6 +44,7 @@ const ActivityLogSchema: Schema = new Schema(
       type: String,
       required: true,
       enum: [
+        'vpn_key_generated',
         'order_approved',
         'order_rejected',
         'order_refunded',

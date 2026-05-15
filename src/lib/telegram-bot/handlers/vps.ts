@@ -44,7 +44,7 @@ export async function handleVPSSelect(ctx: BotContext, vpsId: string) {
   const { vpsPlans } = await import('@/lib/vps-plans');
   const plan = vpsPlans.find(p => p.id === vpsId);
   if (!plan) {
-    if (ctx.answerCbQuery) await ctx.answerCbQuery('VPS Plan not found');
+    if (ctx.answerCallbackQuery) await ctx.answerCallbackQuery('VPS Plan not found');
     return;
   }
   
@@ -82,7 +82,7 @@ export async function handleVPSBuy(ctx: BotContext, vpsId: string) {
       await mongoose.connect(process.env.MONGODB_URI!);
     }
 
-    const { id: telegramId, first_name: firstName, username } = ctx.fromUser;
+    const { id: telegramId, first_name: firstName, username } = ctx.from;
     
     // Find or create the user
     const user = await findOrCreateTelegramUser(telegramId, firstName, undefined, username);

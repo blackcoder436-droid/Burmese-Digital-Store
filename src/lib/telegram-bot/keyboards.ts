@@ -375,6 +375,15 @@ export function adminCreateKeyServerKeyboard(
   keyType: string
 ): InlineKeyboardMarkup {
   const keyboard: InlineKeyboard = [];
+  
+  // Add All Servers option
+  keyboard.push([
+    {
+      text: `🌐 All Servers (Multi-server)`,
+      callback_data: `akey_srv:${keyType}:all`,
+    },
+  ]);
+
   for (const server of servers) {
     if (!server.enabled) continue;
     const statusIcon = server.online ? '🟢' : '🔴';

@@ -497,8 +497,8 @@ class XuiSession {
       // Fetch actual config key (trojan://, vmess://, etc.) from 3X-UI subscription endpoint.
       // Wait briefly for 3X-UI to register the new client before fetching.
       let configLink = subLink; // fallback to sub link if all retries fail
-      const SUB_FETCH_RETRIES = 3;
-      const SUB_FETCH_DELAY_MS = 2000; // 2 seconds between attempts
+      const SUB_FETCH_RETRIES = 1;
+      const SUB_FETCH_DELAY_MS = 500; // 2 seconds between attempts
 
       for (let attempt = 1; attempt <= SUB_FETCH_RETRIES; attempt++) {
         // Wait before fetching — gives 3X-UI time to register the client

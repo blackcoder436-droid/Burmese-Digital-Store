@@ -1,0 +1,85 @@
+async function createAdminKey(
+  chatId: number,
+  messageId: number | undefined,
+  keyType: string,
+  serverId: string,
+  protocol: string,
+  devices: number,
+  expiryDays: number,
+  dataLimitGB: number
+): Promise<void> {
+  const server = await getServer(serverId);
+  if (!server) {
+    await editOrSend(chatId, messageId, '❌ Server မတွေ့ပါ');
+    return;
+  }
+
+  // Show loading on same message
+  await editOrSend(chatId, messageId, '⏳ Key ဖန်တီးနေပါသည်...');
+
+  try {
+    const label = keyType === 'test' ? 'test' : 'admin';
+    const username = `${label}_${Date.now().toString(36)}`;
+
+    const result = await provisionVpnKey({
+      serverId,
+      username,
+      userId: `admin_bot_${chatId}`,
+      devices,
+      expiryDays,
+      dataLimitGB,
+      protocol,
+    });
+
+    if (!result) {
+      // Result message — send new (can't edit loading to include keyboard reliably)
+      await sendMessage(chatId, '❌ Key ဖန်တီးရာတွင် အမှားဖြစ်ပါသည်။ Server ချိတ်ဆက်မှု စစ်ဆေးပါ', {
+        replyMarkup: adminPanelKeyboard(),
+      });
+      return;
+    }
+
+    const typeLabel = keyType === 'test' ? '🧪 TEST KEY' : '🔑 SELL KEY';
+    const dataLabel = dataLimitGB === 0 ? 'Unlimited' : `${dataLimitGB} GB`;
+    const expiryDate = new Date(result.expiryTime).toLocaleDateString('en-GB');
+
+    const resultMsg = [
+      `✅ <b>${typeLabel} Created!</b>`,
+      '',
+      `🖥️ Server: ${server.flag} ${server.name}`,
+      `🔧 Protocol: ${protocol.toUpperCase()}`,
+      `📱 Devices: ${devices}`,
+      `📅 Expiry: ${expiryDays} days (${expiryDate})`,
+      `📊 Data: ${dataLabel}`,
+      '',
+      `📋 <b>Subscription Link:</b>`,
+      `<code>${result.subLink}</code>`,
+      '',
+      `📋 <b>Config Link:</b>`,
+      `<code>${result.configLink}</code>`,
+      '',
+      '👆 Link ကိုနှိပ်ပြီး Copy ယူပါ',
+    ].join('\n');
+
+    // Final result: send as new message (links are important, ensure they display)
+    await sendMessage(chatId, resultMsg, {
+      replyMarkup: adminPanelKeyboard(),
+    });
+
+    log.info('Admin created VPN key via bot', {
+      keyType,
+      serverId,
+      protocol,
+      devices,
+      expiryDays,
+      clientEmail: result.clientEmail,
+    });
+  } catch (error) {
+    log.error('Admin create key error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await sendMessage(chatId, '❌ Key ဖန်တီးရာတွင် အမှားဖြစ်ပါသည်', {
+      replyMarkup: adminPanelKeyboard(),
+    });
+  }
+}
