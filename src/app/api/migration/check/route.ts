@@ -1,0 +1,84 @@
+import { NextRequest, NextResponse } from 'next/server';
+import connectDB from '@/lib/mongodb';
+
+export const dynamic = 'force-dynamic';
+
+// ==========================================
+// GET /api/migration/check?key=<sub-link-or-token>
+// Looks up an old VPN key and returns its details
+// ==========================================
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const key = searchParams.get('key')?.trim();
+
+    if (!key) {
+      return NextResponse.json({ error: 'Missing key parameter' }, { status: 400 });
+    }
+
+    // Extract token: support full sub-link URL or bare token string
+    let token = key;
+    const subLinkMatch = key.match(/\/api\/vpn\/sub\/([a-f0-9]+)/i);
+    if (subLinkMatch) {
+      token = subLinkMatch[1];
+    }
+
+    if (!token || !/^[a-f0-9]{16,64}$/i.test(token)) {
+      return NextResponse.json(
+        { error: 'Invalid key format. Please provide a valid sub-link or token.' },
+        { status: 400 }
+      );
+    }
+
+    const mongoose = await connectDB();
+    const db = mongoose.connection.getClient().db();
+
+    const vpnKey = await db.collection('vpn_keys').findOne({ token });
+
+    if (!vpnKey) {
+      return NextResponse.json(
+        { error: 'Key not found. Please check your sub-link and try again.' },
+        { status: 404 }
+      );
+    }
+
+    if (vpnKey.is_migrated) {
+      return NextResponse.json(
+        { error: 'This key has already been migrated to the new multi-server format.' },
+        { status: 409 }
+      );
+    }
+
+    const now = Date.now();
+    const isExpired = vpnKey.expiryTime && now > vpnKey.expiryTime;
+
+    if (isExpired) {
+      return NextResponse.json(
+        { error: 'This key has already expired and cannot be migrated.' },
+        { status: 410 }
+      );
+    }
+
+    const remainingMs = vpnKey.expiryTime ? vpnKey.expiryTime - now : null;
+    const remainingDays = remainingMs ? Math.ceil(remainingMs / (24 * 60 * 60 * 1000)) : null;
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        token,
+        username: vpnKey.username || 'Unknown',
+        devices: vpnKey.devices || 1,
+        expiryTime: vpnKey.expiryTime || null,
+        remainingDays,
+        protocol: vpnKey.protocol || 'trojan',
+        dataLimitGB: vpnKey.dataLimitGB || 0,
+        keyType: vpnKey.keyType || 'admin_web',
+        createdAt: vpnKey.createdAt || null,
+      },
+    });
+  } catch (error) {
+    console.error('[migration/check] Error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
