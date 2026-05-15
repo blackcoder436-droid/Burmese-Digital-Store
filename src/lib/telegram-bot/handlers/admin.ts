@@ -919,6 +919,8 @@ async function createAdminKey(
     const username = `${label}_${crypto.randomBytes(4).toString('hex')}`;
     const links: string[] = [];
     let errCount = 0;
+    const serverSubLinks: string[] = [];
+    const serverConfigLinks: string[] = [];
     
     const token = crypto.randomBytes(16).toString('hex');
     const subLink = `https://burmesedigital.store/api/vpn/sub/${token}`;
@@ -928,6 +930,8 @@ async function createAdminKey(
         const result = await provisionVpnKey({ serverId: server.id, userId: 'admin_bot_' + chatId, devices, expiryDays, dataLimitGB, protocol, username });
         if (result && result.success) {
            links.push(`💻 <b>${server.flag || '🏳️'} ${server.name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</b>`);
+           if (result.subLink) serverSubLinks.push(result.subLink);
+           if (result.configLink) serverConfigLinks.push(result.configLink);
         } else {
            errCount++;
         }
@@ -982,6 +986,8 @@ async function createAdminKey(
       dataLimitGB,
       createdAt: new Date(),
       status: 'active'
+      ,serverSubLinks,
+      serverConfigLinks
     });
 
     await sendMessage(chatId, resultMsg.join('\n'), {
