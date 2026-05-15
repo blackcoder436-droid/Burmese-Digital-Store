@@ -1,72 +1,85 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import clientPromise from '@/lib/mongodb';
-import { getActiveServers, generateVpnUrl } from '@/lib/vpn-servers';
-import { v4 as uuidv4 } from 'uuid';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/auth';
+import connectDB from '@/lib/mongodb';
+import { getEnabledServers } from '@/lib/vpn-servers';
+import { provisionVpnKey } from '@/lib/xui';
+import { logActivity } from '@/models/ActivityLog';
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== 'admin') {
+    // 1. Authenticate Admin
+    const user = await requireAdmin();
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await req.json();
     const { name, protocol = 'vless' } = body;
     let { days = 30, deviceLimit = 2 } = body;
-    
+
     days = Number(days);
     deviceLimit = Number(deviceLimit);
 
-    const mongoClient = await clientPromise;
-    const db = mongoClient.db();
+    if (!name) {
+      return NextResponse.json({ error: 'Key name is required' }, { status: 400 });
+    }
 
-    const activeServers = await getActiveServers();
+    await connectDB();
+
+    // 2. Provision Keys on ALL active servers
+    const activeServers = await getEnabledServers();
     if (activeServers.length === 0) {
       return NextResponse.json({ error: 'No active VPN servers available' }, { status: 503 });
     }
 
-    const multiServerLinks = [];
-    const expiryTime = new Date().getTime() + (days * 24 * 60 * 60 * 1000);
-    const token = uuidv4();
-    const prefix = name ? name.replace(/\s+/g, '-') : `VIP-${Math.floor(Math.random() * 10000)}`;
+    const multiServerLinks: string[] = [];
+    const sanitizedName = name.replace(/\s+/g, '-').slice(0, 20);
+    const prefix = `web_${crypto.randomUUID().slice(0, 4)}_${sanitizedName}`;
 
     for (const server of activeServers) {
       try {
-        const result = await generateVpnUrl({
-          name: `${prefix}-${server.country}`,
-          protocol: protocol,
-          days: days,
-          limitIp: deviceLimit,
-          serverName: server.name 
+        const username = prefix + '_' + server.name.replace(/\s+/g, '-');
+        
+        const keyData = await provisionVpnKey({
+          serverId: server.id,
+          username,
+          userId: 'admin_web',
+          devices: deviceLimit,
+          expiryDays: days,
+          dataLimitGB: 0,
+          protocol
         });
 
-        if (result && result.subLink) {
-          multiServerLinks.push({
-            server: server.name,
-            subLink: result.subLink,
-            configLink: result.configLink
-          });
+        if (keyData && keyData.subLink) {
+          multiServerLinks.push(keyData.subLink);
         }
-      } catch (err: any) {
-        console.error('Target server failed', err.message);
+      } catch (err) {
+        console.error(`Failed to provision key on server ${server.id}:`, err);
+        // Continue with other servers even if one fails
       }
     }
 
     if (multiServerLinks.length === 0) {
-      return NextResponse.json({ error: 'Failed to provision on any server' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to provision keys on any active server' }, { status: 500 });
     }
 
-    const newKey = {
-      token, name: prefix, type: 'premium', status: 'active',
-      duration: days * 24 * 60 * 60 * 1000, deviceLimit, protocol, dataLimit: 0,
-      createdAt: new Date(), expiresAt: new Date(expiryTime), subLinks: multiServerLinks, createdBy: 'admin'
-    };
+    // 3. Log Activity
+    await logActivity({
+      admin: user.id || 'unknown',
+      action: 'vpn_key_generated' as any,
+      details: `Admin via Web generated multi-server VPN key "${name}" for ${days} days, limit ${deviceLimit} IP. Configured on ${multiServerLinks.length} servers.`
+    });
 
-    await db.collection('vpn_keys').insertOne(newKey);
-    return NextResponse.json({ success: true, key: newKey });
+    return NextResponse.json({
+      success: true,
+      message: `Successfully created key on ${multiServerLinks.length} servers`,
+      subLinks: multiServerLinks
+    });
   } catch (error: any) {
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('Error creating admin VPN key:', error);
+    return NextResponse.json(
+      { error: error?.message || 'Failed to create VPN key' },
+      { status: 500 }
+    );
   }
 }
