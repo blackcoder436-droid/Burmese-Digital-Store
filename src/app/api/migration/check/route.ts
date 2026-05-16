@@ -103,18 +103,11 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Prevent attempting to migrate an already-migrated multi-server token
-    if (vpnKey && vpnKey.keyType === 'migrated_web') {
+    // Prevent attempting to migrate an already-migrated or generated multi-server token
+    if (vpnKey) {
       return NextResponse.json(
         { error: 'Provided key is already a multi-server subscription and cannot be migrated.' },
         { status: 400 }
-      );
-    }
-
-    if (vpnKey.is_migrated) {
-      return NextResponse.json(
-        { error: 'This key has already been migrated to the new multi-server format.' },
-        { status: 409 }
       );
     }
 

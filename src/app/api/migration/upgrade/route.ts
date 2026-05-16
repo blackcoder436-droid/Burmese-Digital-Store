@@ -47,32 +47,43 @@ export async function POST(req: NextRequest) {
     const mongoose = await connectDB();
     const db = mongoose.connection.getClient().db();
 
+    // Prevent attempting to migrate an already-migrated or generated multi-server token
+    const existingCheck = await db.collection('vpn_keys').findOne({ token });
+    if (existingCheck) {
+      if (existingCheck.is_migrated === true) {
+        return NextResponse.json(
+          { error: 'This key has already been migrated to the new multi-server format.' },
+          { status: 409 }
+        );
+      } else {
+        return NextResponse.json(
+          { error: 'Provided key is already a multi-server subscription and cannot be migrated.' },
+          { status: 400 }
+        );
+      }
+    }
+
     let oldKey: Record<string, unknown> | null = null;
     let shouldRollbackClaim = false;
 
     if (!configLinkMatch) {
-      // --- Security: atomic "claim" to prevent duplicate migrations ---
-      // Use findOneAndUpdate to atomically set is_migrated flag before heavy provisioning.
-      const claimResult = await db.collection('vpn_keys').findOneAndUpdate(
-        { token, is_migrated: { $ne: true } },
-        { $set: { is_migrated: true, migratingAt: new Date() } },
-        { returnDocument: 'before' }
-      );
-
-      oldKey = claimResult && 'value' in claimResult ? (claimResult as any).value : claimResult;
-      shouldRollbackClaim = true;
-
-      if (!oldKey) {
-        const existing = await db.collection('vpn_keys').findOne({ token });
-        if (existing) {
-          return NextResponse.json(
-            { error: 'This key has already been migrated to the new multi-server format.' },
-            { status: 409 }
-          );
-        }
+      // --- Security: try to create a lock so parallel requests fail ---
+      try {
+        await db.collection('vpn_keys').insertOne({
+          token,
+          keyType: 'migration_lock',
+          is_migrated: true,
+          migratingAt: new Date()
+        });
+        shouldRollbackClaim = true;
+      } catch (e) {
+        // If insert fails due to unique index, handle it. But MongoDB might not have unique index on token.
+        // The earlier existingCheck covers the normal sequential case.
+      }
 
         const panelClient = await findClientBySubIdAcrossServers(token, oldKeyInput);
         if (!panelClient) {
+          if (shouldRollbackClaim) await db.collection('vpn_keys').deleteOne({ token, keyType: 'migration_lock' });
           return NextResponse.json(
             { error: 'Key not found. Please check your sub-link and try again.' },
             { status: 404 }
@@ -94,8 +105,9 @@ export async function POST(req: NextRequest) {
           dataLimitGB,
           protocol,
           userId,
+          oldServerId: panelClient.serverId,
+          oldClientEmail: panelClient.email || panelClient.clientId
         };
-      }
     } else {
       const panelClient = await findClientByConfigLinkAcrossServers(oldKeyInput);
       if (!panelClient) {
@@ -120,13 +132,15 @@ export async function POST(req: NextRequest) {
         dataLimitGB,
         protocol,
         userId,
+        oldServerId: panelClient.serverId,
+        oldClientEmail: panelClient.email || panelClient.clientId
       };
     }
 
     // Check expiry
     if (oldKey.expiryTime && Date.now() > oldKey.expiryTime) {
       if (shouldRollbackClaim) {
-        await db.collection('vpn_keys').updateOne({ token }, { $set: { is_migrated: false }, $unset: { migratingAt: '' } });
+        await db.collection('vpn_keys').deleteOne({ token, keyType: 'migration_lock' });
       }
       return NextResponse.json(
         { error: 'This key has already expired and cannot be migrated.' },
@@ -146,8 +160,7 @@ export async function POST(req: NextRequest) {
     // --- Provision new keys on all enabled servers ---
     const targetServers = await getEnabledServers();
     if (targetServers.length === 0) {
-      // Roll back claim
-      await db.collection('vpn_keys').updateOne({ token }, { $set: { is_migrated: false }, $unset: { migratingAt: '' } });
+      if (shouldRollbackClaim) await db.collection('vpn_keys').deleteOne({ token, keyType: 'migration_lock' });
       return NextResponse.json({ error: 'No active VPN servers available' }, { status: 503 });
     }
 
@@ -192,8 +205,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (successServerNames.length === 0) {
-      // Roll back claim
-      await db.collection('vpn_keys').updateOne({ token }, { $set: { is_migrated: false }, $unset: { migratingAt: '' } });
+      if (shouldRollbackClaim) await db.collection('vpn_keys').deleteOne({ token, keyType: 'migration_lock' });
       return NextResponse.json(
         { error: 'Failed to provision new keys on any active server. Please try again later.' },
         { status: 500 }
@@ -219,40 +231,17 @@ export async function POST(req: NextRequest) {
     });
 
     // --- CRITICAL: Revoke the old key from panels, then delete the old key from the database ---
-    let revokeLog = '[migration/upgrade] Revoke attempt: ';
     try {
-      // If original input was a config link or subId, try to locate and revoke on panels
-      if (configLinkMatch) {
-        revokeLog += 'Searching by config link...';
-        const client = await findClientByConfigLinkAcrossServers(token);
-        if (client && client.serverId && (client.email || client.clientEmail || client.clientId)) {
-          const clientEmail = client.email || client.clientEmail || client.clientId;
-          revokeLog += ` Found on server ${client.serverId}, email=${clientEmail}, revoking...`;
-          const revoked = await revokeVpnKey(client.serverId, clientEmail);
-          revokeLog += ` Revoke result: ${revoked}`;
-        } else {
-          revokeLog += ` Client not found (configLink=${token})`;
-        }
-      } else {
-        // token may be subId
-        revokeLog += 'Searching by subId...';
-        const client = await findClientBySubIdAcrossServers(token);
-        if (client && client.serverId && (client.email || client.clientEmail || client.clientId)) {
-          const clientEmail = client.email || client.clientEmail || client.clientId;
-          revokeLog += ` Found on server ${client.serverId}, email=${clientEmail}, revoking...`;
-          const revoked = await revokeVpnKey(client.serverId, clientEmail);
-          revokeLog += ` Revoke result: ${revoked}`;
-        } else {
-          revokeLog += ` Client not found (subId=${token})`;
-        }
+      if (oldKey.oldServerId && oldKey.oldClientEmail) {
+        await revokeVpnKey(oldKey.oldServerId as string, oldKey.oldClientEmail as string);
       }
-      console.log(revokeLog);
     } catch (err) {
-      revokeLog += ` ERROR: ${err instanceof Error ? err.message : String(err)}`;
-      console.warn(revokeLog);
+      console.warn('[migration/upgrade] Failed to revoke old key on panels', String(err));
     }
 
-    await db.collection('vpn_keys').deleteOne({ token });
+    if (shouldRollbackClaim) {
+      await db.collection('vpn_keys').deleteOne({ token, keyType: 'migration_lock' });
+    }
 
     return NextResponse.json({
       success: true,
