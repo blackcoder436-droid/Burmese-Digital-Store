@@ -29,6 +29,7 @@ export default function AdminMultiServerKeysPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [summary, setSummary] = useState<SummaryCounts>({ active: 0, expired: 0, disabled: 0, total: 0 });
@@ -228,6 +229,7 @@ export default function AdminMultiServerKeysPage() {
                   <th className="px-4 py-3">Expiry</th>
                   <th className="px-4 py-3">Data Limit</th>
                   <th className="px-4 py-3">Servers</th>
+                  <th className="px-4 py-3">Multi-sub</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Created</th>
                   <th className="px-4 py-3">Actions</th>
@@ -246,6 +248,30 @@ export default function AdminMultiServerKeysPage() {
                     <td className="px-4 py-3 text-gray-200">{(record.dataLimitGB ?? 0) === 0 ? 'Unlimited' : `${record.dataLimitGB} GB`}</td>
                     <td className="px-4 py-3 text-gray-200">
                       {record.serverSubLinks?.length ?? 0} sub / {record.serverConfigLinks?.length ?? 0} cfg
+                    </td>
+                    <td className="px-4 py-3 text-gray-200">
+                      {(() => {
+                        try {
+                          const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://burmesedigital.store');
+                          const link = `${appUrl}/api/vpn/sub/${record.token}`;
+                          return (
+                            <div className="flex items-center gap-2">
+                              <a href={link} target="_blank" rel="noreferrer" className="text-xs text-cyan-300 truncate max-w-[160px] block">{link}</a>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(link);
+                                  setCopiedId(record._id);
+                                  setTimeout(() => setCopiedId(null), 2000);
+                                }}
+                                className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10 transition-colors"
+                              >{copiedId === record._id ? 'Copied' : 'Copy'}</button>
+                            </div>
+                          );
+                        } catch {
+                          return <span className="text-xs text-gray-400">-</span>;
+                        }
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold ${getStatusBadge(record.status)}`}>
