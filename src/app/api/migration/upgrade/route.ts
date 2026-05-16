@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { getEnabledServers } from '@/lib/vpn-servers';
-import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers, provisionVpnKey } from '@/lib/xui';
+import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers, provisionVpnKey, revokeVpnKey } from '@/lib/xui';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -218,7 +218,25 @@ export async function POST(req: NextRequest) {
       migratedFromToken: token,
     });
 
-    // --- CRITICAL: Delete the old key from the database ---
+    // --- CRITICAL: Revoke the old key from panels, then delete the old key from the database ---
+    try {
+      // If original input was a config link or subId, try to locate and revoke on panels
+      if (configLinkMatch) {
+        const client = await findClientByConfigLinkAcrossServers(token);
+        if (client && client.serverId && (client.email || client.clientEmail || client.clientId)) {
+          await revokeVpnKey(client.serverId, client.email || client.clientEmail || client.clientId);
+        }
+      } else {
+        // token may be subId
+        const client = await findClientBySubIdAcrossServers(token);
+        if (client && client.serverId && (client.email || client.clientEmail || client.clientId)) {
+          await revokeVpnKey(client.serverId, client.email || client.clientEmail || client.clientId);
+        }
+      }
+    } catch (err) {
+      console.warn('[migration/upgrade] Failed to revoke old key on panels', String(err));
+    }
+
     await db.collection('vpn_keys').deleteOne({ token });
 
     return NextResponse.json({

@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import dbConnect from '@/lib/mongodb';
 import { createLogger } from '@/lib/logger';
+import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers, updateVpnClient, revokeVpnKey } from '@/lib/xui';
 
 const log = createLogger({ route: '/api/admin/multi-server-keys' });
 
@@ -139,6 +140,56 @@ export async function PATCH(request: NextRequest) {
 
     if (result.matchedCount === 0) {
       return NextResponse.json({ success: false, error: 'Record not found' }, { status: 404 });
+    }
+
+    // Propagate updates to actual 3xUI panels (best-effort).
+    try {
+      const record = await db.collection('vpn_keys').findOne({ _id: objectId });
+      if (record) {
+        const tasks: Promise<unknown>[] = [];
+        const applyUpdatesToClient = async (client: any) => {
+          try {
+            const serverId = client.serverId;
+            const clientEmail = client.email || client.clientEmail || client.client || client.clientId;
+            if (!serverId || !clientEmail) return;
+
+            const panelUpdates: any = {};
+            if (updates.expiryTime !== undefined) panelUpdates.expiryTime = updates.expiryTime as number;
+            if (updates.dataLimitGB !== undefined) panelUpdates.dataLimitGB = updates.dataLimitGB as number;
+            if (updates.status !== undefined) panelUpdates.enable = updates.status === 'active';
+
+            if (Object.keys(panelUpdates).length > 0) {
+              await updateVpnClient(serverId, clientEmail, panelUpdates);
+            }
+          } catch (err) {
+            log.warn('Failed to propagate update to panel', { id, err: err instanceof Error ? err.message : String(err) });
+          }
+        };
+
+        // Prefer explicit config links, fallback to subLinks
+        const cfgLinks: string[] = Array.isArray(record.serverConfigLinks) ? record.serverConfigLinks : [];
+        const subLinks: string[] = Array.isArray(record.serverSubLinks) ? record.serverSubLinks : [];
+
+        for (const cfg of cfgLinks) {
+          tasks.push((async () => {
+            const client = await findClientByConfigLinkAcrossServers(String(cfg));
+            if (client) await applyUpdatesToClient(client);
+          })());
+        }
+
+        for (const sub of subLinks) {
+          tasks.push((async () => {
+            const match = String(sub).match(/\/sub\/(?:api\/vpn\/)?([a-zA-Z0-9-]{8,64})/i);
+            const token = match ? match[1] : String(sub);
+            const client = await findClientBySubIdAcrossServers(token, String(sub));
+            if (client) await applyUpdatesToClient(client);
+          })());
+        }
+
+        await Promise.allSettled(tasks);
+      }
+    } catch (err) {
+      log.warn('Error while propagating updates to panels', { error: err instanceof Error ? err.message : String(err) });
     }
 
     return NextResponse.json({ success: true, data: { id, updates } });
