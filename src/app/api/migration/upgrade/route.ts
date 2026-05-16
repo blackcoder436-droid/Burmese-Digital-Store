@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { getEnabledServers } from '@/lib/vpn-servers';
-import { provisionVpnKey } from '@/lib/xui';
+import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers, provisionVpnKey } from '@/lib/xui';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -28,52 +28,106 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing oldKey in request body' }, { status: 400 });
     }
 
-    // Extract token from URL or bare string. Support 3x-UI `/sub/{id}` links.
+    const configLinkMatch = oldKeyInput.match(/^(vmess|vless|trojan|ss):\/\//i);
     let token = oldKeyInput;
-    const subLinkMatch = oldKeyInput.match(/\/(?:api\/vpn\/)?sub\/([a-z0-9]+)/i);
-    if (subLinkMatch) {
-      token = subLinkMatch[1];
-    }
+    if (!configLinkMatch) {
+      const subLinkMatch = oldKeyInput.match(/\/(?:api\/vpn\/)?sub\/([a-zA-Z0-9-]{8,64})/i);
+      if (subLinkMatch) {
+        token = subLinkMatch[1];
+      }
 
-    if (!token || !/^[a-z0-9]{8,64}$/i.test(token)) {
-      return NextResponse.json(
-        { error: 'Invalid key format. Please provide a valid sub-link or token.' },
-        { status: 400 }
-      );
+      if (!token || !/^[a-zA-Z0-9-]{8,64}$/i.test(token)) {
+        return NextResponse.json(
+          { error: 'Invalid key format. Please provide a valid config link, sub-link or token.' },
+          { status: 400 }
+        );
+      }
     }
 
     const mongoose = await connectDB();
     const db = mongoose.connection.getClient().db();
 
-    // --- Security: atomic "claim" to prevent duplicate migrations ---
-    // Use findOneAndUpdate to atomically set is_migrated flag before heavy provisioning.
-    const claimResult = await db.collection('vpn_keys').findOneAndUpdate(
-      { token, is_migrated: { $ne: true } },
-      { $set: { is_migrated: true, migratingAt: new Date() } },
-      { returnDocument: 'before' }
-    );
+    let oldKey: Record<string, unknown> | null = null;
+    let shouldRollbackClaim = false;
 
-    const oldKey = claimResult;
+    if (!configLinkMatch) {
+      // --- Security: atomic "claim" to prevent duplicate migrations ---
+      // Use findOneAndUpdate to atomically set is_migrated flag before heavy provisioning.
+      const claimResult = await db.collection('vpn_keys').findOneAndUpdate(
+        { token, is_migrated: { $ne: true } },
+        { $set: { is_migrated: true, migratingAt: new Date() } },
+        { returnDocument: 'before' }
+      );
 
-    if (!oldKey) {
-      // Either not found or already migrated
-      const existing = await db.collection('vpn_keys').findOne({ token });
-      if (!existing) {
+      oldKey = claimResult && 'value' in claimResult ? (claimResult as any).value : claimResult;
+      shouldRollbackClaim = true;
+
+      if (!oldKey) {
+        const existing = await db.collection('vpn_keys').findOne({ token });
+        if (existing) {
+          return NextResponse.json(
+            { error: 'This key has already been migrated to the new multi-server format.' },
+            { status: 409 }
+          );
+        }
+
+        const panelClient = await findClientBySubIdAcrossServers(token, oldKeyInput);
+        if (!panelClient) {
+          return NextResponse.json(
+            { error: 'Key not found. Please check your sub-link and try again.' },
+            { status: 404 }
+          );
+        }
+
+        const dataLimitGB = panelClient.totalGB ? Math.floor(panelClient.totalGB / 1024 / 1024 / 1024) : 0;
+        const userId = panelClient.tgId || 'migration_web';
+        const username = panelClient.email || 'migration_user';
+        const devices = panelClient.limitIp || 1;
+        const expiryTime = panelClient.expiryTime || Date.now() + 30 * 24 * 60 * 60 * 1000;
+        const protocol = panelClient.protocol || 'trojan';
+
+        oldKey = {
+          token,
+          username,
+          devices,
+          expiryTime,
+          dataLimitGB,
+          protocol,
+          userId,
+        };
+      }
+    } else {
+      const panelClient = await findClientByConfigLinkAcrossServers(oldKeyInput);
+      if (!panelClient) {
         return NextResponse.json(
-          { error: 'Key not found. Please check your sub-link and try again.' },
+          { error: 'Key not found. Please check your config link and try again.' },
           { status: 404 }
         );
       }
-      return NextResponse.json(
-        { error: 'This key has already been migrated to the new multi-server format.' },
-        { status: 409 }
-      );
+
+      const dataLimitGB = panelClient.totalGB ? Math.floor(panelClient.totalGB / 1024 / 1024 / 1024) : 0;
+      const userId = panelClient.tgId || 'migration_web';
+      const username = panelClient.email || 'migration_user';
+      const devices = panelClient.limitIp || 1;
+      const expiryTime = panelClient.expiryTime || Date.now() + 30 * 24 * 60 * 60 * 1000;
+      const protocol = panelClient.protocol || 'trojan';
+
+      oldKey = {
+        token: oldKeyInput,
+        username,
+        devices,
+        expiryTime,
+        dataLimitGB,
+        protocol,
+        userId,
+      };
     }
 
     // Check expiry
     if (oldKey.expiryTime && Date.now() > oldKey.expiryTime) {
-      // Roll back the claim flag since we won't proceed
-      await db.collection('vpn_keys').updateOne({ token }, { $set: { is_migrated: false }, $unset: { migratingAt: '' } });
+      if (shouldRollbackClaim) {
+        await db.collection('vpn_keys').updateOne({ token }, { $set: { is_migrated: false }, $unset: { migratingAt: '' } });
+      }
       return NextResponse.json(
         { error: 'This key has already expired and cannot be migrated.' },
         { status: 410 }

@@ -6,7 +6,7 @@
 import { randomUUID } from 'crypto';
 import { Agent } from 'undici';
 import { createLogger } from '@/lib/logger';
-import { getServer, type VpnServer } from '@/lib/vpn-servers';
+import { getServer, getEnabledServers, type VpnServer } from '@/lib/vpn-servers';
 import { validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
 
 const log = createLogger({ module: 'xui' });
@@ -663,6 +663,8 @@ class XuiSession {
     down: number;
     tgId: string;
     subId: string;
+    clientId: string;
+    clientPassword: string;
   }[]> {
     const inbounds = await this.getInbounds();
     const clients: {
@@ -676,6 +678,8 @@ class XuiSession {
       down: number;
       tgId: string;
       subId: string;
+      clientId: string;
+      clientPassword: string;
     }[] = [];
 
     for (const ib of inbounds) {
@@ -698,6 +702,8 @@ class XuiSession {
             down: (stats?.down as number) || 0,
             tgId: c.tgId || '',
             subId: c.subId || '',
+            clientId: c.id ? String(c.id) : '',
+            clientPassword: c.password ? String(c.password) : '',
           });
         }
       } catch { /* skip parse errors */ }
@@ -824,6 +830,172 @@ async function getSession(serverId: string): Promise<XuiSession | null> {
 /**
  * Provision a new VPN client on a 3xUI panel.
  */
+export interface XuiClientInfo {
+  email: string;
+  protocol: string;
+  enable: boolean;
+  expiryTime: number;
+  limitIp: number;
+  totalGB: number;
+  up: number;
+  down: number;
+  tgId: string;
+  subId: string;
+  serverId: string;
+  serverName: string;
+}
+
+export async function findClientBySubIdAcrossServers(subId: string, fullUrlHint?: string): Promise<XuiClientInfo | null> {
+  const normSubId = subId.toLowerCase().trim();
+  let servers = await getEnabledServers();
+
+  // Highlight priority servers if hint is provided
+  if (fullUrlHint) {
+    const hint = fullUrlHint.toLowerCase();
+    servers.sort((a, b) => {
+      const aMatch = hint.includes(a.id.toLowerCase()) || hint.includes(a.domain.toLowerCase()) ? 1 : 0;
+      const bMatch = hint.includes(b.id.toLowerCase()) || hint.includes(b.domain.toLowerCase()) ? 1 : 0;
+      return bMatch - aMatch;
+    });
+  }
+
+  for (const server of servers) {
+    const clients = await listServerClients(server.id);
+    if (!clients) continue;
+    const client = clients.find((c) => {
+      const cSubId = (c.subId || '').toLowerCase().trim();
+      const cClientId = (c.clientId || '').toLowerCase().trim();
+      return cSubId === normSubId || cClientId === normSubId;
+    });
+    if (client) {
+      return {
+        ...client,
+        serverId: server.id,
+        serverName: server.name,
+      };
+    }
+  }
+  return null;
+}
+
+interface ParsedConfigLink {
+  protocol: string;
+  clientId?: string;
+  clientPassword?: string;
+  host?: string;
+  port?: number;
+}
+
+function parseVpnConfigLink(input: string): ParsedConfigLink | null {
+  const value = input.trim();
+  if (!value) return null;
+
+  try {
+    if (/^vmess:\/\//i.test(value)) {
+      const encoded = value.slice('vmess://'.length).trim();
+      const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+      const parsed = JSON.parse(decoded);
+      return {
+        protocol: 'vmess',
+        clientId: parsed.id ? String(parsed.id) : undefined,
+        host: parsed.add ? String(parsed.add) : undefined,
+        port: parsed.port ? Number(parsed.port) : undefined,
+      };
+    }
+
+    if (/^vless:|^trojan:/i.test(value)) {
+      const url = new URL(value);
+      return {
+        protocol: url.protocol.replace(':', ''),
+        clientId: url.username || undefined,
+        clientPassword: url.username || url.password || undefined,
+        host: url.hostname || undefined,
+        port: url.port ? Number(url.port) : undefined,
+      };
+    }
+
+    if (/^ss:\/\//i.test(value)) {
+      let host: string | undefined;
+      let password: string | undefined;
+      let port: number | undefined;
+
+      try {
+        const url = new URL(value);
+        host = url.hostname || undefined;
+        password = url.password || url.username || undefined;
+        port = url.port ? Number(url.port) : undefined;
+      } catch {
+        const raw = value.slice('ss://'.length);
+        const [encoded, hostPart] = raw.split('@');
+        try {
+          const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
+          password = decoded.split(':')[1] || undefined;
+        } catch {
+          password = undefined;
+        }
+        if (hostPart) {
+          const hostPort = hostPart.split('#')[0].split('?')[0];
+          const [hostname, portPart] = hostPort.split(':');
+          host = hostname || undefined;
+          port = portPart ? Number(portPart) : undefined;
+        }
+      }
+
+      return {
+        protocol: 'shadowsocks',
+        clientPassword: password,
+        host,
+        port,
+      };
+    }
+  } catch {
+    // Ignore parse errors and return null below
+  }
+
+  return null;
+}
+
+export async function findClientByConfigLinkAcrossServers(configLink: string): Promise<XuiClientInfo | null> {
+  const parsed = parseVpnConfigLink(configLink);
+  if (!parsed) return null;
+
+  let servers = await getEnabledServers();
+  const hint = configLink.toLowerCase();
+
+  // Prioritize servers matching domain or id, fallback to others for unknown vmess
+  servers.sort((a, b) => {
+    const aMatch = hint.includes(a.id.toLowerCase()) || hint.includes(a.domain.toLowerCase()) ? 1 : 0;
+    const bMatch = hint.includes(b.id.toLowerCase()) || hint.includes(b.domain.toLowerCase()) ? 1 : 0;
+    return bMatch - aMatch;
+  });
+
+  for (const server of servers) {
+    try {
+      const clients = await listServerClients(server.id);
+      if (!clients) continue;
+
+      const client = clients.find((c) => {
+        if (String(c.protocol).toLowerCase() !== parsed.protocol.toLowerCase()) return false;
+        if (parsed.clientId && c.clientId && c.clientId === parsed.clientId) return true;
+        if (parsed.clientPassword && c.clientPassword && c.clientPassword === parsed.clientPassword) return true;
+        return false;
+      });
+
+      if (client) {
+        return {
+          ...client,
+          serverId: server.id,
+          serverName: server.name,
+        };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 export async function provisionVpnKey(opts: {
   serverId: string;
   username: string;

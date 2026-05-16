@@ -18,6 +18,7 @@ interface KeyDetails {
   expiryTime: number | null;
   remainingDays: number | null;
   protocol: string;
+  dataLimitGB: number;
 }
 
 interface UpgradeResult {
@@ -131,6 +132,7 @@ export default function MigratePage() {
   };
 
   const formatDate = (ms: number | null) => {
+    if (ms === 0) return tr('Unlimited', 'အကန့်အသတ်မရှိ');
     if (!ms) return 'N/A';
     return new Date(ms).toLocaleDateString('en-GB', {
       day: '2-digit',
@@ -189,18 +191,18 @@ export default function MigratePage() {
         {step === 'input' && (
           <div className="bg-[#12122a] border border-purple-500/20 rounded-2xl p-6 shadow-xl">
             <h2 className="text-lg font-semibold text-white mb-1">
-              {tr('Step 1: Enter Your Old Sub-Link', 'အဆင့် ၁: Sub-Link ဟောင်း ထည့်ပါ')}
+              {tr('Step 1: Enter Your Old Sub-Link or Config Link', 'အဆင့် ၁: Sub-Link သို့မဟုတ် Config Link ဟောင်း ထည့်ပါ')}
             </h2>
             <p className="text-gray-400 text-sm mb-5">
               {tr(
-                'Paste your old VPN subscription link (e.g. https://burmesedigital.store/api/vpn/sub/…)',
-                'Sub-link ဟောင်း ကို ထည့်ပါ (ဥပမာ - https://burmesedigital.store/api/vpn/sub/…)'
+                'Paste your old VPN subscription or config link (e.g. https://burmesedigital.store/api/vpn/sub/… or vmess://...)',
+                'Sub-link သို့မဟုတ် Config Link ဟောင်းကို ထည့်ပါ (ဥပမာ - https://burmesedigital.store/api/vpn/sub/… သို့မဟုတ် vmess://...)'
               )}
             </p>
             <textarea
               rows={3}
               className="w-full bg-[#0a0a1a] border border-purple-500/30 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-purple-400 resize-none"
-              placeholder="https://burmesedigital.store/api/vpn/sub/..."
+              placeholder="https://burmesedigital.store/api/vpn/sub/... or vmess://..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleTextareaKeyDown}
@@ -244,9 +246,20 @@ export default function MigratePage() {
                 icon="⏳"
                 label={tr('Remaining', 'ကျန်ရှိသက်တမ်း')}
                 value={
-                  keyDetails.remainingDays !== null
+                  keyDetails.expiryTime === 0
+                    ? tr('Unlimited', 'အကန့်အသတ်မရှိ')
+                    : keyDetails.remainingDays !== null
                     ? `${keyDetails.remainingDays} ${tr('days', 'ရက်')}`
                     : 'N/A'
+                }
+              />
+              <InfoRow
+                icon="📊"
+                label={tr('Data Limit', 'ဒေတာ အသုံးပြုခွင့်')}
+                value={
+                  keyDetails.dataLimitGB === 0
+                    ? tr('Unlimited', 'အကန့်အသတ်မရှိ')
+                    : `${keyDetails.dataLimitGB} GB`
                 }
               />
               <InfoRow
