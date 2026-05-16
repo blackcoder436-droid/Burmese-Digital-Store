@@ -110,6 +110,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing record id' }, { status: 400 });
     }
 
+    // Security: Prevent attempts to update multi-server subscription tokens or sub-links
+    // These fields are immutable; they can only be set during migration/provisioning
+    const disallowedFields = ['token', 'serverSubLinks', 'serverConfigLinks', 'username', 'keyType', 'protocol'];
+    for (const field of disallowedFields) {
+      if (field in body) {
+        return NextResponse.json(
+          { success: false, error: `Cannot modify immutable field: ${field}. Multi-server subscription details are locked after creation.` },
+          { status: 400 }
+        );
+      }
+    }
+
     const updates: Record<string, unknown> = {};
     if (expiryTime !== undefined) {
       if (typeof expiryTime !== 'number' || expiryTime < 0) {

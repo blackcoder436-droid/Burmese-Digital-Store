@@ -219,22 +219,37 @@ export async function POST(req: NextRequest) {
     });
 
     // --- CRITICAL: Revoke the old key from panels, then delete the old key from the database ---
+    let revokeLog = '[migration/upgrade] Revoke attempt: ';
     try {
       // If original input was a config link or subId, try to locate and revoke on panels
       if (configLinkMatch) {
+        revokeLog += 'Searching by config link...';
         const client = await findClientByConfigLinkAcrossServers(token);
         if (client && client.serverId && (client.email || client.clientEmail || client.clientId)) {
-          await revokeVpnKey(client.serverId, client.email || client.clientEmail || client.clientId);
+          const clientEmail = client.email || client.clientEmail || client.clientId;
+          revokeLog += ` Found on server ${client.serverId}, email=${clientEmail}, revoking...`;
+          const revoked = await revokeVpnKey(client.serverId, clientEmail);
+          revokeLog += ` Revoke result: ${revoked}`;
+        } else {
+          revokeLog += ` Client not found (configLink=${token})`;
         }
       } else {
         // token may be subId
+        revokeLog += 'Searching by subId...';
         const client = await findClientBySubIdAcrossServers(token);
         if (client && client.serverId && (client.email || client.clientEmail || client.clientId)) {
-          await revokeVpnKey(client.serverId, client.email || client.clientEmail || client.clientId);
+          const clientEmail = client.email || client.clientEmail || client.clientId;
+          revokeLog += ` Found on server ${client.serverId}, email=${clientEmail}, revoking...`;
+          const revoked = await revokeVpnKey(client.serverId, clientEmail);
+          revokeLog += ` Revoke result: ${revoked}`;
+        } else {
+          revokeLog += ` Client not found (subId=${token})`;
         }
       }
+      console.log(revokeLog);
     } catch (err) {
-      console.warn('[migration/upgrade] Failed to revoke old key on panels', String(err));
+      revokeLog += ` ERROR: ${err instanceof Error ? err.message : String(err)}`;
+      console.warn(revokeLog);
     }
 
     await db.collection('vpn_keys').deleteOne({ token });
