@@ -89,7 +89,8 @@ class XuiSession {
     const urlCheck = validateExternalHttpUrl(server.url, { requiredAllowlistEnv: 'VPN_SERVER_ALLOWED_HOSTS' });
     if (!urlCheck.ok || !validatePanelPath(server.panelPath)) {
       // Defensive: prevent SSRF even if server record was tampered
-      throw new Error('Blocked VPN panel endpoint');
+      const reason = (!urlCheck.ok ? urlCheck.error : 'invalid panelPath');
+      throw new Error(`Blocked VPN panel endpoint: ${reason}`);
     }
 
     this.baseUrl = `${server.url}${server.panelPath}`;
@@ -847,7 +848,7 @@ export interface XuiClientInfo {
 
 export async function findClientBySubIdAcrossServers(subId: string, fullUrlHint?: string): Promise<XuiClientInfo | null> {
   const normSubId = subId.toLowerCase().trim();
-  let servers = await getEnabledServers();
+  const servers = await getEnabledServers();
 
   // Highlight priority servers if hint is provided
   if (fullUrlHint) {
@@ -959,7 +960,7 @@ export async function findClientByConfigLinkAcrossServers(configLink: string): P
   const parsed = parseVpnConfigLink(configLink);
   if (!parsed) return null;
 
-  let servers = await getEnabledServers();
+  const servers = await getEnabledServers();
   const hint = configLink.toLowerCase();
 
   // Prioritize servers matching domain or id, fallback to others for unknown vmess

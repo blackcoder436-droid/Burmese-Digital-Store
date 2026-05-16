@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+
     let oldKey: Record<string, unknown> | null = null;
     let shouldRollbackClaim = false;
 
@@ -83,12 +84,12 @@ export async function POST(req: NextRequest) {
 
         const panelClient = await findClientBySubIdAcrossServers(token, oldKeyInput);
         if (!panelClient) {
-          if (shouldRollbackClaim) await db.collection('vpn_keys').deleteOne({ token, keyType: 'migration_lock' });
-          return NextResponse.json(
-            { error: 'Key not found. Please check your sub-link and try again.' },
-            { status: 404 }
-          );
-        }
+            if (shouldRollbackClaim) await db.collection('vpn_keys').deleteOne({ token, keyType: 'migration_lock' });
+              return NextResponse.json(
+                { error: 'Key not found. Please check your sub-link and try again.' },
+                { status: 404 }
+              );
+            }
 
         const dataLimitGB = panelClient.totalGB ? Math.floor(panelClient.totalGB / 1024 / 1024 / 1024) : 0;
         const userId = panelClient.tgId || 'migration_web';
@@ -98,16 +99,17 @@ export async function POST(req: NextRequest) {
         const protocol = panelClient.protocol || 'trojan';
 
         oldKey = {
-          token,
-          username,
-          devices,
-          expiryTime,
-          dataLimitGB,
-          protocol,
-          userId,
-          oldServerId: panelClient.serverId,
-          oldClientEmail: panelClient.email || panelClient.clientId
-        };
+            token,
+            username,
+            devices,
+            expiryTime,
+            dataLimitGB,
+            protocol,
+            userId,
+            oldServerId: panelClient.serverId,
+            oldClientEmail: panelClient.email || panelClient.clientId,
+            oldClientId: (panelClient.clientId || panelClient.id || panelClient.password || null),
+          };
     } else {
       const panelClient = await findClientByConfigLinkAcrossServers(oldKeyInput);
       if (!panelClient) {
@@ -133,7 +135,8 @@ export async function POST(req: NextRequest) {
         protocol,
         userId,
         oldServerId: panelClient.serverId,
-        oldClientEmail: panelClient.email || panelClient.clientId
+        oldClientEmail: panelClient.email || panelClient.clientId,
+        oldClientId: (panelClient.clientId || panelClient.id || panelClient.password || null),
       };
     }
 
@@ -146,6 +149,33 @@ export async function POST(req: NextRequest) {
         { error: 'This key has already expired and cannot be migrated.' },
         { status: 410 }
       );
+    }
+
+    // Prevent duplicate migration: check DB for any migrated record that references
+    // this client by token, sub link, client id, or client email.
+    try {
+      const duplicateQuery: any[] = [];
+      if (token) duplicateQuery.push({ migratedFromToken: token });
+      if (oldKey.oldClientId) duplicateQuery.push({ migratedFromClientId: String(oldKey.oldClientId) });
+      if (oldKey.oldClientEmail) duplicateQuery.push({ migratedFromClientEmail: String(oldKey.oldClientEmail) });
+      // Also check serverSubLinks / serverConfigLinks containing token
+      if (token) {
+        duplicateQuery.push({ serverSubLinks: { $elemMatch: { $regex: String(token), $options: 'i' } } });
+        duplicateQuery.push({ serverConfigLinks: { $elemMatch: { $regex: String(token), $options: 'i' } } });
+      }
+
+      if (duplicateQuery.length > 0) {
+        const already = await db.collection('vpn_keys').findOne({ $or: duplicateQuery });
+        if (already) {
+          if (shouldRollbackClaim) await db.collection('vpn_keys').deleteOne({ token, keyType: 'migration_lock' });
+          return NextResponse.json(
+            { error: 'This key has already been converted to the multi-server format and cannot be migrated again.' },
+            { status: 409 }
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('[migration/upgrade] duplicate detection failed', String(err));
     }
 
     const username: string = oldKey.username || 'user';
@@ -228,12 +258,74 @@ export async function POST(req: NextRequest) {
       serverSubLinks,
       serverConfigLinks,
       migratedFromToken: token,
+      migratedFromClientId: oldKey.oldClientId || null,
+      migratedFromClientEmail: oldKey.oldClientEmail || null,
     });
 
-    // --- CRITICAL: Revoke the old key from panels, then delete the old key from the database ---
+    // Mark any existing records that reference the original token as migrated
     try {
-      if (oldKey.oldServerId && oldKey.oldClientEmail) {
-        await revokeVpnKey(oldKey.oldServerId as string, oldKey.oldClientEmail as string);
+      const updateQuery: any = {
+        $or: [
+          { token },
+          { migratedFromToken: token },
+          { serverSubLinks: { $elemMatch: { $regex: String(token), $options: 'i' } } },
+          { serverConfigLinks: { $elemMatch: { $regex: String(token), $options: 'i' } } },
+        ],
+      };
+      await db.collection('vpn_keys').updateMany(updateQuery, {
+        $set: { is_migrated: true, migratedTo: newToken, migratedAt: new Date() },
+      });
+    } catch (err) {
+      console.warn('[migration/upgrade] failed to mark original keys as migrated', String(err));
+    }
+
+    // --- CRITICAL: Attempt to revoke any matching old clients from all enabled panels.
+    try {
+      const enabledServers = await getEnabledServers();
+      const revokeMatches: Array<{ serverId: string; clientEmail: string | null }> = [];
+
+      // Helper to inspect clients on a server and collect matches
+      for (const s of enabledServers) {
+        try {
+          const clients = await listServerClients(s.id);
+          if (!clients) continue;
+
+          for (const c of clients) {
+            const cEmail = c.email || c.clientEmail || c.client || c.clientId || null;
+            const cId = (c.clientId || c.id || c.password || '').toString();
+            const cSub = (c.subId || '').toString();
+
+            // Match by any of: oldClientEmail, oldClientId, token/subId
+            if (
+              (oldKey.oldClientEmail && cEmail && String(cEmail) === String(oldKey.oldClientEmail)) ||
+              (oldKey.oldClientId && cId && cId.toLowerCase() === String(oldKey.oldClientId).toLowerCase()) ||
+              (String(cSub).toLowerCase() === String(token).toLowerCase())
+            ) {
+              revokeMatches.push({ serverId: s.id, clientEmail: cEmail ?? null });
+            }
+          }
+        } catch (err) {
+          console.warn('[migration/upgrade] Failed to list clients for server', s.id, String(err));
+          continue;
+        }
+      }
+
+      // Deduplicate by serverId+clientEmail
+      const unique = new Map<string, { serverId: string; clientEmail: string | null }>();
+      for (const r of revokeMatches) {
+        const keyStr = `${r.serverId}::${r.clientEmail}`;
+        if (!unique.has(keyStr)) unique.set(keyStr, r);
+      }
+
+      for (const entry of unique.values()) {
+        if (entry.clientEmail) {
+          try {
+            const ok = await revokeVpnKey(entry.serverId, entry.clientEmail);
+            if (!ok) console.warn('[migration/upgrade] revoke returned false', entry.serverId, entry.clientEmail);
+          } catch (err) {
+            console.warn('[migration/upgrade] revoke error', entry.serverId, entry.clientEmail, String(err));
+          }
+        }
       }
     } catch (err) {
       console.warn('[migration/upgrade] Failed to revoke old key on panels', String(err));

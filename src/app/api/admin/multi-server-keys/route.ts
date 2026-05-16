@@ -219,13 +219,87 @@ export async function DELETE(request: NextRequest) {
     const mongoose = await dbConnect();
     const db = mongoose.connection.getClient().db();
     const objectId = new mongoose.Types.ObjectId(id);
-    const result = await db.collection('vpn_keys').deleteOne({ _id: objectId });
+    
+    // Fetch the record first to get all client links
+    const record = await db.collection('vpn_keys').findOne({ _id: objectId });
 
-    if (result.deletedCount === 0) {
+    if (!record) {
       return NextResponse.json({ success: false, error: 'Record not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, data: { id } });
+    // Revoke all VPN clients from all servers before deleting the record
+    const revokeTasks: Promise<unknown>[] = [];
+    
+    // Revoke from config links
+    const cfgLinks: string[] = Array.isArray(record.serverConfigLinks) ? record.serverConfigLinks : [];
+    for (const cfg of cfgLinks) {
+      revokeTasks.push((async () => {
+        try {
+          const client = await findClientByConfigLinkAcrossServers(String(cfg));
+          if (client && client.serverId) {
+            const clientEmail = client.email || client.clientEmail || client.client || client.clientId;
+            if (clientEmail) {
+              const revoked = await revokeVpnKey(client.serverId, clientEmail);
+              if (revoked) {
+                log.info('VPN key revoked from config link', { recordId: id, configLink: cfg, serverId: client.serverId });
+              } else {
+                log.warn('Failed to revoke VPN key from config link', { recordId: id, configLink: cfg });
+              }
+            }
+          }
+        } catch (err) {
+          log.error('Error revoking config link client', { recordId: id, cfg, error: err instanceof Error ? err.message : String(err) });
+        }
+      })());
+    }
+
+    // Revoke from sub links
+    const subLinks: string[] = Array.isArray(record.serverSubLinks) ? record.serverSubLinks : [];
+    for (const sub of subLinks) {
+      revokeTasks.push((async () => {
+        try {
+          // Extract sub ID from various URL formats
+          // Support: /sub/{id}, /api/vpn/sub/{id}, and full URLs like https://domain.com/api/vpn/sub/{id}
+          let token = String(sub);
+          
+          // Remove protocol and domain if present
+          const urlPart = token.includes('://') ? new URL(token).pathname + new URL(token).search : token;
+          
+          // Extract ID from path
+          const match = urlPart.match(/(?:\/api\/vpn)?\/sub\/([a-zA-Z0-9-]{8,64})/i);
+          token = match ? match[1] : token;
+          
+          const client = await findClientBySubIdAcrossServers(token, String(sub));
+          if (client && client.serverId) {
+            const clientEmail = client.email || client.clientEmail || client.client || client.clientId;
+            if (clientEmail) {
+              const revoked = await revokeVpnKey(client.serverId, clientEmail);
+              if (revoked) {
+                log.info('VPN key revoked from sub link', { recordId: id, subLink: sub, serverId: client.serverId });
+              } else {
+                log.warn('Failed to revoke VPN key from sub link', { recordId: id, subLink: sub });
+              }
+            }
+          }
+        } catch (err) {
+          log.error('Error revoking sub link client', { recordId: id, sub, error: err instanceof Error ? err.message : String(err) });
+        }
+      })());
+    }
+
+    // Wait for all revoke operations to complete (best-effort)
+    await Promise.allSettled(revokeTasks);
+
+    // Now delete the database record
+    const result = await db.collection('vpn_keys').deleteOne({ _id: objectId });
+
+    if (result.deletedCount === 0) {
+      return NextResponse.json({ success: false, error: 'Record not found or already deleted' }, { status: 404 });
+    }
+
+    log.info('Multi-server key deleted with revocation', { recordId: id, configLinkCount: cfgLinks.length, subLinkCount: subLinks.length });
+
+    return NextResponse.json({ success: true, data: { id, revokedCount: cfgLinks.length + subLinks.length } });
   } catch (error) {
     log.error('Admin multi-server keys delete error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ success: false, error: 'Failed to delete record' }, { status: 500 });
