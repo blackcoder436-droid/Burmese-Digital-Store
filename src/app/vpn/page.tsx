@@ -6,8 +6,10 @@ import { useLanguage } from '@/lib/language';
 import MobileCarousel from '@/components/MobileCarousel';
 import CountryFlag from '@/components/CountryFlag';
 
-/* pricing data (1-5 devices x 6 durations) */
-const pricing: Record<number, { months: number; price: string; popular?: boolean }[]> = {
+/* pricing data (1-5 devices x 6 durations)
+   - Keep a local default as fallback, but prefer loading from the API so updates are shown live.
+*/
+const DEFAULT_PRICING: Record<number, { months: number; price: string; popular?: boolean }[]> = {
   1: [
     { months: 1, price: '4,000' },
     { months: 3, price: '9,000' },
@@ -17,38 +19,56 @@ const pricing: Record<number, { months: number; price: string; popular?: boolean
     { months: 12, price: '31,000' },
   ],
   2: [
-    { months: 1, price: '5,000' },
-    { months: 3, price: '11,000' },
-    { months: 5, price: '18,000' },
-    { months: 7, price: '25,000', popular: true },
-    { months: 9, price: '31,000' },
-    { months: 12, price: '41,000' },
+    { months: 1, price: '7,000' },
+    { months: 3, price: '20,000' },
+    { months: 5, price: '32,000' },
+    { months: 7, price: '43,000', popular: true },
+    { months: 9, price: '54,000' },
+    { months: 12, price: '67,000' },
   ],
   3: [
-    { months: 1, price: '6,000' },
-    { months: 3, price: '14,000' },
-    { months: 5, price: '22,000' },
-    { months: 7, price: '30,000', popular: true },
-    { months: 9, price: '38,000' },
-    { months: 12, price: '51,000' },
+    { months: 1, price: '10,000' },
+    { months: 3, price: '29,000' },
+    { months: 5, price: '46,000' },
+    { months: 7, price: '62,000', popular: true },
+    { months: 9, price: '77,000' },
+    { months: 12, price: '96,000' },
   ],
   4: [
-    { months: 1, price: '7,000' },
-    { months: 3, price: '17,000' },
-    { months: 5, price: '26,000' },
-    { months: 7, price: '36,000', popular: true },
-    { months: 9, price: '46,000' },
-    { months: 12, price: '61,000' },
+    { months: 1, price: '13,000' },
+    { months: 3, price: '37,000' },
+    { months: 5, price: '60,000' },
+    { months: 7, price: '80,000', popular: true },
+    { months: 9, price: '99,000' },
+    { months: 12, price: '125,000' },
   ],
   5: [
-    { months: 1, price: '8,000' },
-    { months: 3, price: '19,000' },
-    { months: 5, price: '31,000' },
-    { months: 7, price: '41,000', popular: true },
-    { months: 9, price: '53,000' },
-    { months: 12, price: '71,000' },
+    { months: 1, price: '16,000' },
+    { months: 3, price: '46,000' },
+    { months: 5, price: '74,000' },
+    { months: 7, price: '99,000', popular: true },
+    { months: 9, price: '122,000' },
+    { months: 12, price: '154,000' },
   ],
 };
+
+const MONTH_OPTIONS = [1, 3, 5, 7, 9, 12];
+
+import type { VpnPlan } from '@/lib/vpn-plans';
+const formatPlansFromApi = (plansByDevice: Record<string, VpnPlan[]>) => {
+  const out: Record<number, { months: number; price: string; popular?: boolean }[]> = {};
+  for (const d of [1, 2, 3, 4, 5]) {
+    const key = String(d);
+    const plans = plansByDevice?.[key] ?? [];
+    // Build map months -> price
+    const map = new Map<number, number>();
+    for (const p of plans) map.set(p.months, p.price);
+    out[d] = MONTH_OPTIONS.map((m) => ({ months: m, price: (map.get(m) ?? 0).toLocaleString(), popular: m === 7 }));
+  }
+  return out;
+};
+
+// Pricing will be managed in the client component (default -> override from API)
 
 const features = [
   { icon: '\u26A1', titleEn: 'Ultra-Fast Speed', titleMy: '\u1021\u1019\u103C\u1014\u103A\u1006\u102F\u1036\u1038 Speed', descEn: 'Premium Singapore & US servers with fast connection speed. Perfect for Streaming & Gaming.', descMy: 'Premium Singapore & US servers \u1016\u103C\u1004\u103A\u1037 \u1019\u103C\u1014\u103A\u1006\u1014\u103A\u101E\u1031\u102C connection speed \u1000\u102D\u102F \u1015\u1031\u1038\u1005\u103D\u1019\u103A\u1038\u1015\u102B\u101E\u100A\u103A\u104B Streaming, Gaming \u1021\u1010\u103D\u1000\u103A \u101E\u1004\u103A\u1037\u1010\u1031\u102C\u103A\u1015\u102B\u101E\u100A\u103A\u104B' },
@@ -165,6 +185,28 @@ export default function VPNPage() {
   const deviceTabsRef = useRef<HTMLDivElement>(null);
   const [liveServers, setLiveServers] = useState<LiveServerHealth[]>([]);
   const [serversLoading, setServersLoading] = useState(true);
+
+  // Pricing state: start with default then try to load from API so updates appear on the page
+  const [pricing, setPricing] = useState(DEFAULT_PRICING);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPricing() {
+      try {
+        const res = await fetch('/api/vpn/plans');
+        const data = await res.json();
+        if (cancelled) return;
+        if (data?.success && data.data) {
+          const byDevice = data.data.plansByDevice || {};
+          setPricing(formatPlansFromApi(byDevice));
+        }
+      } catch (err) {
+        // keep default pricing on error
+      }
+    }
+    void loadPricing();
+    return () => { cancelled = true; };
+  }, []);
 
   // Canonical server list ref — populated by API (enabled servers only).
   // After API load, NEVER shrinks, only grows via health-check additions.
