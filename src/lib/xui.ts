@@ -852,7 +852,8 @@ export interface XuiClientInfo {
 
 export async function findClientBySubIdAcrossServers(subId: string, fullUrlHint?: string): Promise<XuiClientInfo | null> {
   const normSubId = subId.toLowerCase().trim();
-  const servers = await getEnabledServers();
+  const serversMap = await getAllServers();
+  const servers = Object.values(serversMap);
 
   // Highlight priority servers if hint is provided
   if (fullUrlHint) {
@@ -994,7 +995,8 @@ export async function findClientByConfigLinkAcrossServers(configLink: string): P
   const parsedId = normalizeLookupValue(parsed.clientId);
   const parsedPassword = normalizeLookupValue(parsed.clientPassword);
 
-  const servers = await getEnabledServers();
+  const serversMap = await getAllServers();
+  const servers = Object.values(serversMap);
   const hint = configLink.toLowerCase();
 
   // Prioritize servers matching domain or id, fallback to others for unknown vmess
