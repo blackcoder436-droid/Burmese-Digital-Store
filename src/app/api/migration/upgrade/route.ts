@@ -6,6 +6,26 @@ import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
+async function findStoredMigrationRecord(db: any, input: string) {
+  const value = input.trim();
+  if (!value) return null;
+
+  const subLinkMatch = value.match(/\/(?:api\/vpn\/)?sub\/([a-zA-Z0-9-]{8,64})/i);
+  const token = subLinkMatch ? subLinkMatch[1] : value;
+
+  return db.collection('vpn_keys').findOne({
+    $or: [
+      { token: value },
+      { token },
+      { migratedFromToken: token },
+      { serverConfigLinks: value },
+      { serverSubLinks: value },
+      { serverConfigLinks: token },
+      { serverSubLinks: token },
+    ],
+  });
+}
+
 // ==========================================
 // POST /api/migration/upgrade
 // Migrates an old single-server VPN key to a new multi-server key.
@@ -46,6 +66,18 @@ export async function POST(req: NextRequest) {
 
     const mongoose = await connectDB();
     const db = mongoose.connection.getClient().db();
+
+    if (configLinkMatch) {
+      const storedRecord = await findStoredMigrationRecord(db, oldKeyInput);
+      if (storedRecord) {
+        if (storedRecord.keyType === 'migrated_web' || storedRecord.is_migrated === true) {
+          return NextResponse.json(
+            { error: 'This key has already been migrated to the new multi-server format.' },
+            { status: 409 }
+          );
+        }
+      }
+    }
 
     // Prevent attempting to migrate an already-migrated or generated multi-server token
     const existingCheck = await db.collection('vpn_keys').findOne({ token });

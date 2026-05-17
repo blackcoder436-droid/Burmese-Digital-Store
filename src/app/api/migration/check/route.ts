@@ -4,6 +4,26 @@ import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers } f
 
 export const dynamic = 'force-dynamic';
 
+async function findStoredMigrationRecord(db: any, input: string) {
+  const value = input.trim();
+  if (!value) return null;
+
+  const subLinkMatch = value.match(/\/(?:api\/vpn\/)?sub\/([a-zA-Z0-9-]{8,64})/i);
+  const token = subLinkMatch ? subLinkMatch[1] : value;
+
+  return db.collection('vpn_keys').findOne({
+    $or: [
+      { token: value },
+      { token },
+      { migratedFromToken: token },
+      { serverConfigLinks: value },
+      { serverSubLinks: value },
+      { serverConfigLinks: token },
+      { serverSubLinks: token },
+    ],
+  });
+}
+
 // ==========================================
 // GET /api/migration/check?key=<config-link|sub-link|token>
 // Looks up an old VPN key and returns its details
@@ -20,6 +40,40 @@ export async function GET(req: NextRequest) {
 
     const configLinkMatch = key.match(/^(vmess|vless|trojan|ss):\/\//i);
     if (configLinkMatch) {
+      const mongoose = await connectDB();
+      const db = mongoose.connection.getClient().db();
+      const storedRecord = await findStoredMigrationRecord(db, key);
+      if (storedRecord) {
+        const alreadyMigrated = storedRecord.keyType === 'migrated_web' || storedRecord.is_migrated === true;
+        if (alreadyMigrated) {
+          return NextResponse.json(
+            { error: 'This key has already been migrated to the new multi-server format.' },
+            { status: 409 }
+          );
+        }
+
+        const now = Date.now();
+        const expiryTime = storedRecord.expiryTime ?? 0;
+        const remainingDays = expiryTime > 0 ? Math.max(0, Math.ceil((expiryTime - now) / (24 * 60 * 60 * 1000))) : null;
+
+        return NextResponse.json({
+          success: true,
+          message: 'Key found in local DB. It can be migrated.',
+          data: {
+            token: key,
+            username: storedRecord.username || 'Unknown',
+            devices: storedRecord.devices || 1,
+            expiryTime,
+            remainingDays,
+            protocol: storedRecord.protocol || 'trojan',
+            dataLimitGB: storedRecord.dataLimitGB || 0,
+            keyType: storedRecord.keyType || 'admin_web',
+            serverId: storedRecord.serverId || null,
+            serverName: storedRecord.serverName || null,
+          },
+        });
+      }
+
       const panelClient = await findClientByConfigLinkAcrossServers(key);
       if (!panelClient) {
         return NextResponse.json(
@@ -100,14 +154,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         { error: 'Key not found. Please check your sub-link and try again.' },
         { status: 404 }
-      );
-    }
-
-    // Prevent attempting to migrate an already-migrated or generated multi-server token
-    if (vpnKey) {
-      return NextResponse.json(
-        { error: 'Provided key is already a multi-server subscription and cannot be migrated.' },
-        { status: 400 }
       );
     }
 

@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
 import { Agent } from 'undici';
 import { createLogger } from '@/lib/logger';
 import { getServer, getEnabledServers, type VpnServer } from '@/lib/vpn-servers';
-import { validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
+import { hostnameMatchesAllowlist, validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
 
 const log = createLogger({ module: 'xui' });
 
@@ -87,9 +87,13 @@ class XuiSession {
     this.server = server;
 
     const urlCheck = validateExternalHttpUrl(server.url, { requiredAllowlistEnv: 'VPN_SERVER_ALLOWED_HOSTS' });
-    if (!urlCheck.ok || !validatePanelPath(server.panelPath)) {
+    const parsedUrl = new URL(server.url);
+    const trustedHosts = [server.domain, parsedUrl.hostname].filter((value): value is string => Boolean(value));
+    const trustedHostAllowed = hostnameMatchesAllowlist(parsedUrl.hostname, trustedHosts);
+
+    if ((!urlCheck.ok && !trustedHostAllowed) || !validatePanelPath(server.panelPath)) {
       // Defensive: prevent SSRF even if server record was tampered
-      const reason = (!urlCheck.ok ? urlCheck.error : 'invalid panelPath');
+      const reason = (!urlCheck.ok && !trustedHostAllowed ? urlCheck.error : 'invalid panelPath');
       throw new Error(`Blocked VPN panel endpoint: ${reason}`);
     }
 
@@ -887,6 +891,30 @@ interface ParsedConfigLink {
   port?: number;
 }
 
+function normalizeLookupValue(value?: string): string {
+  return (value || '').trim().toLowerCase();
+}
+
+function matchesClientIdentity(parsed: ParsedConfigLink, client: {
+  clientId?: string;
+  clientPassword?: string;
+  subId?: string;
+}): boolean {
+  const parsedIds = [parsed.clientId, parsed.clientPassword]
+    .map(normalizeLookupValue)
+    .filter(Boolean);
+
+  if (parsedIds.length === 0) {
+    return false;
+  }
+
+  const clientIds = [client.clientId, client.clientPassword, client.subId]
+    .map(normalizeLookupValue)
+    .filter(Boolean);
+
+  return parsedIds.some((parsedId) => clientIds.includes(parsedId));
+}
+
 function parseVpnConfigLink(input: string): ParsedConfigLink | null {
   const value = input.trim();
   if (!value) return null;
@@ -960,6 +988,12 @@ export async function findClientByConfigLinkAcrossServers(configLink: string): P
   const parsed = parseVpnConfigLink(configLink);
   if (!parsed) return null;
 
+  // Some 3xUI panels expose the UUID via a different field shape or case.
+  // Try the extracted identifiers against both the direct config fields and
+  // the subscription/subId fields before giving up.
+  const parsedId = normalizeLookupValue(parsed.clientId);
+  const parsedPassword = normalizeLookupValue(parsed.clientPassword);
+
   const servers = await getEnabledServers();
   const hint = configLink.toLowerCase();
 
@@ -977,8 +1011,10 @@ export async function findClientByConfigLinkAcrossServers(configLink: string): P
 
       const client = clients.find((c) => {
         if (String(c.protocol).toLowerCase() !== parsed.protocol.toLowerCase()) return false;
-        if (parsed.clientId && c.clientId && c.clientId === parsed.clientId) return true;
-        if (parsed.clientPassword && c.clientPassword && c.clientPassword === parsed.clientPassword) return true;
+        if (matchesClientIdentity(parsed, c)) return true;
+        if (parsedId && normalizeLookupValue(c.clientId) === parsedId) return true;
+        if (parsedId && normalizeLookupValue(c.subId) === parsedId) return true;
+        if (parsedPassword && normalizeLookupValue(c.clientPassword) === parsedPassword) return true;
         return false;
       });
 
