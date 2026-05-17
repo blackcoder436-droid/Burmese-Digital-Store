@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { getEnabledServers } from '@/lib/vpn-servers';
-import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers, provisionVpnKey, revokeVpnKey } from '@/lib/xui';
+import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers, listServerClients, provisionVpnKey, revokeVpnKey } from '@/lib/xui';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';

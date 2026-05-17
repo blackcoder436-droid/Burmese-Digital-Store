@@ -6,7 +6,7 @@
 import { randomUUID } from 'crypto';
 import { Agent } from 'undici';
 import { createLogger } from '@/lib/logger';
-import { getServer, getEnabledServers, type VpnServer } from '@/lib/vpn-servers';
+import { getServer, getEnabledServers, getAllServers, type VpnServer } from '@/lib/vpn-servers';
 import { hostnameMatchesAllowlist, validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
 
 const log = createLogger({ module: 'xui' });
