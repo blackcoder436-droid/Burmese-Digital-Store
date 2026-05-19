@@ -3,9 +3,10 @@
 // Channel join verification → free key provisioning
 // ==========================================
 
+import crypto from 'crypto';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
-import { getOnlineServers, getServer } from '@/lib/vpn-servers';
+import { getOnlineServers, getServer, getEnabledServers } from '@/lib/vpn-servers';
 import { provisionVpnKey } from '@/lib/xui';
 import { getFeatureFlag } from '@/models/SiteSettings';
 import { sendMessage, getChatMember } from '../api';
@@ -92,27 +93,33 @@ export async function handleFreeTestVerify(
     return;
   }
 
-  // Show server selection for free test
+  // Show protocol selection for multi-server free test
   const servers = await getOnlineServers();
   if (servers.length === 0) {
     await reply(chatId, messageId, '❌ Server များ ယာယီပိတ်ထားပါသည်');
     return;
   }
 
-  setSession(telegramId, { isFree: true });
+  setSession(telegramId, { isFree: true, serverId: 'all' });
 
-  await reply(chatId, messageId, `🎁 <b>Free Test Key</b>\n\nServer ရွေးပါ:`, {
-    replyMarkup: freeServerKeyboard(servers),
+  // Use intersection of protocols or just default to vless/trojan if they are in the active servers
+  const enabledProtocols = Array.from(
+    new Set(servers.flatMap(s => s.enabledProtocols))
+  );
+
+  await reply(chatId, messageId, `🎁 <b>Free Test Key (Multi-Server)</b>\n\nProtocol ရွေးပါ:`, {
+    replyMarkup: freeProtocolKeyboard('all', enabledProtocols),
   });
 }
 
 /**
- * Handle free server selection → show protocol selection
+ * Handle free server selection → show protocol selection (OBSOLETE since we skip server selection for multi-server)
  */
 export async function handleFreeServerSelect(
   chatId: number,
   telegramId: number,
-  serverId: string
+  serverId: string,
+  messageId?: number
 ): Promise<void> {
   const server = await getServer(serverId);
   if (!server) {
@@ -140,7 +147,8 @@ export async function handleFreeProtocolSelect(
   firstName: string,
   username: string | undefined,
   serverId: string,
-  protocol: string
+  protocol: string,
+  messageId?: number
 ): Promise<void> {
   try {
     await connectDB();
@@ -155,27 +163,88 @@ export async function handleFreeProtocolSelect(
       return;
     }
 
-    const server = await getServer(serverId);
-    if (!server) {
+    let targetServers: any[] = [];
+    if (serverId === 'all') {
+      targetServers = await getEnabledServers();
+    } else {
+      const server = await getServer(serverId);
+      if (server) targetServers = [server];
+    }
+
+    if (targetServers.length === 0) {
       await reply(chatId, messageId, MSG.error);
       return;
     }
 
-    // Create free test key: 3GB, 72 hours, 1 device
-    const result = await provisionVpnKey({
-      serverId,
-      username: username || firstName,
-      userId: user._id.toString(),
-      devices: 1,
-      expiryDays: 3, // 72 hours
-      dataLimitGB: 3,
-      protocol,
+    await reply(chatId, messageId, '⏳ Key ဖန်တီးနေပါသည်...');
+
+    const multiServerLinks: string[] = [];
+    const serverSubLinks: string[] = [];
+    const sanitizedName = (username || firstName).replace(/\s+/g, '-').slice(0, 20);
+    const prefix = `free_${crypto.randomBytes(2).toString('hex')}_${sanitizedName}`;
+
+    const token = crypto.randomBytes(16).toString('hex');
+    const masterSubLink = `https://burmesedigital.store/api/vpn/sub/${token}`;
+
+    const provisionPromises = targetServers.map(async (server) => {
+      try {
+        const finalUsername = serverId === 'all' ? prefix + '_' + server.name.replace(/\s+/g, '-') : prefix;
+        const keyData = await provisionVpnKey({
+          serverId: server.id,
+          username: finalUsername,
+          userId: user._id.toString(),
+          devices: 1,
+          expiryDays: 3, // 72 hours
+          dataLimitGB: 3,
+          protocol,
+        });
+
+        if (keyData && keyData.success) {
+           return { serverName: server.name, subLink: keyData.subLink, configLink: keyData.configLink };
+        }
+        return null;
+      } catch (err) {
+        log.error(`Failed to provision free key on server ${server.id}:`, { error: err instanceof Error ? err.message : String(err) });
+        return null;
+      }
     });
 
-    if (!result) {
+    const results = await Promise.all(provisionPromises);
+    
+    // Process results
+    for (const res of results) {
+       if (res) {
+         multiServerLinks.push(res.serverName);
+         serverSubLinks.push(res.subLink);
+       }
+    }
+
+    if (multiServerLinks.length === 0) {
       await reply(chatId, messageId, '❌ Key ဖန်တီးရာတွင် အမှားဖြစ်ပါသည်။ ပြန်ကြိုးစားပါ');
       return;
     }
+
+    // Save into vpn_keys collection
+    const mongoose = await import('mongoose');
+    const db = mongoose.connection.getClient().db();
+    
+    const days = 3;
+    const computedExpiryTimeMs = Date.now() + days * 24 * 60 * 60 * 1000;
+    
+    await db.collection('vpn_keys').insertOne({
+        userId: user._id.toString(),
+        token: token,
+        username: sanitizedName,
+        keyType: 'free_test',
+        protocol,
+        devices: 1,
+        expiryDays: days,
+        expiryTime: computedExpiryTimeMs,
+        dataLimitGB: 3,
+        createdAt: new Date(),
+        status: 'active',
+        serverSubLinks,
+    });
 
     // Mark free test as used
     user.freeVpnTestUsedAt = new Date();
@@ -184,15 +253,23 @@ export async function handleFreeProtocolSelect(
     clearSession(telegramId);
 
     // Send key to user
-    await sendMessage(
+    const linkToSend = serverId === 'all' ? masterSubLink : serverSubLinks[0];
+    const serverNameDisplay = serverId === 'all' 
+      ? `Multi-Server (${multiServerLinks.length} servers)` 
+      : `${targetServers[0].flag} ${targetServers[0].name}`;
+
+    // Create a new message rather than editing if it's cleaner, but edit works too.
+    // wait, we changed the MSG.freeTestGenerated format, it takes configLink, we can pass empty string if it's all.
+    await reply(
       chatId,
+      messageId,
       MSG.freeTestGenerated({
-        serverName: `${server.flag} ${server.name}`,
+        serverName: serverNameDisplay,
         protocol,
-        subLink: result.subLink,
-        configLink: result.configLink,
+        subLink: linkToSend,
+        configLink: serverId === 'all' ? '' : (results.find(r => r)?.configLink || ''),
       }),
-      { replyMarkup: mainMenuKeyboard() }
+      { replyMarkup: mainMenuKeyboard(), parse_mode: 'HTML' }
     );
 
     log.info('Free test key created via bot', {

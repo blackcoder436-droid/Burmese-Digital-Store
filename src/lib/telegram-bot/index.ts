@@ -267,7 +267,7 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
       break;
 
     case '/help':
-      await handleHelp(ctx.chatId);
+      await handleHelp(ctx.chatId, ctx.userId);
       break;
 
     case '/language':
@@ -280,7 +280,7 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
       if (ctx.isAdmin) {
         await handleAdmin(ctx.chatId);
       } else {
-        await handleHelp(ctx.chatId);
+        await handleHelp(ctx.chatId, ctx.userId);
       }
       break;
 
@@ -429,7 +429,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
       await handleFreeTestVerify(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
     } else if (data.startsWith('free_server_')) {
       const serverId = data.substring(12);
-      await handleFreeServerSelect(ctx.chatId, ctx.userId, serverId);
+      await handleFreeServerSelect(ctx.chatId, ctx.userId, serverId, ctx.messageId);
     } else if (data.startsWith('free_proto_') || data.startsWith('free_proto:')) {
       const parsed = parseTwoPartCallback(data, 'free_proto', 'free_proto');
       if (!parsed) return;
@@ -441,7 +441,8 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         ctx.firstName,
         ctx.username,
         serverId,
-        protocol
+        protocol,
+        ctx.messageId
       );
     }
     // ---- My Keys ----
@@ -471,7 +472,7 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         ctx.username,
         keyId,
         protocol,
-        ctx.messageId
+        ctx.messageId!
       );
     }
     // ---- Referral ----

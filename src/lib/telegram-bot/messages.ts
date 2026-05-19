@@ -177,9 +177,8 @@ export const MSG = {
     `📱 Device: 1\n\n` +
     `━━━━━━━━━━━━━━━━━━\n` +
     `🔗 <b>Subscription Link:</b>\n` +
-    `<code>${params.subLink}</code>\n\n` +
-    `🔑 <b>Config Link:</b>\n` +
-    `<code>${params.configLink}</code>\n` +
+    `<code>${params.subLink}</code>\n` +
+    (params.configLink ? `\n🔑 <b>Config Link:</b>\n<code>${params.configLink}</code>\n` : '') +
     `━━━━━━━━━━━━━━━━━━`,
 
   // ---- Exchange Key ----
