@@ -8,6 +8,7 @@ const en = {
   nav: {
     home: 'Home',
     shop: 'Shop',
+    domains: 'Domain',
     vpn: 'VPN',
     contact: 'Contact',
     signIn: 'Sign In',

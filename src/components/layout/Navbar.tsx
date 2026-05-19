@@ -135,6 +135,7 @@ export default function Navbar() {
     { href: '/', label: t('nav.home') },
     { href: '/shop', label: t('nav.shop') },
     { href: '/vps', label: 'VPS' },
+    { href: '/domains', label: t('nav.domains') },
     { href: '/vpn', label: t('nav.vpn') },
     { href: '/contact', label: t('nav.contact') },
   ];

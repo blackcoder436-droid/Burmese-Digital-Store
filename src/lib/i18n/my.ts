@@ -10,6 +10,7 @@ const my: TranslationKeys = {
   nav: {
     home: 'မူလ',
     shop: 'ဆိုင်',
+    domains: 'Domain',
     vpn: 'VPN',
     contact: 'ဆက်သွယ်ရန်',
     signIn: 'ဝင်မည်',

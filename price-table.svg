@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560">
+  <defs>
+    <style type="text/css"><![CDATA[
+      .bg { fill:#0f1720 }
+      .card { fill:#0b1320; stroke:#0b1220; rx:14; }
+      .title { fill:#ffffff; font-family:Inter, Arial, sans-serif; font-size:24px; font-weight:700 }
+      .subtitle { fill:#9fb0c8; font-family:Inter, Arial, sans-serif; font-size:14px }
+      .th { fill:#cbd5e1; font-family:Inter, Arial, sans-serif; font-size:16px; font-weight:700 }
+      .td { fill:#e6eef5; font-family:Inter, Arial, sans-serif; font-size:16px }
+      .cell-odd { fill: rgba(255,255,255,0.02); }
+      .feat { fill:#cfe6ff; font-size:13px }
+      .note { fill:#9fb0c8; font-size:13px }
+    ]]></style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1400" height="560" />
+  <g transform="translate(40,30)">
+    <rect class="card" x="0" y="0" width="1320" height="500" rx="12"/>
+    <text x="28" y="42" class="title">VPN Price Table (MMK)</text>
+    <text x="28" y="68" class="subtitle">Android • iOS • Windows • Mac • Stable Speed • Private Connection • Multi Server Support</text>
+
+    <!-- Table header -->
+    <g transform="translate(28,100)">
+      <!-- header background -->
+      <rect x="0" y="0" width="1264" height="44" fill="#0f1728" rx="6" />
+      <text x="12" y="28" class="th">Duration</text>
+      <text x="220" y="28" class="th" text-anchor="middle">1 Device</text>
+      <text x="420" y="28" class="th" text-anchor="middle">2 Devices</text>
+      <text x="620" y="28" class="th" text-anchor="middle">3 Devices</text>
+      <text x="820" y="28" class="th" text-anchor="middle">4 Devices</text>
+      <text x="1020" y="28" class="th" text-anchor="middle">5 Devices</text>
+
+      <!-- rows -->
+      <!-- Row 1 -->
+      <g transform="translate(0,58)">
+        <rect x="0" y="0" width="1264" height="44" class="cell-odd" />
+        <text x="12" y="30" class="td" font-weight="700">1 Month</text>
+        <text x="220" y="30" class="td" text-anchor="middle">4,000 Ks</text>
+        <text x="420" y="30" class="td" text-anchor="middle">7,000 Ks</text>
+        <text x="620" y="30" class="td" text-anchor="middle">10,000 Ks</text>
+        <text x="820" y="30" class="td" text-anchor="middle">13,000 Ks</text>
+        <text x="1020" y="30" class="td" text-anchor="middle">16,000 Ks</text>
+      </g>
+      <!-- Row 2 -->
+      <g transform="translate(0,116)">
+        <rect x="0" y="0" width="1264" height="44" />
+        <text x="12" y="30" class="td" font-weight="700">3 Months</text>
+        <text x="220" y="30" class="td" text-anchor="middle">11,000 Ks</text>
+        <text x="420" y="30" class="td" text-anchor="middle">20,000 Ks</text>
+        <text x="620" y="30" class="td" text-anchor="middle">29,000 Ks</text>
+        <text x="820" y="30" class="td" text-anchor="middle">37,000 Ks</text>
+        <text x="1020" y="30" class="td" text-anchor="middle">46,000 Ks</text>
+      </g>
+      <!-- Row 3 -->
+      <g transform="translate(0,174)">
+        <rect x="0" y="0" width="1264" height="44" class="cell-odd" />
+        <text x="12" y="30" class="td" font-weight="700">5 Months</text>
+        <text x="220" y="30" class="td" text-anchor="middle">18,000 Ks</text>
+        <text x="420" y="30" class="td" text-anchor="middle">32,000 Ks</text>
+        <text x="620" y="30" class="td" text-anchor="middle">46,000 Ks</text>
+        <text x="820" y="30" class="td" text-anchor="middle">60,000 Ks</text>
+        <text x="1020" y="30" class="td" text-anchor="middle">74,000 Ks</text>
+      </g>
+      <!-- Row 4 -->
+      <g transform="translate(0,232)">
+        <rect x="0" y="0" width="1264" height="44" />
+        <text x="12" y="30" class="td" font-weight="700">7 Months</text>
+        <text x="220" y="30" class="td" text-anchor="middle">25,000 Ks</text>
+        <text x="420" y="30" class="td" text-anchor="middle">43,000 Ks</text>
+        <text x="620" y="30" class="td" text-anchor="middle">62,000 Ks</text>
+        <text x="820" y="30" class="td" text-anchor="middle">80,000 Ks</text>
+        <text x="1020" y="30" class="td" text-anchor="middle">99,000 Ks</text>
+      </g>
+      <!-- Row 5 -->
+      <g transform="translate(0,290)">
+        <rect x="0" y="0" width="1264" height="44" class="cell-odd" />
+        <text x="12" y="30" class="td" font-weight="700">9 Months</text>
+        <text x="220" y="30" class="td" text-anchor="middle">31,000 Ks</text>
+        <text x="420" y="30" class="td" text-anchor="middle">54,000 Ks</text>
+        <text x="620" y="30" class="td" text-anchor="middle">77,000 Ks</text>
+        <text x="820" y="30" class="td" text-anchor="middle">99,000 Ks</text>
+        <text x="1020" y="30" class="td" text-anchor="middle">122,000 Ks</text>
+      </g>
+      <!-- Row 6 -->
+      <g transform="translate(0,348)">
+        <rect x="0" y="0" width="1264" height="44" />
+        <text x="12" y="30" class="td" font-weight="700">12 Months</text>
+        <text x="220" y="30" class="td" text-anchor="middle">38,000 Ks</text>
+        <text x="420" y="30" class="td" text-anchor="middle">67,000 Ks</text>
+        <text x="620" y="30" class="td" text-anchor="middle">96,000 Ks</text>
+        <text x="820" y="30" class="td" text-anchor="middle">125,000 Ks</text>
+        <text x="1020" y="30" class="td" text-anchor="middle">154,000 Ks</text>
+      </g>
+
+    </g>
+
+    <g transform="translate(28,430)">
+      <text x="0" y="0" class="note">Rounded to nearest 1,000 Ks • No discounts shown (full-price tiers)</text>
+    </g>
+  </g>
+</svg>
