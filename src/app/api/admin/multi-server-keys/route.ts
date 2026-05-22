@@ -3,7 +3,8 @@ import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import dbConnect from '@/lib/mongodb';
 import { createLogger } from '@/lib/logger';
-import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers, updateVpnClient, revokeVpnKey } from '@/lib/xui';
+import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers, updateVpnClient, revokeVpnKey, listServerClients } from '@/lib/xui';
+import { getEnabledServers } from '@/lib/vpn-servers';
 
 const log = createLogger({ route: '/api/admin/multi-server-keys' });
 
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
       ],
     };
 
-    const query: Record<string, unknown> = { ...baseQuery };
+    const query: any = { ...baseQuery };
     if (status !== 'all') {
       query.status = status;
     }
@@ -105,7 +106,7 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { id, expiryTime, dataLimitGB, status } = body;
+    const { id, expiryTime, dataLimitGB, status, devices } = body;
     if (!id) {
       return NextResponse.json({ success: false, error: 'Missing record id' }, { status: 400 });
     }
@@ -122,6 +123,12 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Invalid dataLimitGB' }, { status: 400 });
       }
       updates.dataLimitGB = dataLimitGB;
+    }
+    if (devices !== undefined) {
+      if (typeof devices !== 'number' || devices < 1) {
+        return NextResponse.json({ success: false, error: 'Invalid devices limit' }, { status: 400 });
+      }
+      updates.devices = devices;
     }
     if (status !== undefined) {
       if (status !== 'active' && status !== 'disabled' && status !== 'expired') {
@@ -147,19 +154,27 @@ export async function PATCH(request: NextRequest) {
       const record = await db.collection('vpn_keys').findOne({ _id: objectId });
       if (record) {
         const tasks: Promise<unknown>[] = [];
+        const targetUsername = String(record.username || '').trim();
+        const targetDeviceLabel = `${updates.devices !== undefined ? updates.devices : record.devices || 1}D`;
+        const targetBaseName = targetUsername ? `${targetUsername} - ${targetDeviceLabel}` : '';
         const applyUpdatesToClient = async (client: any) => {
           try {
             const serverId = client.serverId;
-            const clientEmail = client.email || client.clientEmail || client.client || client.clientId;
+            const cAny = client as any;
+            const clientEmail = cAny.email || cAny.clientEmail || cAny.client || cAny.clientId;
             if (!serverId || !clientEmail) return;
 
             const panelUpdates: any = {};
             if (updates.expiryTime !== undefined) panelUpdates.expiryTime = updates.expiryTime as number;
             if (updates.dataLimitGB !== undefined) panelUpdates.dataLimitGB = updates.dataLimitGB as number;
+              if (updates.devices !== undefined) panelUpdates.devices = updates.devices as number;
             if (updates.status !== undefined) panelUpdates.enable = updates.status === 'active';
 
             if (Object.keys(panelUpdates).length > 0) {
-              await updateVpnClient(serverId, clientEmail, panelUpdates);
+                const ok = await updateVpnClient(serverId, clientEmail, panelUpdates);
+                if (!ok) {
+                  log.warn('Failed to propagate update to panel', { id, serverId, clientEmail, panelUpdates });
+                }
             }
           } catch (err) {
             log.warn('Failed to propagate update to panel', { id, err: err instanceof Error ? err.message : String(err) });
@@ -187,6 +202,32 @@ export async function PATCH(request: NextRequest) {
         }
 
         await Promise.allSettled(tasks);
+
+        if (targetBaseName) {
+          const enabledServers = await getEnabledServers();
+          for (const server of enabledServers) {
+            tasks.push((async () => {
+              try {
+                const clients = await listServerClients(server.id);
+                const matched = (clients || []).filter((client: any) => {
+                  const email = String(client.email || '').trim();
+                  return email === targetBaseName || email.startsWith(`${targetBaseName} Key`);
+                });
+                for (const client of matched) {
+                  await applyUpdatesToClient({ ...client, serverId: server.id });
+                }
+              } catch (err) {
+                log.warn('Fallback name-based panel update failed', {
+                  id,
+                  serverId: server.id,
+                  err: err instanceof Error ? err.message : String(err),
+                });
+              }
+            })());
+          }
+
+          await Promise.allSettled(tasks);
+        }
       }
     } catch (err) {
       log.warn('Error while propagating updates to panels', { error: err instanceof Error ? err.message : String(err) });
@@ -237,7 +278,8 @@ export async function DELETE(request: NextRequest) {
         try {
           const client = await findClientByConfigLinkAcrossServers(String(cfg));
           if (client && client.serverId) {
-            const clientEmail = client.email || client.clientEmail || client.client || client.clientId;
+            const cAny = client as any;
+            const clientEmail = cAny.email || cAny.clientEmail || cAny.client || cAny.clientId;
             if (clientEmail) {
               const revoked = await revokeVpnKey(client.serverId, clientEmail);
               if (revoked) {
@@ -271,7 +313,8 @@ export async function DELETE(request: NextRequest) {
           
           const client = await findClientBySubIdAcrossServers(token, String(sub));
           if (client && client.serverId) {
-            const clientEmail = client.email || client.clientEmail || client.client || client.clientId;
+            const cAny = client as any;
+            const clientEmail = cAny.email || cAny.clientEmail || cAny.client || cAny.clientId;
             if (clientEmail) {
               const revoked = await revokeVpnKey(client.serverId, clientEmail);
               if (revoked) {

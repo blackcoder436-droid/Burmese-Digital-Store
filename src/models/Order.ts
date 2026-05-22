@@ -79,6 +79,7 @@ export interface IOrderDocument extends Document {
   multiSubToken?: string; // Token for the aggregated subscription link
   vpnProvisionStatus?: VpnProvisionStatus;
   adminNote?: string;
+  contactInfo?: string;
   couponCode?: string;
   discountAmount?: number;
   // Telegram screenshot storage
@@ -214,6 +215,11 @@ const OrderSchema: Schema = new Schema(
     telegramMessageId: {
       type: Number,
       default: null,
+    },
+    contactInfo: {
+      type: String,
+      trim: true,
+      maxlength: [200, 'Contact info cannot exceed 200 characters'],
     },
     couponCode: {
       type: String,

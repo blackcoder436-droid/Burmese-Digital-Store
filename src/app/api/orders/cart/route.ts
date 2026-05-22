@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
     const paymentMethod = formData.get('paymentMethod') as string;
     const screenshot = formData.get('screenshot') as File;
     const couponCode = sanitizeString((formData.get('couponCode') as string) || '');
+    const contactInfo = sanitizeString((formData.get('contactInfo') as string) || '').slice(0, 200);
 
     // Parse cart items
     let cartItems: CartItem[];
@@ -122,7 +123,14 @@ export async function POST(request: NextRequest) {
 
     // Validate each cart item
     for (const item of cartItems) {
-      if (!item.productId || !isValidObjectId(item.productId)) {
+      if (!item.productId) {
+        return NextResponse.json(
+          { success: false, error: 'Missing product ID in cart' },
+          { status: 400 }
+        );
+      }
+      // Allow both ObjectId and string IDs (for VPS and manual fulfillment products)
+      if (typeof item.productId !== 'string' || item.productId.length === 0) {
         return NextResponse.json(
           { success: false, error: 'Invalid product ID in cart' },
           { status: 400 }
@@ -136,13 +144,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch all products
-    const productIds = cartItems.map((item) => item.productId);
-    const products = await Product.find({ _id: { $in: productIds }, active: true });
+    // Fetch all products by _id (ObjectId) or slug (string ID)
+    const productQueries = cartItems.map((item) => {
+      if (isValidObjectId(item.productId)) {
+        return { _id: item.productId };
+      } else {
+        return { slug: item.productId };
+      }
+    });
+
+    const products = await Product.find(
+      {
+        $or: productQueries,
+        active: true,
+      }
+    );
 
     if (products.length !== cartItems.length) {
       const foundIds = products.map((p) => p._id.toString());
-      const missing = cartItems.find((item) => !foundIds.includes(item.productId));
+      const foundSlugs = products.map((p) => p.slug);
+      const missing = cartItems.find(
+        (item) => !foundIds.includes(item.productId) && !foundSlugs.includes(item.productId)
+      );
       return NextResponse.json(
         { success: false, error: `Product not found: ${missing?.productId}` },
         { status: 404 }
@@ -162,8 +185,11 @@ export async function POST(request: NextRequest) {
     for (const item of cartItems) {
       const product = products.find((p) => p._id.toString() === item.productId);
       if (!product) continue;
-      const availableStock = product.details.filter((d: { sold: boolean }) => !d.sold).length;
-      if (availableStock < item.quantity) {
+      const hasStockDetails = Array.isArray(product.details) && product.details.length > 0;
+      const availableStock = hasStockDetails
+        ? product.details.filter((d: { sold: boolean }) => !d.sold).length
+        : null;
+      if (availableStock !== null && availableStock < item.quantity) {
         return NextResponse.json(
           { success: false, error: `${product.name}: Only ${availableStock} in stock` },
           { status: 400 }
@@ -279,6 +305,7 @@ export async function POST(request: NextRequest) {
         telegramFileId,
         telegramMessageId,
         transactionId: ocrData?.transactionId ?? '',
+        contactInfo: contactInfo || undefined,
         ocrVerified: ocrEnabled && ocrData ? ocrData.confidence > 60 && ocrData.transactionId !== null : false,
         ocrExtractedData: ocrData
           ? {

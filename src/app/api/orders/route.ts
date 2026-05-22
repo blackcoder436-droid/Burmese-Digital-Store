@@ -136,6 +136,7 @@ export async function POST(request: NextRequest) {
     const transactionId = sanitizeString((formData.get('transactionId') as string) || '');
     const screenshot = formData.get('screenshot') as File;
     const couponCode = sanitizeString((formData.get('couponCode') as string) || '');
+    const contactInfo = sanitizeString((formData.get('contactInfo') as string) || '').slice(0, 200);
 
     // Validation
     if (!productId || !paymentMethod || !screenshot) {
@@ -145,16 +146,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate productId format
-    if (!isValidObjectId(productId)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid product ID' },
-        { status: 400 }
-      );
+    // Find product by either ObjectId or slug (for VPS and other manual fulfillment items)
+    let productQuery: Record<string, unknown>;
+    if (isValidObjectId(productId)) {
+      productQuery = { _id: productId, active: true };
+    } else {
+      // Try to find by slug (supports VPS and other string-based product IDs)
+      productQuery = { slug: productId, active: true };
     }
 
     // Validate payment method against product's allowed gateways
-    const productDoc = await Product.findOne({ _id: productId, active: true }).populate('allowedPaymentGateways');
+    const productDoc = await Product.findOne(productQuery).populate('allowedPaymentGateways');
     if (!productDoc) {
       return NextResponse.json(
         { success: false, error: 'Product not found' },
@@ -212,9 +214,12 @@ export async function POST(request: NextRequest) {
     // Find product (already fetched above)
     const product = productDoc;
 
-    // Check stock
-    const availableStock = product.details.filter((d) => !d.sold).length;
-    if (availableStock < quantity) {
+    // Check stock only when product has detail items
+    const hasStockDetails = Array.isArray(product.details) && product.details.length > 0;
+    const availableStock = hasStockDetails
+      ? product.details.filter((d) => !d.sold).length
+      : null;
+    if (availableStock !== null && availableStock < quantity) {
       return NextResponse.json(
         { success: false, error: `Only ${availableStock} items in stock` },
         { status: 400 }
@@ -325,6 +330,7 @@ export async function POST(request: NextRequest) {
       telegramFileId,
       telegramMessageId,
       transactionId: transactionId || (ocrData?.transactionId ?? ''),
+      contactInfo: contactInfo || undefined,
       ocrVerified: ocrEnabled && ocrData ? ocrData.confidence > 60 && ocrData.transactionId !== null : false,
       ocrExtractedData: ocrData
         ? {

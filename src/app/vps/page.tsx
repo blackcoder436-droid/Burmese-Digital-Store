@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
   CheckCircle,
@@ -15,8 +16,10 @@ import {
   Server,
   Upload,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
 import { useScrollFade } from '@/hooks/useScrollFade';
+import { useCart } from '@/lib/cart';
 import { vpsPlans, type VpsPlan } from '@/lib/vps-plans';
 
 const flowSteps = [
@@ -84,7 +87,106 @@ function formatMMK(value: number) {
 export default function VpsPage() {
   const { tr } = useLanguage();
   const containerRef = useScrollFade();
+  const router = useRouter();
+  const { addItem } = useCart();
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [addingPlan, setAddingPlan] = useState<string | null>(null);
+
+  async function findProductForVpsPlan(plan: VpsPlan) {
+    // Try to find exact product by slug/ID first
+    try {
+      const byIdRes = await fetch(`/api/products/${encodeURIComponent(plan.id)}`);
+      if (byIdRes.ok) {
+        const data = await byIdRes.json();
+        if (data.success && data.data?.product) {
+          console.log('Found VPS product by ID/slug:', plan.id);
+          return data.data.product;
+        }
+      }
+    } catch (err) {
+      console.error('Error looking up VPS product by ID/slug:', err);
+    }
+
+    // Try search by name
+    try {
+      const searchRes = await fetch(`/api/products?search=${encodeURIComponent(plan.name)}`);
+      if (searchRes.ok) {
+        const data = await searchRes.json();
+        if (data.success && Array.isArray(data.data?.products) && data.data.products.length > 0) {
+          console.log('Found VPS product by name:', plan.name);
+          return data.data.products[0];
+        }
+      }
+    } catch (err) {
+      console.error('Error looking up VPS product by name:', err);
+    }
+
+    // Fallback: create a virtual product object so users can add to cart
+    // This supports manual-fulfillment VPS flows even when DB entries are absent
+    console.warn('No VPS product found in DB; returning virtual product for plan:', plan.id);
+    return {
+      _id: plan.id,
+      name: plan.name,
+      slug: plan.id,
+      price: plan.price,
+      category: 'vps',
+      image: '/images/vps-default.png',
+      description: `${plan.os} Ubuntu VPS Instance`,
+      stock: 999,
+      purchaseDisabled: false,
+      details: [],
+      active: true,
+    } as any;
+  }
+
+  async function handleStartPlan(plan: VpsPlan) {
+    setAddingPlan(plan.id);
+    try {
+      const product = await findProductForVpsPlan(plan);
+      
+      if (!product || !product._id) {
+        toast.error(tr('Could not process this plan. Please try again.', 'ဤ plan ကို လုပ်ဆောင်၍မရပါ။ ထပ်ကြိုးစားပါ။'));
+        setAddingPlan(null);
+        return;
+      }
+
+      if (product.purchaseDisabled) {
+        toast.error(tr('This plan is not available for purchase right now.', 'ဤ plan ကို ယခု ဝယ်ယူ၍ မရနိုင်ပါ။'));
+        setAddingPlan(null);
+        return;
+      }
+
+      const hasManualFulfillment = Array.isArray(product.details) && product.details.length === 0;
+      const effectiveStock = product.stock > 0 ? product.stock : hasManualFulfillment ? 10 : 0;
+      
+      if (effectiveStock <= 0) {
+        toast.error(tr('This plan is currently out of stock. Please try another plan.', 'ဤ plan သည် ဈိုက်အားမရှိသေးပါ။ အခြား plan တစ်ခုကို ကြိုးစားပါ။'));
+        setAddingPlan(null);
+        return;
+      }
+
+      addItem(
+        {
+          productId: product._id as string,
+          slug: product.slug || plan.id,
+          name: product.name,
+          price: product.price,
+          stock: effectiveStock,
+          category: product.category || 'vps',
+          image: product.image,
+        },
+        1
+      );
+      
+      toast.success(tr('Added to cart. Continue to checkout.', 'ကာတ်ထဲသို့ ထည့်ပြီး checkout ဆက်ပါ။'));
+      router.push('/cart');
+    } catch (err) {
+      console.error('Error adding VPS plan to cart:', err);
+      toast.error(tr('Unable to add plan to cart. Please try again.', 'ကာတ်ထဲထည့်၍ မရပါ။ ထပ်ကြိုးစားပါ။'));
+    } finally {
+      setAddingPlan(null);
+    }
+  }
 
   return (
     <div className="min-h-screen pt-10 sm:pt-14 pb-12" ref={containerRef}>
@@ -171,9 +273,14 @@ export default function VpsPage() {
                     {formatMMK(plan.price)} <span className="text-xl text-gray-400 font-semibold">MMK</span>
                     <span className="text-base font-medium text-gray-500"> / {tr('month', 'လစဉ်')}</span>
                   </p>
-                  <a href="#checkout" className="btn-electric">
-                    {tr('Get Started', 'စတင်ဝယ်ယူရန်')} <ArrowRight className="w-4 h-4" />
-                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleStartPlan(plan)}
+                    disabled={addingPlan === plan.id}
+                    className="btn-electric inline-flex items-center gap-2"
+                  >
+                    {addingPlan === plan.id ? tr('Adding...', 'ထည့်နေသည်...') : tr('Get Started', 'စတင်ဝယ်ယူရန်')} <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
               </article>
             ))}

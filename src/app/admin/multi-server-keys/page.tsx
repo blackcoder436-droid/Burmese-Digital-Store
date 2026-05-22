@@ -32,7 +32,16 @@ export default function AdminMultiServerKeysPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [syncingId, setSyncingId] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryCounts>({ active: 0, expired: 0, disabled: 0, total: 0 });
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<MultiServerKeyRecord | null>(null);
+  const [editDevices, setEditDevices] = useState(1);
+  const [editExpiryDate, setEditExpiryDate] = useState<string>('');
+  const [editUnlimitedExpiry, setEditUnlimitedExpiry] = useState<boolean>(false);
+  const [editDataLimit, setEditDataLimit] = useState(0);
 
   useEffect(() => {
     fetchKeys();
@@ -131,36 +140,87 @@ export default function AdminMultiServerKeysPage() {
   async function toggleStatus(record: MultiServerKeyRecord) {
     const nextStatus = record.status === 'disabled' ? 'active' : 'disabled';
     await updateRecord(record._id, { status: nextStatus });
+    await syncRecord(record);
   }
 
-  async function editRecord(record: MultiServerKeyRecord) {
-    const expiryPrompt = window.prompt(
-      'Enter expiry days from today (0 = unlimited):',
-      record.expiryTime && record.expiryTime > 0
-        ? String(Math.max(0, Math.ceil((record.expiryTime - Date.now()) / (1000 * 60 * 60 * 24))))
-        : '0'
-    );
-
-    if (expiryPrompt === null) return;
-    const expiryDays = Number(expiryPrompt);
-    if (Number.isNaN(expiryDays) || expiryDays < 0) {
-      window.alert('Expiry days must be a non-negative number.');
-      return;
+  async function syncRecord(record: MultiServerKeyRecord) {
+    setSyncingId(record._id);
+    try {
+      const res = await fetch('/api/admin/multi-server-keys/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: record._id }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Sync failed');
+      }
+      window.alert(data.message || 'Synced successfully.');
+      await fetchKeys();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to sync record');
+      console.error(err);
+    } finally {
+      setSyncingId(null);
     }
+  }
 
-    const dataLimitPrompt = window.prompt(
-      'Enter data limit in GB (0 = unlimited):',
-      String(record.dataLimitGB ?? 0)
-    );
-    if (dataLimitPrompt === null) return;
-    const dataLimitGB = Number(dataLimitPrompt);
-    if (Number.isNaN(dataLimitGB) || dataLimitGB < 0) {
-      window.alert('Data limit must be a non-negative number.');
-      return;
+  function openEditModal(record: MultiServerKeyRecord) {
+    setEditingRecord(record);
+    setEditDevices(record.devices || 1);
+    
+    if (record.expiryTime && record.expiryTime > 0) {
+      setEditUnlimitedExpiry(false);
+      const dateObj = new Date(record.expiryTime);
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      setEditExpiryDate(`${year}-${month}-${day}`);
+    } else {
+      setEditUnlimitedExpiry(true);
+      setEditExpiryDate('');
     }
+    
+    setEditDataLimit(record.dataLimitGB || 0);
+    setShowEditModal(true);
+  }
 
-    const expiryTime = expiryDays === 0 ? 0 : Date.now() + expiryDays * 24 * 60 * 60 * 1000;
-    await updateRecord(record._id, { expiryTime, dataLimitGB });
+  async function handleSaveEdit() {
+    if (!editingRecord) return;
+    
+    setEditingId(editingRecord._id);
+    setShowEditModal(false); // Close modal immediately
+    
+    try {
+      let expiryTime = 0;
+      if (!editUnlimitedExpiry && editExpiryDate) {
+        const dt = new Date(editExpiryDate);
+        if (!isNaN(dt.getTime())) {
+          dt.setHours(23, 59, 59, 999);
+          expiryTime = dt.getTime();
+        }
+      }
+      
+      await updateRecord(editingRecord._id, { expiryTime, dataLimitGB: editDataLimit, devices: editDevices });
+      
+      // Auto-sync after successful update
+      const res = await fetch('/api/admin/multi-server-keys/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingRecord._id }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Sync failed');
+      }
+      await fetchKeys();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to update and sync record');
+      console.error(err);
+    } finally {
+      setEditingId(null);
+      setEditingRecord(null);
+    }
   }
 
   return (
@@ -219,20 +279,19 @@ export default function AdminMultiServerKeysPage() {
           ) : keys.length === 0 ? (
             <div className="py-16 text-center text-gray-400">No multi-server key records found.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-sm">
+            <div className="overflow-x-auto pb-4">
+              <table className="min-w-full border-collapse text-sm whitespace-nowrap">
               <thead>
                 <tr className="text-left text-gray-400 border-b border-white/10 uppercase text-xs tracking-[0.2em]">
-                  <th className="px-4 py-3">Token</th>
-                  <th className="px-4 py-3">Username</th>
-                  <th className="px-4 py-3">Devices</th>
-                  <th className="px-4 py-3">Expiry</th>
-                  <th className="px-4 py-3">Data Limit</th>
-                  <th className="px-4 py-3">Servers</th>
-                  <th className="px-4 py-3">Multi-sub</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Created</th>
-                  <th className="px-4 py-3">Actions</th>
+                  <th className="px-4 py-3 font-medium">Token</th>
+                  <th className="px-4 py-3 font-medium">Username</th>
+                  <th className="px-4 py-3 font-medium">Devices</th>
+                  <th className="px-4 py-3 font-medium">Expiry</th>
+                  <th className="px-4 py-3 font-medium">Data Limit</th>
+                  <th className="px-4 py-3 font-medium">Servers</th>
+                  <th className="px-4 py-3 font-medium">Multi-sub</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,13 +299,13 @@ export default function AdminMultiServerKeysPage() {
                   <tr key={record._id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
                     <td className="px-4 py-3 text-white">
                       <div className="font-medium">{record.token.slice(0, 8)}…</div>
-                      <div className="text-xs text-gray-500">{record.migratedFromToken ? `from ${record.migratedFromToken.slice(0, 8)}…` : 'direct'}</div>
+                      <div className="text-[10px] text-gray-500">{record.migratedFromToken ? `from ${record.migratedFromToken.slice(0, 8)}…` : 'direct'}</div>
                     </td>
                     <td className="px-4 py-3 text-gray-200">{record.username}</td>
                     <td className="px-4 py-3 text-gray-200">{record.devices || 1}</td>
-                    <td className="px-4 py-3 text-gray-200">{formatDate(record.expiryTime)}</td>
-                    <td className="px-4 py-3 text-gray-200">{(record.dataLimitGB ?? 0) === 0 ? 'Unlimited' : `${record.dataLimitGB} GB`}</td>
-                    <td className="px-4 py-3 text-gray-200">
+                    <td className="px-4 py-3 text-gray-200 text-xs">{formatDate(record.expiryTime)}</td>
+                    <td className="px-4 py-3 text-gray-200 text-xs">{(record.dataLimitGB ?? 0) === 0 ? 'Unlimited' : `${record.dataLimitGB} GB`}</td>
+                    <td className="px-4 py-3 text-gray-200 text-xs">
                       {record.serverSubLinks?.length ?? 0} sub / {record.serverConfigLinks?.length ?? 0} cfg
                     </td>
                     <td className="px-4 py-3 text-gray-200">
@@ -256,7 +315,7 @@ export default function AdminMultiServerKeysPage() {
                           const link = `${appUrl}/api/vpn/sub/${record.token}`;
                           return (
                             <div className="flex items-center gap-2">
-                              <a href={link} target="_blank" rel="noreferrer" className="text-xs text-cyan-300 truncate max-w-[160px] block">{link}</a>
+                              <a href={link} target="_blank" rel="noreferrer" className="text-xs text-cyan-300 truncate max-w-[140px] block hover:underline">{link}</a>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -264,7 +323,7 @@ export default function AdminMultiServerKeysPage() {
                                   setCopiedId(record._id);
                                   setTimeout(() => setCopiedId(null), 2000);
                                 }}
-                                className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-white hover:bg-white/10 transition-colors"
+                                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white hover:bg-white/10 transition-colors"
                               >{copiedId === record._id ? 'Copied' : 'Copy'}</button>
                             </div>
                           );
@@ -274,27 +333,46 @@ export default function AdminMultiServerKeysPage() {
                       })()}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold ${getStatusBadge(record.status)}`}>
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusBadge(record.status)}`}>
                         {record.status || 'active'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-200">{record.createdAt ? new Date(record.createdAt).toLocaleDateString() : '–'}</td>
-                    <td className="px-4 py-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => editRecord(record)}
-                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white hover:bg-white/10 transition-colors"
-                      >Edit</button>
-                      <button
-                        type="button"
-                        onClick={() => toggleStatus(record)}
-                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white hover:bg-white/10 transition-colors"
-                      >{record.status === 'disabled' ? 'Enable' : 'Disable'}</button>
-                      <button
-                        type="button"
-                        onClick={() => deleteRecord(record._id)}
-                        className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs text-red-300 hover:bg-red-500/20 transition-colors"
-                      >Delete</button>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(record)}
+                          disabled={syncingId === record._id || editingId === record._id}
+                          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white hover:bg-white/10 transition-colors disabled:opacity-50 min-w-[56px] flex justify-center"
+                        >
+                          {editingId === record._id ? (
+                            <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block"></span>
+                          ) : 'Edit'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => syncRecord(record)}
+                          disabled={syncingId === record._id}
+                          className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-2.5 py-1.5 text-xs text-blue-300 hover:bg-blue-500/20 transition-colors disabled:opacity-50 min-w-[56px] flex justify-center"
+                          title="Sync expiry/data limits and automatically add missing new servers"
+                        >
+                          {syncingId === record._id ? (
+                            <span className="w-3.5 h-3.5 rounded-full border-2 border-blue-300 border-t-transparent animate-spin inline-block"></span>
+                          ) : 'Sync'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleStatus(record)}
+                          disabled={syncingId === record._id}
+                          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                        >{record.status === 'disabled' ? 'Enable' : 'Disable'}</button>
+                        <button
+                          type="button"
+                          onClick={() => deleteRecord(record._id)}
+                          disabled={syncingId === record._id}
+                          className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                        >Delete</button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -321,6 +399,92 @@ export default function AdminMultiServerKeysPage() {
           </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {showEditModal && editingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#10101f] border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl relative">
+            <button 
+              onClick={() => setShowEditModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            
+            <h2 className="text-xl font-bold text-white mb-6">Edit Multi-Server Key</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Username</label>
+                <div className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-gray-400 text-sm cursor-not-allowed">
+                  {editingRecord.username}
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Devices Limit</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={editDevices}
+                  onChange={(e) => setEditDevices(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full bg-[#0b0b19] border border-white/10 focus:border-purple-500 rounded-xl px-4 py-2 text-white text-sm outline-none transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Expiry Date</label>
+                <div className="flex items-center gap-3 mb-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editUnlimitedExpiry}
+                      onChange={(e) => setEditUnlimitedExpiry(e.target.checked)}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 bg-[#0b0b19] w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-400">Unlimited Expiry</span>
+                  </label>
+                </div>
+                {!editUnlimitedExpiry && (
+                  <input
+                    type="date"
+                    value={editExpiryDate}
+                    onChange={(e) => setEditExpiryDate(e.target.value)}
+                    className="w-full bg-[#0b0b19] border border-white/10 focus:border-purple-500 rounded-xl px-4 py-2 text-white text-sm outline-none transition-colors"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Data Limit in GB (0 = unlimited)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editDataLimit}
+                  onChange={(e) => setEditDataLimit(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="w-full bg-[#0b0b19] border border-white/10 focus:border-purple-500 rounded-xl px-4 py-2 text-white text-sm outline-none transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-5 py-2 rounded-xl text-sm font-medium text-gray-300 hover:bg-white/5 transition-colors border border-transparent"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="px-5 py-2 rounded-xl text-sm font-medium text-white bg-purple-600 hover:bg-purple-500 transition-colors shadow-lg shadow-purple-500/20"
+              >
+                Save & Sync
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

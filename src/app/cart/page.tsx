@@ -47,6 +47,7 @@ export default function CartPage() {
   const [couponCode, setCouponCode] = useState('');
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [appliedCoupon, setAppliedCoupon] = useState('');
+  const [contactInfo, setContactInfo] = useState('');
   const [couponValidating, setCouponValidating] = useState(false);
 
   useEffect(() => {
@@ -117,6 +118,7 @@ export default function CartPage() {
       formData.append('screenshot', paymentFile);
       formData.append('paymentMethod', paymentMethod);
       if (appliedCoupon) formData.append('couponCode', appliedCoupon);
+      if (contactInfo.trim()) formData.append('contactInfo', contactInfo.trim());
 
       // Send cart items as JSON
       const cartItems = items.map((item) => ({
@@ -391,41 +393,43 @@ export default function CartPage() {
             {/* Payment Account Info */}
             {(() => {
               const selectedGateway = availableGateways.find((g) => g.code === paymentMethod);
-              const selectedAccount = selectedGateway?.accountName || selectedGateway?.accountNumber
-                ? selectedGateway
-                : paymentAccounts.find((a) => a.method === paymentMethod);
-              if (!selectedAccount) return null;
-              return (
-                <div className="p-4 bg-purple-500/5 rounded-xl border border-purple-500/20">
-                  <p className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wider">
-                    {t('shop.productDetail.sendPaymentTo')}
-                  </p>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      {selectedAccount.accountName && (
-                        <p className="text-white font-bold text-base">{selectedAccount.accountName}</p>
-                      )}
-                      {selectedAccount.accountNumber && (
-                        <p className="text-purple-400 font-mono text-lg font-bold tracking-wide">{selectedAccount.accountNumber}</p>
+                const legacyAccount = paymentAccounts.find((a) => a.method === paymentMethod);
+                
+                const accountName = selectedGateway?.accountName || legacyAccount?.accountName;
+                const accountNumber = selectedGateway?.accountNumber || legacyAccount?.accountNumber;
+                
+                if (!accountName && !accountNumber) return null;
+
+                return (
+                  <div className="p-4 bg-purple-500/5 rounded-xl border border-purple-500/20 mb-6">
+                    <p className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wider">
+                      {t('shop.productDetail.sendPaymentTo')}
+                    </p>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        {accountName && (
+                          <p className="text-white font-bold text-base">{accountName}</p>
+                        )}
+                        {accountNumber && (
+                          <p className="text-purple-400 font-mono text-lg font-bold tracking-wide">{accountNumber}</p>
+                        )}
+                      </div>
+                      {accountNumber && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(accountNumber);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-dark-800 text-gray-300 hover:text-white transition"
+                        >
+                          {t('common.copy')}
+                        </button>
                       )}
                     </div>
-                    {selectedAccount.accountNumber && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(selectedAccount.accountNumber);
-                          toast.success(t('common.copied'));
-                        }}
-                        className="px-3 py-1.5 text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg transition-colors"
-                      >
-                        {t('common.copy')}
-                      </button>
-                    )}
+                    <p className="text-xs text-gray-500 mt-2">
+                      {t('cart.page.transferExactTotalScreenshot')}
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {t('cart.page.transferExactTotalScreenshot')}
-                  </p>
-                </div>
               );
             })()}
 
@@ -456,6 +460,19 @@ export default function CartPage() {
                   </button>
                 </div>
               )}
+            </div>
+
+            <div>
+              <label className="input-label">Telegram / Viber contact (optional)</label>
+              <input
+                type="text"
+                value={contactInfo}
+                onChange={(e) => setContactInfo(e.target.value)}
+                placeholder="@username or +95 9xxxxxxx"
+                maxLength={200}
+                className="input-field w-full"
+              />
+              <p className="text-xs text-gray-500 mt-2">Optional contact info for faster delivery or follow-up.</p>
             </div>
 
             {/* Screenshot Upload */}

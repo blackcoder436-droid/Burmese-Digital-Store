@@ -1,0 +1,1 @@
+const { MongoClient } = require('mongodb'); require('dotenv').config({ path: '.env.local' }); MongoClient.connect(process.env.MONGODB_URI).then(client => { const db = client.db(); db.collection('vpn_keys').find({ serverConfigLinks: { \$exists: true } }).limit(2).toArray().then(arr => { console.log(JSON.stringify(arr, null, 2)); client.close(); }); });

@@ -66,8 +66,9 @@ export async function POST(req: NextRequest) {
     const multiServerLinks: string[] = [];
     const serverSubLinks: string[] = [];
     const serverConfigLinks: string[] = [];
-    const sanitizedName = username.replace(/\s+/g, '-').slice(0, 20);
-    const prefix = `web_${crypto.randomBytes(2).toString('hex')}_${sanitizedName}`;
+    
+    // We want the raw username to be clean and simple, e.g. "Ei Ei Mon"
+    const displayUsername = username.trim().slice(0, 30);
 
     const token = crypto.randomBytes(16).toString('hex');
     const masterSubLink = `https://burmesedigital.store/api/vpn/sub/${token}`;
@@ -75,8 +76,6 @@ export async function POST(req: NextRequest) {
     // Run in parallel to reduce loading time
     const provisionPromises = targetServers.map(async (server) => {
       try {
-        const finalUsername = serverId === 'all' ? prefix + '_' + server.name.replace(/\s+/g, '-') : prefix;
-        
         const keyData = await provisionVpnKey({
           serverId: server.id,
           userId: (user as any).id?.toString() || 'admin_web',
@@ -84,7 +83,7 @@ export async function POST(req: NextRequest) {
           expiryDays: days,
           dataLimitGB: limitGB,
           protocol,
-          username: finalUsername
+          username: displayUsername
         });
 
         if (keyData && keyData.success) {
@@ -120,7 +119,7 @@ export async function POST(req: NextRequest) {
     await db.collection('vpn_keys').insertOne({
         userId: (user as any).id || 'admin_web',
         token: token,
-        username: sanitizedName,
+        username: displayUsername,
         keyType: body.type || 'admin_web',
         protocol,
         devices: deviceLimit,
@@ -138,7 +137,7 @@ export async function POST(req: NextRequest) {
         admin: (user as any).id,
         action: 'vpn_key_generated' as any,
         target: 'system',
-        details: `Admin via Web generated ${serverId === 'all' ? 'multi-server' : 'single-server'} VPN key "${sanitizedName}" for ${days} days. Configured on ${multiServerLinks.length} servers.`
+        details: `Admin via Web generated ${serverId === 'all' ? 'multi-server' : 'single-server'} VPN key "${displayUsername}" for ${days} days. Configured on ${multiServerLinks.length} servers.`
       });
     } catch(err) {
       console.warn("Could not log activity:", err);
@@ -148,7 +147,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: `Successfully created key on ${multiServerLinks.length} servers`,
       data: {
-        username: sanitizedName,
+        username: displayUsername,
         subLink: masterSubLink,
         servers: multiServerLinks,
         protocol,

@@ -40,6 +40,7 @@ interface Product {
   price: number;
   category: string;
   stock: number;
+  details?: { sold: boolean }[];
   image?: string;
   purchaseDisabled?: boolean;
   allowedPaymentGateways?: { _id: string; name: string; code: string; type: string; category: string; accountName: string; accountNumber: string; qrImage?: string; instructions?: string; enabled: boolean }[];
@@ -71,6 +72,7 @@ export default function ProductDetailPage() {
   const [couponCode, setCouponCode] = useState('');
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [appliedCoupon, setAppliedCoupon] = useState('');
+  const [contactInfo, setContactInfo] = useState('');
   const [couponValidating, setCouponValidating] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [justAdded, setJustAdded] = useState(false);
@@ -165,13 +167,17 @@ export default function ProductDetailPage() {
   }
 
   function handleAddToCart() {
-    if (!product || product.stock <= 0 || product.purchaseDisabled) return;
+    if (!product || product.purchaseDisabled) return;
+    const hasManualFulfillment = Array.isArray(product.details) && product.details.length === 0;
+    const effectiveStock = product.stock > 0 ? product.stock : hasManualFulfillment ? 10 : 0;
+    if (effectiveStock <= 0) return;
+
     addItem({
       productId: product._id,
       slug: product.slug,
       name: product.name,
       price: product.price,
-      stock: product.stock,
+      stock: effectiveStock,
       category: product.category,
       image: product.image,
     }, quantity);
@@ -222,6 +228,7 @@ export default function ProductDetailPage() {
       formData.append('paymentMethod', paymentMethod);
       formData.append('screenshot', paymentFile);
       if (appliedCoupon) formData.append('couponCode', appliedCoupon);
+      if (contactInfo.trim()) formData.append('contactInfo', contactInfo.trim());
 
       const res = await fetch('/api/orders', { method: 'POST', body: formData });
       if (res.status === 401) {
@@ -258,6 +265,9 @@ export default function ProductDetailPage() {
 
   const subtotal = product.price * quantity;
   const total = Math.max(0, subtotal - couponDiscount);
+  const hasManualFulfillment = Array.isArray(product.details) && product.details.length === 0;
+  const canPurchase = !product.purchaseDisabled && (product.stock > 0 || hasManualFulfillment);
+  const maxQuantity = product.stock > 0 ? product.stock : hasManualFulfillment ? 10 : 0;
   const alreadyInCart = isInCart(product._id);
   const cartItem = getItem(product._id);
   const normalizedImage = normalizeImageSrc(product.image);
@@ -335,10 +345,12 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="flex flex-col items-end gap-2 shrink-0">
-              <span className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap ${product.stock > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+              <span className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap ${product.stock > 0 ? 'bg-emerald-500/20 text-emerald-400' : hasManualFulfillment ? 'bg-blue-500/20 text-blue-300' : 'bg-red-500/20 text-red-400'}`}>
                 {product.stock > 0
                   ? `${product.stock} ${t('shop.productDetail.inStockSuffix')}`
-                  : t('shop.outOfStock')}
+                  : hasManualFulfillment
+                    ? tr('Manual fulfillment available', 'Manual fulfillment ရနိုင်ပါတယ်')
+                    : t('shop.outOfStock')}
               </span>
               {durationOnlyMatch && (
                 <span className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 whitespace-nowrap">
@@ -360,7 +372,7 @@ export default function ProductDetailPage() {
                 <span className="text-sm text-gray-500 ml-1">MMK</span>
               </div>
             </div>
-            {product.stock > 0 && !product.purchaseDisabled && (
+            {canPurchase && (
               <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center justify-center sm:justify-start gap-3">
                   <button
@@ -372,7 +384,7 @@ export default function ProductDetailPage() {
                   </button>
                   <span className="w-12 text-center text-xl font-bold text-white">{quantity}</span>
                   <button
-                    onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
+                    onClick={() => setQuantity(Math.min(maxQuantity, quantity + 1))}
                     className="w-11 h-11 flex items-center justify-center rounded-xl bg-dark-800 border border-dark-600 hover:border-purple-500/50 text-gray-400 hover:text-white transition-all"
                     aria-label="Increase quantity"
                   >
@@ -388,7 +400,7 @@ export default function ProductDetailPage() {
           </div>
 
           {/* Action Buttons */}
-          {product.stock > 0 && !showPayment && !product.purchaseDisabled && (
+          {canPurchase && !showPayment && (
             <div className="mt-6 flex flex-col sm:flex-row gap-3">
               {/* Add to Cart Button (Primary) */}
               <button
@@ -430,7 +442,7 @@ export default function ProductDetailPage() {
           )}
 
           {/* Stock Alert — shown when out of stock */}
-          {product.stock <= 0 && !showPayment && !product.purchaseDisabled && (
+          {!canPurchase && !showPayment && !product.purchaseDisabled && (
             <div className="mt-6">
               <button
                 onClick={toggleStockAlert}
@@ -495,43 +507,44 @@ export default function ProductDetailPage() {
             {/* Payment Account Info */}
             {(() => {
               const selectedGateway = availableGateways.find((g) => g.code === paymentMethod);
-              // Also check legacy payment accounts for backward compatibility
-              const selectedAccount = selectedGateway?.accountName || selectedGateway?.accountNumber
-                ? selectedGateway
-                : paymentAccounts.find((a) => a.method === paymentMethod);
-              if (!selectedAccount) return null;
-              return (
-                <div className="p-4 bg-purple-500/5 rounded-xl border border-purple-500/20">
-                  <p className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wider">
-                    {t('shop.productDetail.sendPaymentTo')}
-                  </p>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      {selectedAccount.accountName && (
-                        <p className="text-white font-bold text-base">{selectedAccount.accountName}</p>
-                      )}
-                      {selectedAccount.accountNumber && (
-                        <p className="text-purple-400 font-mono text-lg font-bold tracking-wide">{selectedAccount.accountNumber}</p>
+                const legacyAccount = paymentAccounts.find((a) => a.method === paymentMethod);
+                
+                const accountName = selectedGateway?.accountName || legacyAccount?.accountName;
+                const accountNumber = selectedGateway?.accountNumber || legacyAccount?.accountNumber;
+                
+                if (!accountName && !accountNumber) return null;
+
+                return (
+                  <div className="p-4 bg-purple-500/5 rounded-xl border border-purple-500/20 mb-6">
+                    <p className="text-xs text-gray-400 mb-2 font-semibold uppercase tracking-wider">
+                      {t('shop.productDetail.sendPaymentTo')}
+                    </p>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        {accountName && (
+                          <p className="text-white font-bold text-base">{accountName}</p>
+                        )}
+                        {accountNumber && (
+                          <p className="text-purple-400 font-mono text-lg font-bold tracking-wide">{accountNumber}</p>
+                        )}
+                      </div>
+                      {accountNumber && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(accountNumber);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-dark-800 text-gray-300 hover:text-white transition"
+                        >
+                          {t('common.copy')}
+                        </button>
                       )}
                     </div>
-                    {selectedAccount.accountNumber && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(selectedAccount.accountNumber);
-                          toast.success(t('common.copied'));
-                        }}
-                        className="px-3 py-1.5 text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg transition-colors"
-                      >
-                        {t('common.copy')}
-                      </button>
-                    )}
+                    <p className="text-xs text-gray-500 mt-2">
+                      {t('shop.productDetail.transferExactAmountScreenshot')}
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {t('shop.productDetail.transferExactAmountScreenshot')}
-                  </p>
-                </div>
-              );
+                );
             })()}
 
             {/* Coupon Code */}
@@ -561,6 +574,19 @@ export default function ProductDetailPage() {
                   </button>
                 </div>
               )}
+            </div>
+
+            <div>
+              <label className="input-label">Telegram / Viber contact (optional)</label>
+              <input
+                type="text"
+                value={contactInfo}
+                onChange={(e) => setContactInfo(e.target.value)}
+                placeholder="@username or +95 9xxxxxxx"
+                maxLength={200}
+                className="input-field w-full"
+              />
+              <p className="text-xs text-gray-500 mt-2">Optional contact info for faster delivery or follow-up.</p>
             </div>
 
             <div>
