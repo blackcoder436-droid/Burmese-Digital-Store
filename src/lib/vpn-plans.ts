@@ -11,14 +11,25 @@ export interface VpnPlan {
   expiryDays: number;
   dataLimitGB: number; // 0 = unlimited
   price: number; // MMK
+  originalPrice?: number; // Pre-discount MMK
 }
 
 // Paid plans: 1-5 devices × 1/3/5/7/9/12 months
 // Prices are defined explicitly to match the website pricing table (discounts applied).
 const MONTH_OPTIONS = [1, 3, 5, 7, 9, 12];
 
+// Use base discounts or flat rates. Here we'll use flat rates based on user's new base prices
+// and define ORIGINAL_PRICE_TABLE to show the previous expensive prices.
 const PRICE_TABLE: Record<number, Record<number, number>> = {
   1: { 1: 4000, 3: 11000, 5: 18000, 7: 25000, 9: 31000, 12: 38000 },
+  2: { 1: 5000, 3: 15000, 5: 24000, 7: 33000, 9: 42000, 12: 55000 },
+  3: { 1: 6000, 3: 18000, 5: 29000, 7: 40000, 9: 51000, 12: 70000 },
+  4: { 1: 7000, 3: 21000, 5: 34000, 7: 47000, 9: 60000, 12: 80000 },
+  5: { 1: 8000, 3: 24000, 5: 39000, 7: 54000, 9: 69000, 12: 90000 },
+};
+
+const ORIGINAL_PRICE_TABLE: Record<number, Record<number, number>> = {
+  1: { 1: 4000, 3: 11000, 5: 18000, 7: 25000, 9: 31000, 12: 38000 }, // same
   2: { 1: 7000, 3: 20000, 5: 32000, 7: 43000, 9: 54000, 12: 67000 },
   3: { 1: 10000, 3: 29000, 5: 46000, 7: 62000, 9: 77000, 12: 96000 },
   4: { 1: 13000, 3: 37000, 5: 60000, 7: 80000, 9: 99000, 12: 125000 },
@@ -33,6 +44,7 @@ export const VPN_PLANS: Record<string, VpnPlan> = (() => {
       const name = `${devices} Device${devices > 1 ? 's' : ''} - ${months} Month${months > 1 ? 's' : ''}`;
       const expiryDays = months === 12 ? 365 : months * 30;
       const price = PRICE_TABLE[devices]?.[months] ?? 0;
+      const originalPrice = ORIGINAL_PRICE_TABLE[devices]?.[months] ?? 0;
       out[id] = {
         id,
         name,
@@ -41,6 +53,7 @@ export const VPN_PLANS: Record<string, VpnPlan> = (() => {
         expiryDays,
         dataLimitGB: 0,
         price,
+        ...(originalPrice > price ? { originalPrice } : {})
       };
     }
   }

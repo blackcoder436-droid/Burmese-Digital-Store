@@ -9,46 +9,46 @@ import CountryFlag from '@/components/CountryFlag';
 /* pricing data (1-5 devices x 6 durations)
    - Keep a local default as fallback, but prefer loading from the API so updates are shown live.
 */
-const DEFAULT_PRICING: Record<number, { months: number; price: string; popular?: boolean }[]> = {
+const DEFAULT_PRICING: Record<number, { months: number; price: string; originalPrice?: string; popular?: boolean }[]> = {
   1: [
     { months: 1, price: '4,000' },
-    { months: 3, price: '9,000' },
-    { months: 5, price: '14,000' },
-    { months: 7, price: '19,000', popular: true },
-    { months: 9, price: '24,000' },
-    { months: 12, price: '31,000' },
+    { months: 3, price: '12,000' },
+    { months: 5, price: '20,000' },
+    { months: 7, price: '28,000', popular: true },
+    { months: 9, price: '36,000' },
+    { months: 12, price: '48,000' },
   ],
   2: [
-    { months: 1, price: '7,000' },
-    { months: 3, price: '20,000' },
-    { months: 5, price: '32,000' },
-    { months: 7, price: '43,000', popular: true },
-    { months: 9, price: '54,000' },
-    { months: 12, price: '67,000' },
+    { months: 1, price: '5,000', originalPrice: '7,000' },
+    { months: 3, price: '15,000', originalPrice: '20,000' },
+    { months: 5, price: '25,000', originalPrice: '32,000' },
+    { months: 7, price: '35,000', originalPrice: '43,000', popular: true },
+    { months: 9, price: '45,000', originalPrice: '54,000' },
+    { months: 12, price: '60,000', originalPrice: '67,000' },
   ],
   3: [
-    { months: 1, price: '10,000' },
-    { months: 3, price: '29,000' },
-    { months: 5, price: '46,000' },
-    { months: 7, price: '62,000', popular: true },
-    { months: 9, price: '77,000' },
-    { months: 12, price: '96,000' },
+    { months: 1, price: '6,000', originalPrice: '10,000' },
+    { months: 3, price: '18,000', originalPrice: '29,000' },
+    { months: 5, price: '30,000', originalPrice: '46,000' },
+    { months: 7, price: '42,000', originalPrice: '62,000', popular: true },
+    { months: 9, price: '54,000', originalPrice: '77,000' },
+    { months: 12, price: '72,000', originalPrice: '96,000' },
   ],
   4: [
-    { months: 1, price: '13,000' },
-    { months: 3, price: '37,000' },
-    { months: 5, price: '60,000' },
-    { months: 7, price: '80,000', popular: true },
-    { months: 9, price: '99,000' },
-    { months: 12, price: '125,000' },
+    { months: 1, price: '7,000', originalPrice: '13,000' },
+    { months: 3, price: '21,000', originalPrice: '37,000' },
+    { months: 5, price: '35,000', originalPrice: '60,000' },
+    { months: 7, price: '49,000', originalPrice: '80,000', popular: true },
+    { months: 9, price: '63,000', originalPrice: '99,000' },
+    { months: 12, price: '84,000', originalPrice: '125,000' },
   ],
   5: [
-    { months: 1, price: '16,000' },
-    { months: 3, price: '46,000' },
-    { months: 5, price: '74,000' },
-    { months: 7, price: '99,000', popular: true },
-    { months: 9, price: '122,000' },
-    { months: 12, price: '154,000' },
+    { months: 1, price: '8,000', originalPrice: '16,000' },
+    { months: 3, price: '24,000', originalPrice: '46,000' },
+    { months: 5, price: '40,000', originalPrice: '74,000' },
+    { months: 7, price: '56,000', originalPrice: '99,000', popular: true },
+    { months: 9, price: '72,000', originalPrice: '122,000' },
+    { months: 12, price: '96,000', originalPrice: '154,000' },
   ],
 };
 
@@ -56,14 +56,23 @@ const MONTH_OPTIONS = [1, 3, 5, 7, 9, 12];
 
 import type { VpnPlan } from '@/lib/vpn-plans';
 const formatPlansFromApi = (plansByDevice: Record<string, VpnPlan[]>) => {
-  const out: Record<number, { months: number; price: string; popular?: boolean }[]> = {};
+  const out: Record<number, { months: number; price: string; originalPrice?: string; popular?: boolean }[]> = {};
   for (const d of [1, 2, 3, 4, 5]) {
     const key = String(d);
     const plans = plansByDevice?.[key] ?? [];
-    // Build map months -> price
-    const map = new Map<number, number>();
-    for (const p of plans) map.set(p.months, p.price);
-    out[d] = MONTH_OPTIONS.map((m) => ({ months: m, price: (map.get(m) ?? 0).toLocaleString(), popular: m === 7 }));
+    // Build map months -> price and originalPrice
+    const mapPrice = new Map<number, number>();
+    const mapOrig = new Map<number, number>();
+    for (const p of plans) {
+       mapPrice.set(p.months, p.price);
+       if (p.originalPrice) mapOrig.set(p.months, p.originalPrice);
+    }
+    out[d] = MONTH_OPTIONS.map((m) => ({ 
+       months: m, 
+       price: (mapPrice.get(m) ?? 0).toLocaleString(), 
+       originalPrice: mapOrig.get(m)?.toLocaleString(),
+       popular: m === 7 
+    }));
   }
   return out;
 };
@@ -316,11 +325,14 @@ export default function VPNPage() {
   const pricingCard = (p: typeof pricing[1][0], i: number, extraClass = '') => {
     // Calculate per-month cost and savings
     const priceNum = parseInt(p.price.replace(/,/g, ''));
+    const originalPriceNum = p.originalPrice ? parseInt(p.originalPrice.replace(/,/g, '')) : 0;
     const monthlyRate = pricing[activeDevice][0]; // 1month price for this device count
     const monthlyNum = parseInt(monthlyRate.price.replace(/,/g, ''));
-    const fullPrice = monthlyNum * p.months;
+    
+    // If we have an original price (the previous expensive rate), we use that to show massive savings.
+    const fullPrice = originalPriceNum || (monthlyNum * p.months);
     const saved = fullPrice - priceNum;
-    const savedPct = p.months > 1 ? Math.round((saved / fullPrice) * 100) : 0;
+    const savedPct = fullPrice > priceNum ? Math.round((saved / fullPrice) * 100) : 0;
     const perMonth = Math.round(priceNum / p.months).toLocaleString();
 
     const isPopular = !!p.popular;
@@ -373,16 +385,24 @@ export default function VPNPage() {
           </div>
 
           {/* Price */}
-          <div className="mb-1">
-            <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">{p.price}</span>
-            <span className="text-sm sm:text-base font-medium text-gray-500 ml-1.5">Ks</span>
+          <div className="mb-2 flex items-baseline flex-wrap gap-x-2 gap-y-1">
+            <div className="flex items-baseline">
+              <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">{p.price}</span>
+              <span className="text-sm sm:text-base font-medium text-gray-500 ml-1.5">Ks</span>
+            </div>
+            {p.originalPrice && (
+              <span className="text-gray-400 line-through text-base sm:text-lg font-medium opacity-70">
+                {p.originalPrice} Ks
+              </span>
+            )}
           </div>
 
           {/* Per month breakdown */}
           {p.months > 1 && (
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs text-gray-500">{perMonth} Ks / month</span>
-              <span className="text-[10px] font-bold text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">Save {saved.toLocaleString()} Ks</span>
+            <div className="flex items-center mt-1 mb-2">
+              <span className="text-[13px] text-gray-400 font-medium">
+                {perMonth} Ks <span className="text-gray-500 font-normal">/ month</span>
+              </span>
             </div>
           )}
 
