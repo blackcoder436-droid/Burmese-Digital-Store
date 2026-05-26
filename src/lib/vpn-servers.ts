@@ -91,7 +91,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     id: 'sg4',
     name: 'Singapore 4',
     flag: '🇸🇬',
-    url: 'https://sg4.burmesedigital.store:8080',
+    url: 'https://sg4.burmesedigital.store:2053',
     panelPath: '/mka',
     apiKey: '',
     domain: 'sg4.burmesedigital.store',

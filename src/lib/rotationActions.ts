@@ -78,22 +78,15 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
   return candidates;
 }
 
-function getPortFromUrl(value?: string): number | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (url.port) return parseInt(url.port, 10);
-    return url.protocol === 'https:' ? 443 : 80;
-  } catch {
-    return null;
-  }
+function getRotationPanelPort(serverName: string): number {
+  return serverName === 'sg4' ? 2053 : 8080;
 }
 
-async function getPanelTarget(serverName: string, fallbackPort: number) {
+async function getPanelTarget(serverName: string) {
   const server = await VpnServer.findOne({ serverId: serverName }).lean().catch(() => null);
   return {
     domain: (server?.domain || `${serverName}.burmesedigital.store`).trim(),
-    port: getPortFromUrl(server?.url) || fallbackPort,
+    port: getRotationPanelPort(serverName),
     panelPath: normalizePanelPath(server?.panelPath),
   };
 }
@@ -683,8 +676,7 @@ function sftpUpload(host: string, localPath: string, remotePath: string): Promis
 export async function actionInstall3xUI(serverName: string, progress?: ProgressReporter) {
   const config = await getRotateConfig();
   const doToken = ['jan', 'sg1', 'sg4'].includes(serverName) ? config.doToken1 : config.doToken2;
-  const adminPort = serverName === 'sg4' ? 2053 : 8080; // Only node 4 uses 2053
-  const panelTarget = await getPanelTarget(serverName, adminPort);
+  const panelTarget = await getPanelTarget(serverName);
 
   // Get New IP
   await reportProgress(progress, 'Finding the new DigitalOcean public IP...');
