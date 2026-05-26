@@ -455,6 +455,40 @@ async function isXuiInstalled(host: string): Promise<boolean> {
   }
 }
 
+async function restartPanelAndXray(host: string, progress?: ProgressReporter) {
+  await reportProgress(progress, 'Restarting 3x-ui panel (CLI option 13)...');
+  await execSsh(
+    host,
+    '(command -v x-ui >/dev/null 2>&1 && timeout 90s x-ui restart) || systemctl restart x-ui',
+    120000
+  );
+  await sleep(8000);
+
+  await reportProgress(progress, 'Restarting Xray core (CLI option 14)...');
+  await execSsh(
+    host,
+    '(command -v x-ui >/dev/null 2>&1 && timeout 90s x-ui restart-xray) || systemctl reload x-ui || systemctl restart x-ui',
+    120000
+  );
+  await sleep(5000);
+}
+
+async function detectPanelProtocol(host: string, port: number, panelPath: string): Promise<'https' | 'http'> {
+  const finalBasePath = panelPath.endsWith('/') ? panelPath : `${panelPath}/`;
+  const urlPath = finalBasePath === '/' ? '/panel' : `${finalBasePath}`;
+
+  for (const protocol of ['https', 'http'] as const) {
+    try {
+      await execSsh(host, `curl -kfsS --max-time 8 -o /dev/null ${shellQuote(`${protocol}://127.0.0.1:${port}${urlPath}`)}`, 20000);
+      return protocol;
+    } catch {
+      // Try the next protocol before declaring the panel unavailable.
+    }
+  }
+
+  throw new Error(`x-ui service is active, but the panel did not respond on port ${port}${urlPath} via HTTPS or HTTP after restart.`);
+}
+
 // SFTP Upload helper
 function sftpUpload(host: string, localPath: string, remotePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -548,6 +582,7 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.0.2
       '-password', shellQuote(config.xuiPassword || 'admin'),
       '-port', String(panelTarget.port),
       '-webBasePath', shellQuote(panelTarget.panelPath),
+      '-listenIP', '0.0.0.0',
       '-resetTwoFactor', resetTwoFactor,
     ].join(' ');
     await execSsh(newIp, `[ -x /usr/local/x-ui/x-ui ] || { echo "x-ui binary not found"; exit 1; }; ${settingCmd}`);
@@ -559,7 +594,7 @@ key=$(find /root/cert /root/.acme.sh -type f -name '*.key' 2>/dev/null | grep -i
 if [ -z "$cert" ]; then cert=$(find /root/cert /root/.acme.sh -type f \\( -name 'fullchain.cer' -o -name '*.cer' -o -name '*.crt' -o -name 'fullchain.pem' -o -name '*.pem' \\) 2>/dev/null | head -n 1); fi
 if [ -z "$key" ]; then key=$(find /root/cert /root/.acme.sh -type f -name '*.key' 2>/dev/null | head -n 1); fi
 if [ -n "$cert" ] && [ -n "$key" ]; then
-  /usr/local/x-ui/x-ui cert -webCert "$cert" -webCertKey "$key"
+  /usr/local/x-ui/x-ui cert -webCert "$cert" -webCertKey "$key" || { echo "SSL_APPLY_FAILED"; exit 1; }
   echo "SSL_APPLIED:$cert"
 else
   echo "SSL_NOT_FOUND"
@@ -568,8 +603,10 @@ fi
     const sslOutput = await execSsh(newIp, sslCmd);
     const sslApplied = sslOutput.includes('SSL_APPLIED');
 
-    await reportProgress(progress, 'Restarting 3x-ui panel...');
-    await execSsh(newIp, 'systemctl restart x-ui');
+    await reportProgress(progress, `Opening panel port ${panelTarget.port} on the VPS firewall...`);
+    await execSsh(newIp, `ufw allow ${panelTarget.port}/tcp || true`);
+
+    await restartPanelAndXray(newIp, progress);
 
     const readyDeadline = Date.now() + XUI_READY_WAIT_MS;
     let ready = false;
@@ -588,10 +625,13 @@ fi
       throw new Error('x-ui service did not become active after restore.');
     }
 
-    const protocol = sslApplied ? 'https' : 'http';
+    await reportProgress(progress, 'Checking whether the restored panel is serving HTTPS...');
+    const protocol = await detectPanelProtocol(newIp, panelTarget.port, panelTarget.panelPath);
     const finalBasePath = panelTarget.panelPath.endsWith('/') ? panelTarget.panelPath : `${panelTarget.panelPath}/`;
     const urlPath = finalBasePath === '/' ? '/panel' : `${finalBasePath}`;
-    const sslNote = sslApplied ? '' : ' SSL certificate files were not found in the backup, so the panel URL is HTTP.';
+    const sslNote = sslApplied
+      ? (protocol === 'https' ? '' : ' SSL certificate files were applied, but HTTPS did not respond after restart, so the panel URL is HTTP.')
+      : ' SSL certificate files were not found in the backup, so the panel URL is HTTP.';
 
     return { success: true, message: `3X-UI successfully restored! Panel: ${protocol}://${panelTarget.domain}:${panelTarget.port}${urlPath}${sslNote}` };
   } else {
