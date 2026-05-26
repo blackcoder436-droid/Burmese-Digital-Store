@@ -191,6 +191,14 @@ export default function RotateWizardPage() {
 
 	async function handleOneClickRotate() {
 		setActionLoading(true);
+		setCurrentStep(5);
+		setStepResults((prev) => ({
+			...prev,
+			2: { status: 'loading', message: 'One-click rotation is preparing backup...' },
+			3: { status: 'loading', message: 'Waiting for backup to finish before recreating VPS...' },
+			4: { status: 'loading', message: 'Waiting for recreate before DNS update...' },
+			5: { status: 'loading', message: 'One-click rotation is starting...' },
+		}));
 
 		try {
 			const response = await fetch('/api/admin/rotate-server', {
@@ -202,13 +210,44 @@ export default function RotateWizardPage() {
 			const data = await readApiJson(response);
 
 			if (data?.success) {
-				toast.success(data.message || 'One-click rotation started');
-				setCurrentStep(2);
+				if (data?.pending && data?.jobId) {
+					setStepResults((prev) => ({
+						...prev,
+						5: {
+							status: 'loading',
+							message: data.message || 'One-click rotation is running in the background...',
+							jobId: data.jobId,
+						},
+					}));
+					toast.success(data.message || 'One-click rotation started');
+					await pollRotateJob(data.jobId, 5);
+					setStepResults((prev) => ({
+						...prev,
+						2: prev[2]?.status === 'loading' ? { status: 'success', message: 'Backup completed' } : prev[2],
+						3: prev[3]?.status === 'loading' ? { status: 'success', message: 'VPS recreated' } : prev[3],
+						4: prev[4]?.status === 'loading' ? { status: 'success', message: 'DNS updated' } : prev[4],
+					}));
+				} else {
+					setStepResults((prev) => ({
+						...prev,
+						5: { status: 'success', message: data.message || 'One-click rotation completed' },
+					}));
+					toast.success(data.message || 'One-click rotation completed');
+				}
 			} else {
+				setStepResults((prev) => ({
+					...prev,
+					5: { status: 'error', message: data?.error || 'Failed to start rotation' },
+				}));
 				toast.error(data?.error || 'Failed to start rotation');
 			}
-		} catch {
-			toast.error('Network error while starting rotation');
+		} catch (error) {
+			const message = getActionErrorMessage(error);
+			setStepResults((prev) => ({
+				...prev,
+				5: { status: 'error', message },
+			}));
+			toast.error(message);
 		} finally {
 			setActionLoading(false);
 		}
