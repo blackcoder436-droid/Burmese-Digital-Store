@@ -12,8 +12,138 @@ const XUI_READY_POLL_MS = 10000;
 
 // ================= Helpers =================
 
+type JsonObject = Record<string, any>;
+type HeaderMap = Record<string, string>;
+
 export async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function cleanSecret(value?: string): string {
+  return (value || '')
+    .trim()
+    .replace(/^Bearer\s+/i, '')
+    .replace(/^Authorization:\s*Bearer\s+/i, '')
+    .trim();
+}
+
+function looksLikeGlobalApiKey(value: string): boolean {
+  return /^[a-f0-9]{32,64}$/i.test(value);
+}
+
+async function readJsonResponse(res: Response, label: string): Promise<JsonObject> {
+  const text = await res.text();
+  let data: JsonObject;
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    const preview = text.replace(/\s+/g, ' ').slice(0, 160);
+    throw new Error(`${label}: Expected JSON but received HTTP ${res.status} ${res.statusText || ''}: ${preview || '(empty response)'}`);
+  }
+
+  if (!res.ok) {
+    const message =
+      data.errors?.[0]?.message ||
+      data.message ||
+      data.error ||
+      `HTTP ${res.status} ${res.statusText || 'request failed'}`;
+    throw new Error(`${label}: ${message}`);
+  }
+
+  return data;
+}
+
+function getCloudflareAuthCandidates(config: { cfToken?: string; cfEmail?: string }): Array<{ label: string; headers: HeaderMap }> {
+  const cfToken = cleanSecret(config.cfToken);
+  const cfEmail = (config.cfEmail || '').trim();
+
+  if (!cfToken) {
+    throw new Error('Cloudflare token/key is missing. Save a valid Cloudflare API Token or Global API Key first.');
+  }
+
+  const apiTokenCandidate = {
+    label: 'API Token',
+    headers: {
+      Authorization: `Bearer ${cfToken}`,
+      'Content-Type': 'application/json',
+    },
+  };
+
+  if (cfEmail) {
+    const globalKeyCandidate = {
+      label: 'Global API Key',
+      headers: {
+        'X-Auth-Email': cfEmail,
+        'X-Auth-Key': cfToken,
+        'Content-Type': 'application/json',
+      },
+    };
+
+    return looksLikeGlobalApiKey(cfToken)
+      ? [globalKeyCandidate, apiTokenCandidate]
+      : [apiTokenCandidate, globalKeyCandidate];
+  }
+
+  return [apiTokenCandidate];
+}
+
+async function fetchCloudflareJson(
+  pathOrUrl: string,
+  init: RequestInit,
+  headers: HeaderMap,
+  label: string
+): Promise<JsonObject> {
+  const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${CF_API}${pathOrUrl}`;
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      ...headers,
+      ...(init.headers || {}),
+    },
+  });
+  const data = await readJsonResponse(res, label);
+
+  if (data.success === false) {
+    const message = data.errors?.[0]?.message || 'Unknown Cloudflare error';
+    throw new Error(`${label}: CF Error: ${message}`);
+  }
+
+  return data;
+}
+
+async function resolveCloudflareZone(config: { cfToken?: string; cfEmail?: string }) {
+  const candidates = getCloudflareAuthCandidates(config);
+  const errors: string[] = [];
+  const zoneName = 'burmesedigital.store';
+
+  for (const candidate of candidates) {
+    try {
+      const zonesData = await fetchCloudflareJson(
+        `/zones?name=${encodeURIComponent(zoneName)}`,
+        { method: 'GET' },
+        candidate.headers,
+        `Cloudflare Zones (${candidate.label})`
+      );
+
+      if (!zonesData.result?.[0]?.id) {
+        throw new Error(`Cloudflare Zones (${candidate.label}): Zone ${zoneName} was not found or token lacks Zone Read permission`);
+      }
+
+      return {
+        zoneId: zonesData.result[0].id as string,
+        headers: candidate.headers,
+        authLabel: candidate.label,
+      };
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  const emailHint = (config.cfEmail || '').trim()
+    ? ''
+    : ' | Global API Key requires the Cloudflare account email in rotation config.';
+  throw new Error(`${errors.join(' | ')}${emailHint}`);
 }
 
 async function sendFileTg(botToken: string, chatId: string, filePath: string, caption: string) {
@@ -59,9 +189,9 @@ function sftpDownload(host: string, remotePath: string, localPath: string): Prom
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn.on('ready', () => {
-      conn.sftp((err, sftp) => {
+      conn.sftp((err: any, sftp: any) => {
         if (err) { conn.end(); return reject(err); }
-        sftp.fastGet(remotePath, localPath, {}, (downloadErr) => {
+        sftp.fastGet(remotePath, localPath, {}, (downloadErr: any) => {
           conn.end();
           if (downloadErr) reject(downloadErr);
           else resolve();
@@ -195,38 +325,18 @@ export async function actionUpdateDNS(serverName: string) {
     throw new Error(`DigitalOcean Fetch Error: ${err.message}`);
   }
 
-  const cfHeaders = {
-    'Authorization': `Bearer ${config.cfToken?.trim()}`,
-    'Content-Type': 'application/json'
-  };
-
-  // Get Zone ID
-  let CF_ZONE_ID: string;
-  try {
-    const zonesRes = await fetch(`${CF_API}/zones?name=burmesedigital.store`, { headers: cfHeaders });
-    const zonesData = await zonesRes.json();
-    if (!zonesData.success || !zonesData.result?.[0]) {
-      throw new Error(`CF Error: ${zonesData.errors?.[0]?.message || 'Unknown. Make sure CF Token is a valid API Token (not Global Key)'}`);
-    }
-    CF_ZONE_ID = zonesData.result[0].id;
-  } catch (err: any) {
-    // If it's a 4xx error or invalid header
-    if (err.message.includes('fetch failed')) {
-      // Fallback to try global key if Bearer failed
-      cfHeaders['X-Auth-Email'] = config.cfEmail?.trim();
-      cfHeaders['X-Auth-Key'] = config.cfToken?.trim();
-      delete cfHeaders['Authorization'];
-      throw new Error(`Cloudflare Fetch Failed. Invalid headers or network issue. Try saving config again.`);
-    }
-    throw new Error(`Cloudflare Zones Error: ${err.message}`);
-  }
+  const { zoneId, headers: cfHeaders, authLabel } = await resolveCloudflareZone(config);
 
   // Get DNS Record ID
   let record: any;
   let dnsData: any;
   try {
-    const dnsRes = await fetch(`${CF_API}/zones/${CF_ZONE_ID}/dns_records?name=${DOMAIN}`, { headers: cfHeaders });
-    dnsData = await dnsRes.json();
+    dnsData = await fetchCloudflareJson(
+      `/zones/${zoneId}/dns_records?type=A&name=${encodeURIComponent(DOMAIN)}`,
+      { method: 'GET' },
+      cfHeaders,
+      `Cloudflare DNS Records (${authLabel})`
+    );
     record = dnsData.result?.[0];
   } catch(err: any) {
     throw new Error(`Cloudflare DNS Records Error: ${err.message}`);
@@ -235,23 +345,27 @@ export async function actionUpdateDNS(serverName: string) {
   const body = JSON.stringify({ type: 'A', name: DOMAIN, content: newIp, proxied: false, ttl: 60 });
 
   // Update or Create
-  let finalRes;
   try {
     if (record) {
-      finalRes = await fetch(`${CF_API}/zones/${CF_ZONE_ID}/dns_records/${record.id}`, { method: 'PUT', headers: cfHeaders as any, body });
+      await fetchCloudflareJson(
+        `/zones/${zoneId}/dns_records/${record.id}`,
+        { method: 'PUT', body },
+        cfHeaders,
+        `Cloudflare Update DNS (${authLabel})`
+      );
     } else {
-      finalRes = await fetch(`${CF_API}/zones/${CF_ZONE_ID}/dns_records`, { method: 'POST', headers: cfHeaders as any, body });
-    }
-  
-    const finalData = await finalRes.json();
-    if (!finalData.success) {
-      throw new Error(`Failed to update DNS record. CF Error: ${finalData.errors?.[0]?.message || 'Unknown'}`);
+      await fetchCloudflareJson(
+        `/zones/${zoneId}/dns_records`,
+        { method: 'POST', body },
+        cfHeaders,
+        `Cloudflare Create DNS (${authLabel})`
+      );
     }
   } catch(err: any) {
     throw new Error(`Cloudflare Update DNS Error: ${err.message}`);
   }
 
-  return { success: true, message: `DNS updated successfully: ${DOMAIN} -> ${newIp}` };
+  return { success: true, message: `DNS updated successfully via ${authLabel}: ${DOMAIN} -> ${newIp}` };
 }
 
 // SSH execution helper 
@@ -259,7 +373,7 @@ function execSsh(host: string, command: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn.on('ready', () => {
-      conn.exec(command, (err, stream) => {
+      conn.exec(command, (err: any, stream: any) => {
         if (err) { conn.end(); return reject(err); }
         let output = '';
         stream.on('close', (code: any) => {
@@ -277,9 +391,9 @@ function sftpUpload(host: string, localPath: string, remotePath: string): Promis
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn.on('ready', () => {
-      conn.sftp((err, sftp) => {
+      conn.sftp((err: any, sftp: any) => {
         if (err) { conn.end(); return reject(err); }
-        sftp.fastPut(localPath, remotePath, (err) => {
+        sftp.fastPut(localPath, remotePath, (err: any) => {
           conn.end();
           if (err) reject(err);
           else resolve();

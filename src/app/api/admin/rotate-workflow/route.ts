@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { actionBackupServer, actionRecreateServer, actionUpdateDNS, actionInstall3xUI } from '@/lib/rotationActions';
+import connectDB from '@/lib/mongodb';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 900;
 
 export async function POST(request: NextRequest) {
   const limited = await apiLimiter(request);
@@ -9,6 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     await requireAdmin();
+    await connectDB();
     const body = await request.json();
     const { action, serverId } = body;
 

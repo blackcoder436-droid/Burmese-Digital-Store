@@ -1,9 +1,9 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck
 import fs from 'fs';
 import path from 'path';
-import fetch from 'node-fetch';
 import { Client } from 'ssh2';
 import mongoose from 'mongoose';
-import FormData from 'form-data';
 
 /**
  * 🚀 VPN Server Rotation Script 🚀
@@ -78,10 +78,12 @@ async function sendFileTg(filePath, caption) {
    if (!tgToken || !tgChatId) return;
 
    try {
-     const form = new FormData();
+     const buffer = await fs.promises.readFile(filePath);
+     const blob = new Blob([buffer]);
+     const form = new globalThis.FormData();
      form.append('chat_id', tgChatId);
      form.append('caption', caption);
-     form.append('document', fs.createReadStream(filePath));
+     form.append('document', blob, path.basename(filePath));
 
      await fetch(`https://api.telegram.org/bot${tgToken}/sendDocument`, {
        method: 'POST',
@@ -109,18 +111,65 @@ async function fetchDO(path, options = {}) {
   return json;
 }
 
+function cleanSecret(value) {
+  return (value || '')
+    .trim()
+    .replace(/^Bearer\s+/i, '')
+    .replace(/^Authorization:\s*Bearer\s+/i, '')
+    .trim();
+}
+
+function looksLikeGlobalApiKey(value) {
+  return /^[a-f0-9]{32,64}$/i.test(value);
+}
+
 async function fetchCF(path, options = {}) {
-  const res = await fetch(`${CF_API}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.cfToken}`,
-      ...options.headers
+  const cfToken = cleanSecret(config.cfToken);
+  const cfEmail = (config.cfEmail || '').trim();
+  const body = options.body && typeof options.body !== 'string'
+    ? JSON.stringify(options.body)
+    : options.body;
+  const apiTokenCandidate = {
+    label: 'API Token',
+    headers: { 'Authorization': `Bearer ${cfToken}` }
+  };
+
+  let candidates = [apiTokenCandidate];
+  if (cfEmail) {
+    const globalKeyCandidate = {
+      label: 'Global API Key',
+      headers: { 'X-Auth-Email': cfEmail, 'X-Auth-Key': cfToken }
+    };
+    candidates = looksLikeGlobalApiKey(cfToken)
+      ? [globalKeyCandidate, apiTokenCandidate]
+      : [apiTokenCandidate, globalKeyCandidate];
+  }
+
+  const errors = [];
+
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(`${CF_API}${path}`, {
+        ...options,
+        body,
+        headers: {
+          'Content-Type': 'application/json',
+          ...candidate.headers,
+          ...options.headers
+        }
+      });
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : {};
+      if (!res.ok || !json.success) {
+        throw new Error(json.errors?.[0]?.message || json.message || `HTTP ${res.status}`);
+      }
+      return json;
+    } catch (err) {
+      errors.push(`${candidate.label}: ${err.message}`);
     }
-  });
-  const json = await res.json();
-  if (!json.success) throw new Error(json.errors?.[0]?.message || 'Cloudflare API Error');
-  return json;
+  }
+
+  throw new Error(errors.join(' | '));
 }
 
 // ==== SSH Helpers ====
@@ -153,12 +202,15 @@ function sftpDownload(host, remotePath, localPath) {
 }
 
 // ==== MAIN FLOW ====
-import { getRotateConfig } from '../src/models/RotateConfig'; 
-import connectDB from '../src/lib/mongodb';
 
 async function main() {
   // We use mongoose to fetch the config from DB.
   // We must import it dynamically or assume the user runs scripts/rotate-vpn.mjs via ts-node / tsx
+  const [{ getRotateConfig }, { default: connectDB }] = await Promise.all([
+    import('../src/models/RotateConfig'),
+    import('../src/lib/mongodb')
+  ]);
+
   await connectDB();
   config = await getRotateConfig();
 
@@ -278,6 +330,10 @@ async function main() {
 }
 
 main().catch(console.error);
+
+/*
+ * Legacy duplicate rotation flow below is disabled. It referenced undefined env
+ * variables and was left after the active main() flow, which broke tsx parsing.
           if (code !== 0) return reject(new Error(`Command failed with code ${code}. Output: ${output}`));
           resolve(output);
         }).on('data', data => output += data).stderr.on('data', data => output += data);
@@ -465,3 +521,4 @@ async function rotateDatabase() {
 }
 
 rotateDatabase().catch(console.error);
+*/

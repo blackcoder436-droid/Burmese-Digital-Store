@@ -85,6 +85,35 @@ const DROPLET_IMAGE_OPTIONS = [
 	{ value: 'fedora-41-x64', label: 'Fedora 41 x64' },
 ] as const;
 
+async function readApiJson(response: Response) {
+	const text = await response.text();
+	if (!text) return {};
+
+	try {
+		return JSON.parse(text);
+	} catch {
+		const isHtml = /<!doctype|<html/i.test(text);
+		const preview = text.replace(/\s+/g, ' ').slice(0, 180);
+		throw new Error(
+			`Server returned non-JSON response (HTTP ${response.status}). ${
+				isHtml
+					? 'This usually means the rotate request timed out or the server returned an HTML error page.'
+					: 'The API response could not be parsed.'
+			}${preview ? ` Preview: ${preview}` : ''}`
+		);
+	}
+}
+
+function getActionErrorMessage(error: unknown) {
+	const message = error instanceof Error ? error.message : 'Network error occurred';
+
+	if (/failed to fetch|networkerror|load failed/i.test(message)) {
+		return 'Network request failed. If you are connected through the same VPN server being rotated, your browser connection likely dropped after the old VPS was deleted. Reconnect with another network/VPN, reload the page, then continue from DNS.';
+	}
+
+	return message;
+}
+
 export default function RotateWizardPage() {
 	const [loading, setLoading] = useState(true);
 	const [actionLoading, setActionLoading] = useState(false);
@@ -99,7 +128,7 @@ export default function RotateWizardPage() {
 		async function loadConfig() {
 			try {
 				const response = await fetch('/api/admin/rotate-config');
-				const data = await response.json();
+				const data = await readApiJson(response);
 
 				if (mounted && data?.success && data?.data?.config) {
 					setConfig((prev) => ({ ...prev, ...data.data.config }));
@@ -141,7 +170,7 @@ export default function RotateWizardPage() {
 				body: JSON.stringify(config),
 			});
 
-			const data = await response.json();
+			const data = await readApiJson(response);
 			if (data?.success) {
 				toast.success('Configuration saved successfully');
 				setCurrentStep(2);
@@ -165,7 +194,7 @@ export default function RotateWizardPage() {
 				body: JSON.stringify({ serverId: targetServer }),
 			});
 
-			const data = await response.json();
+			const data = await readApiJson(response);
 
 			if (data?.success) {
 				toast.success(data.message || 'One-click rotation started');
@@ -191,7 +220,7 @@ export default function RotateWizardPage() {
 				body: JSON.stringify({ serverId: targetServer, action }),
 			});
 
-			const data = await response.json();
+			const data = await readApiJson(response);
 
 			if (data?.success) {
 				setStepResults((prev) => ({
@@ -215,7 +244,7 @@ export default function RotateWizardPage() {
 				toast.error(data?.error || 'Action failed');
 			}
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Network error occurred';
+			const message = getActionErrorMessage(error);
 			setStepResults((prev) => ({
 				...prev,
 				[stepNumber]: { status: 'error', message },
@@ -388,8 +417,22 @@ export default function RotateWizardPage() {
 									<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
 										<h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-300/80">CF</h3>
 										<div className="mt-4 grid gap-4">
-											<Field label="API token" name="cfToken" value={config.cfToken} onChange={handleConfigChange} type="password" />
-											<Field label="Account email" name="cfEmail" value={config.cfEmail} onChange={handleConfigChange} type="email" />
+											<Field
+												label="API token / Global API key"
+												name="cfToken"
+												value={config.cfToken}
+												onChange={handleConfigChange}
+												type="password"
+												help="For a Global API Key, paste only the key value and fill the Cloudflare account email below. Do not include Bearer."
+											/>
+											<Field
+												label="Account email"
+												name="cfEmail"
+												value={config.cfEmail}
+												onChange={handleConfigChange}
+												type="email"
+												help="Required when using a Global API Key."
+											/>
 										</div>
 									</div>
 								</div>
@@ -510,12 +553,14 @@ function Field({
 	value,
 	onChange,
 	type = 'text',
+	help,
 }: {
 	label: string;
 	name: string;
 	value: string;
 	onChange: (event: ChangeEvent<HTMLInputElement>) => void;
 	type?: string;
+	help?: string;
 }) {
 	return (
 		<label className="block">
@@ -527,6 +572,7 @@ function Field({
 				onChange={onChange}
 				className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
 			/>
+			{help ? <span className="mt-2 block text-xs leading-5 text-slate-500">{help}</span> : null}
 		</label>
 	);
 }
