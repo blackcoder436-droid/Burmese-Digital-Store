@@ -586,16 +586,24 @@ curl -kfsS --max-time 15 -b "$cookie" -c "$cookie" \
   ${shellQuote(`${baseUrl}/login`)} >/dev/null
 curl -kfsS --max-time 15 -b "$cookie" \
   -H 'Accept: application/json' \
-  ${shellQuote(`${baseUrl}/panel/api/inbounds/list`)}
+  ${shellQuote(`${baseUrl}/panel/api/inbounds/list`)} | python3 -c ${shellQuote(`
+import json
+import sys
+
+data = json.load(sys.stdin)
+if not data.get("success") or not isinstance(data.get("obj"), list):
+    raise SystemExit(data.get("msg") or "Panel API did not return an inbound list")
+
+print(f"INBOUND_COUNT:{len(data['obj'])}")
+`)}
 `;
   const output = await execSsh(host, command, 30000);
-  const data = JSON.parse(output) as { success?: boolean; obj?: unknown; msg?: string };
-
-  if (!data.success || !Array.isArray(data.obj)) {
-    throw new Error(`Panel API did not return an inbound list after restore: ${data.msg || output.slice(0, 200)}`);
+  const match = output.match(/INBOUND_COUNT:(\d+)/);
+  if (!match) {
+    throw new Error(`Panel API did not return an inbound count after restore: ${output.slice(0, 300) || '(empty)'}`);
   }
 
-  return data.obj.length;
+  return Number(match[1]);
 }
 
 async function getRemoteBackupInboundCount(host: string, backup: BackupCandidate): Promise<number> {
