@@ -3,13 +3,14 @@ import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { actionBackupServer, actionRecreateServer, actionUpdateDNS, actionInstall3xUI } from '@/lib/rotationActions';
 import connectDB from '@/lib/mongodb';
+import RotateJobModel from '@/models/RotateJob';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 900;
 
-type RotateJob = {
-  id: string;
+type RotateJobUpdate = {
+  jobId: string;
   action: string;
   serverId: string;
   status: 'running' | 'success' | 'error';
@@ -20,62 +21,58 @@ type RotateJob = {
   updatedAt: number;
 };
 
-const globalForRotateJobs = globalThis as typeof globalThis & {
-  rotateWorkflowJobs?: Map<string, RotateJob>;
-};
-
-const rotateWorkflowJobs = globalForRotateJobs.rotateWorkflowJobs || new Map<string, RotateJob>();
-globalForRotateJobs.rotateWorkflowJobs = rotateWorkflowJobs;
-
-function cleanupRotateJobs() {
+async function cleanupRotateJobs() {
   const cutoff = Date.now() - 60 * 60 * 1000;
-  for (const [id, job] of rotateWorkflowJobs.entries()) {
-    if (job.updatedAt < cutoff) {
-      rotateWorkflowJobs.delete(id);
-    }
-  }
+  await RotateJobModel.updateMany(
+    { status: 'running', updatedAt: { $lt: new Date(cutoff) } },
+    { $set: { status: 'error', error: 'Background job timed out.', message: 'Background job timed out.', updatedAt: new Date() } }
+  );
 }
 
-function findRunningJob(action: string, serverId: string) {
-  for (const job of rotateWorkflowJobs.values()) {
-    if (job.action === action && job.serverId === serverId && job.status === 'running') {
-      return job;
-    }
-  }
-  return null;
+async function findRunningJob(action: string, serverId: string) {
+  return RotateJobModel.findOne({ action, serverId, status: 'running' }).lean();
 }
 
-function startRotateJob(action: string, serverId: string, runner: () => Promise<any>) {
-  cleanupRotateJobs();
+async function updateRotateJob(jobId: string, updates: Partial<RotateJobUpdate>) {
+  await RotateJobModel.updateOne(
+    { jobId },
+    { $set: { ...updates, updatedAt: new Date() } }
+  );
+}
 
-  const existingJob = findRunningJob(action, serverId);
+async function startRotateJob(action: string, serverId: string, runner: (progress: (message: string) => Promise<void>) => Promise<any>) {
+  await cleanupRotateJobs();
+
+  const existingJob = await findRunningJob(action, serverId);
   if (existingJob) return existingJob;
 
   const now = Date.now();
-  const job: RotateJob = {
-    id: `${action}:${serverId}:${now}`,
+  const job = await RotateJobModel.create({
+    jobId: `${action}:${serverId}:${now}`,
     action,
     serverId,
     status: 'running',
     message: 'Panel install/restore is running in the background.',
-    startedAt: now,
-    updatedAt: now,
-  };
+    startedAt: new Date(now),
+    updatedAt: new Date(now),
+    expiresAt: new Date(now + 24 * 60 * 60 * 1000),
+  });
 
-  rotateWorkflowJobs.set(job.id, job);
-
-  void runner()
+  void runner((message: string) => updateRotateJob(job.jobId, { message }))
     .then((result) => {
-      job.status = 'success';
-      job.result = result;
-      job.message = result?.message || 'Step completed successfully';
-      job.updatedAt = Date.now();
+      void updateRotateJob(job.jobId, {
+        status: 'success',
+        result,
+        message: result?.message || 'Step completed successfully',
+      });
     })
     .catch((error) => {
-      job.status = 'error';
-      job.error = error instanceof Error ? error.message : String(error);
-      job.message = job.error || 'Step failed';
-      job.updatedAt = Date.now();
+      const message = error instanceof Error ? error.message : String(error);
+      void updateRotateJob(job.jobId, {
+        status: 'error',
+        error: message,
+        message: message || 'Step failed',
+      });
     });
 
   return job;
@@ -87,12 +84,13 @@ export async function GET(request: NextRequest) {
 
   try {
     await requireAdmin();
+    await connectDB();
     const jobId = request.nextUrl.searchParams.get('jobId');
     if (!jobId) {
       return NextResponse.json({ success: false, error: 'Job ID is required' }, { status: 400 });
     }
 
-    const job = rotateWorkflowJobs.get(jobId);
+    const job = await RotateJobModel.findOne({ jobId }).lean();
     if (!job) {
       return NextResponse.json({ success: false, error: 'Job not found or expired' }, { status: 404 });
     }
@@ -101,7 +99,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         pending: true,
-        jobId: job.id,
+        jobId: job.jobId,
         status: job.status,
         message: job.message,
       });
@@ -111,7 +109,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         pending: false,
-        jobId: job.id,
+        jobId: job.jobId,
         status: job.status,
         ...(job.result || {}),
         message: job.message,
@@ -121,7 +119,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: false,
       pending: false,
-      jobId: job.id,
+      jobId: job.jobId,
       status: job.status,
       error: job.error || job.message,
     }, { status: 500 });
@@ -160,11 +158,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'install_3xui') {
-      const job = startRotateJob(action, serverId, () => actionInstall3xUI(serverId));
+      const job = await startRotateJob(action, serverId, (progress) => actionInstall3xUI(serverId, progress));
       return NextResponse.json({
         success: true,
         pending: true,
-        jobId: job.id,
+        jobId: job.jobId,
         status: job.status,
         message: job.message,
       });

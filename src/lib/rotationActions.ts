@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { Client } from 'ssh2';
 import { getRotateConfig } from '@/models/RotateConfig';
+import VpnServer from '@/models/VpnServer';
 
 const DO_API = 'https://api.digitalocean.com/v2';
 const CF_API = 'https://api.cloudflare.com/client/v4';
@@ -14,9 +15,45 @@ const XUI_READY_POLL_MS = 10000;
 
 type JsonObject = Record<string, any>;
 type HeaderMap = Record<string, string>;
+type ProgressReporter = (message: string) => void | Promise<void>;
 
 export async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function reportProgress(progress: ProgressReporter | undefined, message: string) {
+  if (progress) await progress(message);
+}
+
+function shellQuote(value: string): string {
+  const escaped = value.replace(/'/g, "'\\''");
+  return `'${escaped}'`;
+}
+
+function normalizePanelPath(value?: string): string {
+  const raw = (value || '/mka').trim();
+  if (!raw || raw === '/') return '/';
+  return `/${raw.replace(/^\/+|\/+$/g, '')}`;
+}
+
+function getPortFromUrl(value?: string): number | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.port) return parseInt(url.port, 10);
+    return url.protocol === 'https:' ? 443 : 80;
+  } catch {
+    return null;
+  }
+}
+
+async function getPanelTarget(serverName: string, fallbackPort: number) {
+  const server = await VpnServer.findOne({ serverId: serverName }).lean().catch(() => null);
+  return {
+    domain: (server?.domain || `${serverName}.burmesedigital.store`).trim(),
+    port: getPortFromUrl(server?.url) || fallbackPort,
+    panelPath: normalizePanelPath(server?.panelPath),
+  };
 }
 
 function cleanSecret(value?: string): string {
@@ -404,15 +441,18 @@ function sftpUpload(host: string, localPath: string, remotePath: string): Promis
 }
 
 // Step 5: Install & Restore
-export async function actionInstall3xUI(serverName: string) {
+export async function actionInstall3xUI(serverName: string, progress?: ProgressReporter) {
   const config = await getRotateConfig();
   const doToken = ['jan', 'sg1', 'sg4'].includes(serverName) ? config.doToken1 : config.doToken2;
   const adminPort = serverName === 'sg4' ? 2053 : 8080; // Only node 4 uses 2053
+  const panelTarget = await getPanelTarget(serverName, adminPort);
 
   // Get New IP
+  await reportProgress(progress, 'Finding the new DigitalOcean public IP...');
   const newIp = await waitForDropletPublicIp(doToken, serverName);
 
   // Wait extra 30s to make sure SSH is really up
+  await reportProgress(progress, `New IP is ${newIp}. Waiting for SSH to become ready...`);
   await sleep(30000);
 
   // Use the exact installation script version requested by the user: v3.0.2
@@ -426,9 +466,11 @@ export async function actionInstall3xUI(serverName: string) {
   while(attempt < 3 && !installed) {
     try {
       attempt++;
+      await reportProgress(progress, `Installing 3x-ui on ${newIp} (attempt ${attempt}/3)...`);
       await execSsh(newIp, installCmd);
       installed = true;
     } catch(err) {
+      await reportProgress(progress, `SSH/install attempt ${attempt} failed. Retrying in 10 seconds...`);
       await sleep(10000); // Wait 10s and test connection again
     }
   }
@@ -438,60 +480,76 @@ export async function actionInstall3xUI(serverName: string) {
   // Restore DB and SSL Certificates
   const backupsDir = path.join(process.cwd(), 'backups');
   const localTarPath = path.join(backupsDir, `${serverName}_backup.tar.gz`);
-  
+
   if (fs.existsSync(localTarPath)) {
+    await reportProgress(progress, 'Uploading backup archive to the new VPS...');
     const remoteTarPath = '/root/backup.tar.gz';
     await sftpUpload(newIp, localTarPath, remoteTarPath);
-    
+
+    await reportProgress(progress, 'Stopping 3x-ui before database and certificate restore...');
+    await execSsh(newIp, 'systemctl stop x-ui || true');
+
     // Extract the tar file (which contains etc/x-ui/x-ui.db, root/cert, root/.acme.sh) relative to /
-    const extractCmd = `tar -xzf ${remoteTarPath} -C / && rm -f ${remoteTarPath}`;
+    await reportProgress(progress, 'Restoring x-ui database and SSL certificate files...');
+    const extractCmd = `tar -xzf ${remoteTarPath} -C / && rm -f ${remoteTarPath} && (chmod 600 /etc/x-ui/x-ui.db || true)`;
     await execSsh(newIp, extractCmd);
-    
+
+    await reportProgress(progress, 'Applying panel username, password, port, and base path...');
+    const resetTwoFactor = config.enable2FA ? 'false' : 'true';
+    const settingCmd = [
+      '/usr/local/x-ui/x-ui',
+      'setting',
+      '-username', shellQuote(config.xuiUsername || 'admin'),
+      '-password', shellQuote(config.xuiPassword || 'admin'),
+      '-port', String(panelTarget.port),
+      '-webBasePath', shellQuote(panelTarget.panelPath),
+      '-resetTwoFactor', resetTwoFactor,
+    ].join(' ');
+    await execSsh(newIp, `[ -x /usr/local/x-ui/x-ui ] || { echo "x-ui binary not found"; exit 1; }; ${settingCmd}`);
+
+    await reportProgress(progress, `Looking for restored SSL files for ${panelTarget.domain}...`);
+    const sslCmd = `
+cert=$(find /root/cert /root/.acme.sh -type f \\( -name 'fullchain.cer' -o -name '*.cer' -o -name '*.crt' -o -name 'fullchain.pem' -o -name '*.pem' \\) 2>/dev/null | grep -i ${shellQuote(panelTarget.domain)} | head -n 1)
+key=$(find /root/cert /root/.acme.sh -type f -name '*.key' 2>/dev/null | grep -i ${shellQuote(panelTarget.domain)} | head -n 1)
+if [ -z "$cert" ]; then cert=$(find /root/cert /root/.acme.sh -type f \\( -name 'fullchain.cer' -o -name '*.cer' -o -name '*.crt' -o -name 'fullchain.pem' -o -name '*.pem' \\) 2>/dev/null | head -n 1); fi
+if [ -z "$key" ]; then key=$(find /root/cert /root/.acme.sh -type f -name '*.key' 2>/dev/null | head -n 1); fi
+if [ -n "$cert" ] && [ -n "$key" ]; then
+  /usr/local/x-ui/x-ui cert -webCert "$cert" -webCertKey "$key"
+  echo "SSL_APPLIED:$cert"
+else
+  echo "SSL_NOT_FOUND"
+fi
+`;
+    const sslOutput = await execSsh(newIp, sslCmd);
+    const sslApplied = sslOutput.includes('SSL_APPLIED');
+
+    await reportProgress(progress, 'Restarting 3x-ui panel...');
     await execSsh(newIp, 'systemctl restart x-ui');
 
     const readyDeadline = Date.now() + XUI_READY_WAIT_MS;
+    let ready = false;
     while (Date.now() < readyDeadline) {
       try {
+        await reportProgress(progress, 'Waiting for x-ui service to become active...');
         await execSsh(newIp, 'systemctl is-active --quiet x-ui');
+        ready = true;
         break;
       } catch (err) {
         await sleep(XUI_READY_POLL_MS);
       }
     }
+
+    if (!ready) {
+      throw new Error('x-ui service did not become active after restore.');
+    }
+
+    const protocol = sslApplied ? 'https' : 'http';
+    const finalBasePath = panelTarget.panelPath.endsWith('/') ? panelTarget.panelPath : `${panelTarget.panelPath}/`;
+    const urlPath = finalBasePath === '/' ? '/panel' : `${finalBasePath}`;
+    const sslNote = sslApplied ? '' : ' SSL certificate files were not found in the backup, so the panel URL is HTTP.';
+
+    return { success: true, message: `3X-UI successfully restored! Panel: ${protocol}://${panelTarget.domain}:${panelTarget.port}${urlPath}${sslNote}` };
   } else {
     throw new Error(`Backup file not found to restore! Looked for: ${localTarPath}`);
   }
-
-  // Look up the restored port in the database to return the correct URL
-  let restoredPort = adminPort;
-  try {
-    const portRes = await execSsh(newIp, `sqlite3 /etc/x-ui/x-ui.db "SELECT value FROM settings WHERE key='webPort';"`);
-    if (portRes && portRes.trim()) {
-      restoredPort = parseInt(portRes.trim(), 10);
-    }
-  } catch(e) { }
-
-  let restoredBasePath = '';
-  try {
-    const pathRes = await execSsh(newIp, `sqlite3 /etc/x-ui/x-ui.db "SELECT value FROM settings WHERE key='webBasePath';"`);
-    if (pathRes && pathRes.trim() && pathRes.trim() !== '/') {
-      restoredBasePath = pathRes.trim();
-    }
-  } catch(e) { }
-
-  // Check if SSL is enabled so we can return https
-  let isSSL = false;
-  try {
-    const sslRes = await execSsh(newIp, `sqlite3 /etc/x-ui/x-ui.db "SELECT value FROM settings WHERE key='webCertFile';"`);
-    if (sslRes && sslRes.trim() && sslRes.trim().length > 5) {
-      isSSL = true;
-    }
-  } catch(e) { }
-
-  const protocol = isSSL ? 'https' : 'http';
-  // Ensure the base path ends with a slash if it exists
-  const finalBasePath = restoredBasePath.endsWith('/') ? restoredBasePath : `${restoredBasePath}/`;
-  const urlPath = finalBasePath === '/' ? '/panel' : `${finalBasePath}`;
-  
-  return { success: true, message: `3X-UI successfully restored! Panel: ${protocol}://${newIp}:${restoredPort}${urlPath}` };
 }
