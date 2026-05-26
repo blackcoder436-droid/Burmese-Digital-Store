@@ -34,6 +34,7 @@ type StepResult = {
 	status: 'loading' | 'success' | 'error';
 	message?: string;
 	newIp?: string;
+	jobId?: string;
 };
 
 const STEPS = [
@@ -112,6 +113,10 @@ function getActionErrorMessage(error: unknown) {
 	}
 
 	return message;
+}
+
+function sleep(ms: number) {
+	return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 export default function RotateWizardPage() {
@@ -223,6 +228,20 @@ export default function RotateWizardPage() {
 			const data = await readApiJson(response);
 
 			if (data?.success) {
+				if (data?.pending && data?.jobId) {
+					setStepResults((prev) => ({
+						...prev,
+						[stepNumber]: {
+							status: 'loading',
+							message: data.message || 'Step is running in the background...',
+							jobId: data.jobId,
+						},
+					}));
+					toast.success(data.message || 'Background job started');
+					await pollRotateJob(data.jobId, stepNumber);
+					return;
+				}
+
 				setStepResults((prev) => ({
 					...prev,
 					[stepNumber]: {
@@ -253,6 +272,49 @@ export default function RotateWizardPage() {
 		} finally {
 			setActionLoading(false);
 		}
+	}
+
+	async function pollRotateJob(jobId: string, stepNumber: number) {
+		const deadline = Date.now() + 40 * 60 * 1000;
+
+		while (Date.now() < deadline) {
+			await sleep(5000);
+
+			const response = await fetch(`/api/admin/rotate-workflow?jobId=${encodeURIComponent(jobId)}`, {
+				cache: 'no-store',
+			});
+			const data = await readApiJson(response);
+
+			if (data?.pending) {
+				setStepResults((prev) => ({
+					...prev,
+					[stepNumber]: {
+						status: 'loading',
+						message: data.message || 'Step is still running in the background...',
+						jobId,
+					},
+				}));
+				continue;
+			}
+
+			if (data?.success) {
+				setStepResults((prev) => ({
+					...prev,
+					[stepNumber]: {
+						status: 'success',
+						message: data.message,
+						newIp: data.newIp,
+						jobId,
+					},
+				}));
+				toast.success(data.message || 'Step completed');
+				return;
+			}
+
+			throw new Error(data?.error || 'Background job failed');
+		}
+
+		throw new Error('Background job timed out while waiting for panel installation.');
 	}
 
 	if (loading) {
@@ -653,6 +715,7 @@ function ResultCard({ stepNumber, result }: { stepNumber: number; result?: StepR
 			<div className="rounded-2xl border border-sky-400/20 bg-sky-400/10 p-6 text-sm text-sky-100">
 				<Loader2 className="mr-2 inline h-4 w-4 animate-spin align-[-2px]" />
 				Running step {stepNumber}...
+				{result.message ? <p className="mt-2 text-sky-100/80">{result.message}</p> : null}
 			</div>
 		);
 	}
