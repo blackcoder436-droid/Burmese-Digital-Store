@@ -540,9 +540,19 @@ set -e
 cookie=$(mktemp)
 cleanup() { rm -f "$cookie"; }
 trap cleanup EXIT
-curl -kfsS --max-time 15 -c "$cookie" \
+csrfResponse=$(curl -kfsS --max-time 15 -c "$cookie" -b "$cookie" \
+  -H 'Accept: application/json' \
+  ${shellQuote(`${baseUrl}/csrf-token`)})
+csrfToken=$(printf '%s' "$csrfResponse" | sed -n 's/.*"obj":"\\([^"]*\\)".*/\\1/p')
+if [ -z "$csrfToken" ]; then
+  echo "Could not get CSRF token: $csrfResponse"
+  exit 1
+fi
+curl -kfsS --max-time 15 -b "$cookie" -c "$cookie" \
   -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
   -H 'X-Requested-With: XMLHttpRequest' \
+  -H "X-CSRF-Token: $csrfToken" \
   --data ${shellQuote(loginBody)} \
   ${shellQuote(`${baseUrl}/login`)} >/dev/null
 curl -kfsS --max-time 15 -b "$cookie" \
