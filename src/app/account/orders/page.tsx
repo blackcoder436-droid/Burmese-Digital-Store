@@ -94,7 +94,7 @@ export default function OrdersPage() {
 
   return (
     <div className="min-h-screen pt-6 sm:pt-8 pb-12 relative z-[1]" ref={containerRef}>
-      <div className="max-w-5xl mx-auto px-3 sm:px-6 lg:px-8">
+      <div className="w-full mx-auto px-3 sm:px-6 lg:px-8">
         {/* Header + Filter row */}
         <div className="scroll-fade mb-5 sm:mb-8">
           <div className="flex items-center justify-between gap-3">

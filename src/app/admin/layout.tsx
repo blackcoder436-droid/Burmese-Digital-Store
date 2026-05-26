@@ -149,7 +149,7 @@ export default function AdminLayout({
 
       {/* Sticky admin nav bar */}
       <div className="sticky top-[64px] z-30 bg-[#0a0a1a]/95 backdrop-blur-lg border-b border-purple-500/[0.08]">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-center h-11 sm:h-12">
 
             {/* Mobile: hamburger + current page title */}
@@ -166,16 +166,16 @@ export default function AdminLayout({
               </span>
             </div>
 
-            {/* Desktop: horizontal nav links (primary) + More dropdown (secondary) */}
-            <div className="hidden lg:flex items-center gap-0.5 flex-1">
-              {primaryItems.map((item) => {
+            {/* Desktop: horizontal nav links */}
+            <div className="hidden lg:flex items-center gap-1 flex-1 overflow-x-auto pb-1.5 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-purple-500/30 hover:[&::-webkit-scrollbar-thumb]:bg-purple-500/60 [&::-webkit-scrollbar-thumb]:rounded-full transition-colors">
+              {allNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
                       isActive
                         ? 'bg-purple-500/20 text-purple-300'
                         : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'
@@ -186,53 +186,6 @@ export default function AdminLayout({
                   </Link>
                 );
               })}
-
-              {/* Separator */}
-              <div className="w-px h-5 bg-purple-500/10 mx-1 shrink-0" />
-
-              {/* More dropdown for secondary items */}
-              <div className="relative" ref={moreRef}>
-                <button
-                  onClick={() => setMoreOpen(!moreOpen)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                    isSecondaryActive
-                      ? 'bg-purple-500/20 text-purple-300'
-                      : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <MoreHorizontal className="w-4 h-4 shrink-0" />
-                  {isSecondaryActive
-                    ? getLabel(secondaryItems.find((i) => pathname === i.href) || secondaryItems[0])
-                    : t('admin.nav.more')}
-                  <ChevronDown className={`w-3 h-3 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {moreOpen && (
-                  <div className="absolute top-full left-0 mt-1.5 w-56 bg-[#0c0c20] border border-purple-500/15 rounded-xl shadow-2xl shadow-black/40 overflow-hidden z-50">
-                    <div className="p-1.5">
-                      {secondaryItems.map((item) => {
-                        const Icon = item.icon;
-                        const isActive = pathname === item.href;
-                        return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                              isActive
-                                ? 'bg-purple-500/15 text-purple-300'
-                                : 'text-gray-400 hover:text-white hover:bg-white/[0.04]'
-                            }`}
-                          >
-                            <Icon className="w-4 h-4 shrink-0" />
-                            {getLabel(item)}
-                            {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-400" />}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>
@@ -302,7 +255,7 @@ export default function AdminLayout({
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
         {children}
       </div>
     </div>

@@ -16,8 +16,10 @@ interface PaymentCountdownProps {
 export default function PaymentCountdown({ expiresAt, onExpired }: PaymentCountdownProps) {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [expired, setExpired] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const calculateTimeLeft = () => {
       const diff = new Date(expiresAt).getTime() - Date.now();
       return Math.max(0, Math.floor(diff / 1000));
@@ -38,6 +40,17 @@ export default function PaymentCountdown({ expiresAt, onExpired }: PaymentCountd
 
     return () => clearInterval(interval);
   }, [expiresAt, onExpired]);
+
+  if (!mounted) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-amber-500/10 border-amber-500/20 animate-pulse">
+        <Timer className="w-4 h-4 text-amber-400" />
+        <span className="text-sm font-mono font-semibold text-amber-400">
+          --:--
+        </span>
+      </div>
+    );
+  }
 
   if (expired || timeLeft <= 0) {
     return (
@@ -67,4 +80,11 @@ export default function PaymentCountdown({ expiresAt, onExpired }: PaymentCountd
       </span>
     </div>
   );
+}
+
+// Add loading skeleton or return null if not mounted to prevent hydration mismatch
+function useMounted() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
 }

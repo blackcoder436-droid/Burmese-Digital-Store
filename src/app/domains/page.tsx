@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 import { ShoppingCart, Check, X, Search, Globe, Zap, Cpu, Terminal, ArrowRight } from 'lucide-react';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
 import { useCart } from '@/lib/cart';
 import toast from 'react-hot-toast';
 import { useScrollFade } from '@/hooks/useScrollFade';
@@ -97,16 +95,14 @@ export default function DomainSearchPage() {
   };
 
   return (
-    <div className="min-h-screen pt-20 pb-12" ref={containerRef}>
-      <Navbar />
-
+    <div className="min-h-screen pb-12" ref={containerRef}>
       <main className="flex-grow">
         {/* Header Section */}
         <div className="relative overflow-hidden mb-12">
           {/* Background decoration */}
           <div className="absolute inset-0 bg-hero-glow pointer-events-none" />
           
-          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center pt-12 pb-8">
+          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center pt-8 pb-8">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-electric-500/10 text-electric-400 text-sm font-medium mb-6 ring-1 ring-electric-500/20">
               <Terminal className="w-4 h-4" />
               Developer Domains
@@ -142,17 +138,28 @@ export default function DomainSearchPage() {
               </button>
             </form>
 
-            {/* Available Extensions List */}
-            <div className="mt-8 flex flex-col items-center scroll-fade">
-              <p className="text-gray-500 text-sm mb-3">Available extensions for {formatPrice(FIXED_PRICE)} / Year</p>
-              <div className="flex flex-wrap justify-center gap-2 max-w-3xl">
-                {EXTENSIONS.map((e) => (
-                  <span 
-                    key={e.ext} 
-                    className="px-3 py-1.5 bg-dark-800/50 border border-dark-600 rounded-lg text-electric-400 font-mono text-sm hover:border-electric-500/50 transition-colors cursor-default"
-                  >
-                    {e.ext}
-                  </span>
+            <div className="mt-12 text-left scroll-fade max-w-4xl mx-auto">
+              <h3 className="text-center text-gray-400 text-sm font-semibold tracking-widest uppercase mb-6">
+                Premium Extensions @ {formatPrice(FIXED_PRICE)} / Year
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {Array.from(new Set(EXTENSIONS.map(e => e.category))).map(category => (
+                  <div key={category} className="bg-dark-800/50 border border-dark-600 rounded-2xl p-5 hover:border-dark-500 transition-colors shadow-lg">
+                    <h4 className="text-electric-400 font-semibold mb-4 flex items-center gap-2">
+                       <span className="w-2 h-2 rounded-full bg-electric-500" />
+                       {category}
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {EXTENSIONS.filter(e => e.category === category).map((e) => (
+                        <span 
+                          key={e.ext} 
+                          className="px-3 py-1.5 bg-dark-900/80 border border-dark-700/50 rounded-lg text-gray-300 font-mono text-sm hover:text-white hover:border-electric-500/50 transition-colors cursor-default shadow-inner"
+                        >
+                          {e.ext}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -286,8 +293,6 @@ export default function DomainSearchPage() {
           )}
         </div>
       </main>
-
-      <Footer />
     </div>
   );
 }

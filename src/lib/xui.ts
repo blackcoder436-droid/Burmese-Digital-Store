@@ -635,7 +635,7 @@ class XuiSession {
     if (!this.loggedIn && !(await this.login())) return false;
 
     try {
-      const body = JSON.stringify({
+      const body = new URLSearchParams({
         id: String(inboundId),
         settings: JSON.stringify({ clients: [updatedClient] }),
       });
@@ -643,7 +643,7 @@ class XuiSession {
       const res = await this.request(`/panel/api/inbounds/updateClient/${encodeURIComponent(clientUUID)}`, {
         method: 'POST',
         body,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
       const result: XuiApiResponse = await res.json();
       if (!result.success) {

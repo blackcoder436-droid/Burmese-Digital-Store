@@ -29,7 +29,7 @@ const nextConfig = {
       },
     ],
   },
-  serverExternalPackages: ['tesseract.js', 'sharp'],
+  serverExternalPackages: ['tesseract.js', 'sharp', 'ssh2'],
   // Disable x-powered-by header to reduce fingerprinting
   poweredByHeader: false,
   // Compress responses

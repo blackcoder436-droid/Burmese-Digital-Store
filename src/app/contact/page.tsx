@@ -87,7 +87,7 @@ export default function ContactPage() {
 
   return (
     <div className="min-h-screen pt-8 sm:pt-10 pb-16 sm:pb-20 bg-mesh relative z-[1]" ref={containerRef}>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="scroll-fade text-center mb-16">
           <h1 className="heading-lg mb-4">

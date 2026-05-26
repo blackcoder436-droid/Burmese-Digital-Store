@@ -158,7 +158,7 @@ export default function AdminTicketDetailPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Link

@@ -465,7 +465,7 @@ export default function VPNPage() {
 
       {/* ======== HERO ======== */}
       <section className="pt-10 sm:pt-12 pb-10 sm:pb-16 relative z-[1] overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 lg:gap-16 items-start">
             {/* Text */}
             <div className="text-center lg:text-left relative z-10">
@@ -535,7 +535,7 @@ export default function VPNPage() {
 
       {/* ======== FEATURES ======== */}
       <section className="py-12 sm:py-20 relative z-[1]" id="features">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="vpn-fade text-center mb-8 sm:mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\u2728'} Features</div>
             <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight mb-3 sm:mb-4">
@@ -571,7 +571,7 @@ export default function VPNPage() {
 
       {/* ======== SERVERS ======== */}
       <section className="py-20 relative z-[1] bg-[rgba(18,18,42,0.5)]" id="servers">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="vpn-fade text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\uD83C\uDF0D'} Servers</div>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">Global Server Locations</h2>
@@ -634,7 +634,7 @@ export default function VPNPage() {
 
       {/* ======== PRICING ======== */}
       <section className="py-14 sm:py-20 relative z-[1]" id="pricing">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="vpn-fade text-center mb-12">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\uD83D\uDC8E'} Pricing</div>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">
@@ -681,7 +681,7 @@ export default function VPNPage() {
 
       {/* ======== HOW IT WORKS ======== */}
       <section className="py-20 relative z-[1] bg-[rgba(18,18,42,0.5)]" id="how-it-works">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="vpn-fade text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\uD83D\uDCCB'} How It Works</div>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">{t('vpn.landing.howToBuyTitle')}</h2>
@@ -705,7 +705,7 @@ export default function VPNPage() {
 
       {/* ======== COMPATIBLE APPS ======== */}
       <section className="py-20 relative z-[1]" id="apps">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="vpn-fade text-center mb-12">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full text-sm text-purple-300 mb-4">{'\uD83D\uDCF2'} Compatible Apps</div>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">{t('vpn.landing.compatibleAppsTitle')}</h2>

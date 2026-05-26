@@ -124,7 +124,7 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-mesh pointer-events-none" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-radial from-purple-500/10 via-transparent to-transparent pointer-events-none" />
         
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
           <div className="max-w-4xl mx-auto space-y-8">
             {/* Badge */}
             <div className="scroll-fade inline-flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/30 rounded-full animate-glow-pulse">
@@ -178,7 +178,7 @@ export default function HomePage() {
 
       {/* How It Works */}
       <section className="py-14 sm:py-20 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="scroll-fade text-center mb-16">
             <h2 className="heading-lg">{t('homePage.howItWorksTitle')}</h2>
             <p className="text-gray-400 mt-4 max-w-xl mx-auto">
@@ -191,7 +191,7 @@ export default function HomePage() {
       </section>
 
       <section className="py-20 sm:py-28 bg-dark-900/50 border-y border-dark-600/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="scroll-fade text-center mb-16">
             <h2 className="heading-lg">{t('homePage.productCategoriesTitle')}</h2>
             <p className="text-gray-400 mt-4 max-w-xl mx-auto">

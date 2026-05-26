@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Server,
   Plus,
@@ -293,7 +294,7 @@ export default function AdminServersPage() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="w-full mx-auto px-4 py-8">
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
         </div>
@@ -302,7 +303,7 @@ export default function AdminServersPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -319,6 +320,13 @@ export default function AdminServersPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Link
+            href="/admin/rotate"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-xl transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Rotate
+          </Link>
           {servers.length === 0 && (
             <button
               onClick={seedServers}

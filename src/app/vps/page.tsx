@@ -190,7 +190,7 @@ export default function VpsPage() {
 
   return (
     <div className="min-h-screen pt-10 sm:pt-14 pb-12" ref={containerRef}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 sm:space-y-14">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 space-y-10 sm:space-y-14">
         <section className="scroll-fade game-card p-6 sm:p-10 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-cyan-500/10 pointer-events-none" />
           <div className="relative z-10">

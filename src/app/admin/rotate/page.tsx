@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import toast from 'react-hot-toast';
 import {
 	Check,
 	CheckCircle2,
+	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
-	ChevronDown,
 	Database,
 	Globe,
 	Loader2,
@@ -17,12 +17,6 @@ import {
 	Terminal,
 	XCircle,
 } from 'lucide-react';
-import {
-	ROTATION_TARGET_GROUPS,
-	ROTATION_TARGETS,
-	getRotationTarget,
-	type RotationTarget,
-} from '@/lib/rotationTargets';
 
 type RotateConfig = {
 	doToken1: string;
@@ -48,6 +42,15 @@ const STEPS = [
 	{ id: 3, title: 'Recreate', icon: Server },
 	{ id: 4, title: 'DNS', icon: Globe },
 	{ id: 5, title: 'Panel', icon: Terminal },
+] as const;
+
+const SERVER_OPTIONS = [
+	{ value: 'jan', label: 'Jan Server (Account 1)' },
+	{ value: 'sg1', label: 'SG-1 Server (Account 1)' },
+	{ value: 'sg2', label: 'SG-2 Server (Account 2)' },
+	{ value: 'sg3', label: 'SG-3 Server (Account 2)' },
+	{ value: 'sg4', label: 'SG-4 Server (Account 1 - NYC1)' },
+	{ value: 'backup', label: 'Backup Server (Account 2)' },
 ] as const;
 
 const DEFAULT_CONFIG: RotateConfig = {
@@ -87,10 +90,8 @@ export default function RotateWizardPage() {
 	const [actionLoading, setActionLoading] = useState(false);
 	const [currentStep, setCurrentStep] = useState(1);
 	const [targetServer, setTargetServer] = useState('sg1');
-	const [serverPickerOpen, setServerPickerOpen] = useState(false);
 	const [config, setConfig] = useState(DEFAULT_CONFIG);
 	const [stepResults, setStepResults] = useState<Record<number, StepResult>>({});
-	const serverPickerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		let mounted = true;
@@ -117,32 +118,17 @@ export default function RotateWizardPage() {
 		};
 	}, []);
 
-	useEffect(() => {
-		if (!serverPickerOpen) return;
-
-		function handleOutsideClick(event: MouseEvent) {
-			if (serverPickerRef.current && !serverPickerRef.current.contains(event.target as Node)) {
-				setServerPickerOpen(false);
-			}
-		}
-
-		document.addEventListener('mousedown', handleOutsideClick);
-		return () => document.removeEventListener('mousedown', handleOutsideClick);
-	}, [serverPickerOpen]);
-
-	function handleConfigChange(event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-		const { name, type, checked, value } = event.target;
+	function handleConfigChange(event: any) {
+		const target = event.target;
+		const name = target.name;
+		const type = target.type;
+		const checked = target.checked;
+		const value = target.value;
+		
 		setConfig((current) => ({
 			...current,
 			[name]: type === 'checkbox' ? checked : value,
 		} as RotateConfig));
-	}
-
-	function updateConfigField<K extends keyof RotateConfig>(field: K, value: RotateConfig[K]) {
-		setConfig((current) => ({
-			...current,
-			[field]: value,
-		}));
 	}
 
 	async function handleSaveConfig() {
@@ -253,7 +239,7 @@ export default function RotateWizardPage() {
 
 	return (
 		<div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.18),_transparent_30%),linear-gradient(180deg,#020617_0%,#0f172a_55%,#111827_100%)] px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
-			<div className="mx-auto w-full max-w-6xl">
+			<div className="mx-auto w-full">
 				<div className="mb-8 overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-sky-950/20 backdrop-blur-xl sm:p-8">
 					<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 						<div>
@@ -328,86 +314,31 @@ export default function RotateWizardPage() {
 
 							<div className="grid gap-8 lg:grid-cols-2">
 								<div className="space-y-5">
-									<div ref={serverPickerRef} className="relative">
-										<div className="mb-3 flex items-center justify-between">
-											<div>
-												<p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Server target</p>
-												<p className="mt-1 text-sm text-slate-500">Pick the server and its owning DO account</p>
-											</div>
-											<button
-												type="button"
-												onClick={() => setServerPickerOpen((open) => !open)}
-												className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-sky-100 transition hover:bg-sky-400/15"
-											>
-												{serverPickerOpen ? 'Close' : 'Change'}
-												<ChevronDown className={`h-3.5 w-3.5 transition-transform ${serverPickerOpen ? 'rotate-180' : ''}`} />
-											</button>
-										</div>
-
-										<button
-											type="button"
-											onClick={() => setServerPickerOpen((open) => !open)}
-											className="w-full rounded-3xl border border-sky-400/20 bg-slate-950/60 px-5 py-4 text-left shadow-lg shadow-black/10 transition-all hover:border-sky-400/40 hover:bg-slate-950/80"
-										>
-											<div className="flex items-center justify-between gap-4">
-												<div>
-													<div className="flex items-center gap-3">
-														<span className="rounded-full bg-sky-400/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-sky-200">{getRotationTarget(targetServer)?.accountLabel || 'DigitalOcean Account'}</span>
-														<span className="text-xs text-slate-500">{getRotationTarget(targetServer)?.region?.toUpperCase()}</span>
-													</div>
-													<p className="mt-2 text-xl font-semibold text-white">{getRotationTarget(targetServer)?.label || targetServer}</p>
-													<p className="mt-1 text-sm text-slate-400">{getRotationTarget(targetServer)?.note}</p>
-												</div>
-												<ChevronDown className={`h-5 w-5 text-slate-400 transition-transform ${serverPickerOpen ? 'rotate-180' : ''}`} />
-											</div>
-										</button>
-
-										{serverPickerOpen && (
-											<div className="absolute left-0 top-full z-20 mt-3 w-full overflow-hidden rounded-3xl border border-white/10 bg-[#0a1020] shadow-2xl shadow-black/40">
-												<div className="max-h-[420px] overflow-auto p-4">
-													{ROTATION_TARGET_GROUPS.map((group) => (
-														<div key={group.accountId} className="mb-4 last:mb-0">
-															<div className="mb-3 flex items-center justify-between">
-																<div>
-																	<p className="text-sm font-semibold text-white">{group.label}</p>
-																	<p className="text-xs text-slate-500">{group.description}</p>
-																</div>
-																<span className="rounded-full border border-sky-400/15 bg-sky-400/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-200">{group.label}</span>
+									<div>
+										<div className="mt-3 grid gap-3 sm:grid-cols-2">
+											{SERVER_OPTIONS.map((option) => {
+												const selected = targetServer === option.value;
+												return (
+													<button
+														key={option.value}
+														type="button"
+														onClick={() => setTargetServer(option.value)}
+														className={`rounded-2xl border px-4 py-4 text-left transition-all ${
+															selected
+																? 'border-sky-400/70 bg-sky-400/15 text-white'
+																: 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
+														}`}
+													>
+														<div className="flex items-center gap-3">
+															<div className={`flex h-4 w-4 items-center justify-center rounded-full border ${selected ? 'border-sky-300 bg-sky-400' : 'border-slate-500'}`}>
+																{selected ? <span className="h-1.5 w-1.5 rounded-full bg-slate-950" /> : null}
 															</div>
-															<div className="grid gap-2">
-																{ROTATION_TARGETS.filter((target) => target.accountId === group.accountId).map((target) => {
-																	const selected = targetServer === target.id;
-																	return (
-																		<button
-																			key={target.id}
-																			type="button"
-																			onClick={() => {
-																				setTargetServer(target.id);
-																				setServerPickerOpen(false);
-																			}}
-																			className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-all ${selected ? 'border-sky-400/70 bg-sky-400/15 shadow-lg shadow-sky-500/10' : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'}`}
-																		>
-																			<div className="flex items-start gap-3">
-																				<div className={`mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border ${selected ? 'border-sky-300 bg-sky-400' : 'border-slate-500'}`}>
-																					{selected ? <span className="h-1.5 w-1.5 rounded-full bg-slate-950" /> : null}
-																				</div>
-																				<div>
-																					<p className="text-sm font-semibold text-white">{target.label}</p>
-																					<p className="mt-1 text-xs text-slate-400">{target.note} · {target.region.toUpperCase()}</p>
-																				</div>
-																			</div>
-																			<span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-																				{target.accountLabel}
-																			</span>
-																		</button>
-																	);
-																})}
-															</div>
+															<span className="text-sm font-medium leading-5">{option.label}</span>
 														</div>
-													))}
-												</div>
-											</div>
-										)}
+													</button>
+												);
+											})}
+										</div>
 									</div>
 
 									<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -415,42 +346,32 @@ export default function RotateWizardPage() {
 										<div className="mt-4 grid gap-4">
 											<Field label="Token 1" name="doToken1" value={config.doToken1} onChange={handleConfigChange} type="password" />
 											<Field label="Token 2" name="doToken2" value={config.doToken2} onChange={handleConfigChange} type="password" />
+											<div className="grid gap-4 sm:grid-cols-2">
+												<SelectField
+													label="Droplet size"
+													name="dropletSize"
+													value={config.dropletSize}
+													onChange={handleConfigChange}
+													options={DROPLET_SIZE_OPTIONS}
+												/>
+												<SelectField
+													label="Droplet image"
+													name="dropletImage"
+													value={config.dropletImage}
+													onChange={handleConfigChange}
+													options={DROPLET_IMAGE_OPTIONS}
+												/>
+											</div>
 										</div>
 									</div>
 								</div>
 
 								<div className="space-y-5">
 									<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-										<h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-300/80">CF</h3>
-										<div className="mt-4 grid gap-4">
-											<Field label="API token" name="cfToken" value={config.cfToken} onChange={handleConfigChange} type="password" />
-											<Field label="Account email" name="cfEmail" value={config.cfEmail} onChange={handleConfigChange} type="email" />
-										</div>
-									</div>
-
-									<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
 										<h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-300/80">X-UI</h3>
 										<div className="mt-4 grid gap-4">
 											<Field label="Username" name="xuiUsername" value={config.xuiUsername} onChange={handleConfigChange} />
 											<Field label="Password" name="xuiPassword" value={config.xuiPassword} onChange={handleConfigChange} type="password" />
-											<div className="grid gap-4 sm:grid-cols-2">
-												<DropdownField
-													label="Droplet size"
-													name="dropletSize"
-													value={config.dropletSize}
-													onSelect={(value) => updateConfigField('dropletSize', value)}
-													options={DROPLET_SIZE_OPTIONS}
-													preview={(option) => option.label}
-												/>
-												<DropdownField
-													label="Droplet image"
-													name="dropletImage"
-													value={config.dropletImage}
-													onSelect={(value) => updateConfigField('dropletImage', value)}
-													options={DROPLET_IMAGE_OPTIONS}
-													preview={(option) => option.label}
-												/>
-											</div>
 											<label className="flex items-center gap-3 rounded-xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-slate-200">
 												<input
 													type="checkbox"
@@ -461,6 +382,14 @@ export default function RotateWizardPage() {
 												/>
 												Enable 2FA during install
 											</label>
+										</div>
+									</div>
+
+									<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+										<h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-300/80">CF</h3>
+										<div className="mt-4 grid gap-4">
+											<Field label="API token" name="cfToken" value={config.cfToken} onChange={handleConfigChange} type="password" />
+											<Field label="Account email" name="cfEmail" value={config.cfEmail} onChange={handleConfigChange} type="email" />
 										</div>
 									</div>
 								</div>
@@ -602,86 +531,63 @@ function Field({
 	);
 }
 
-function DropdownField({
+function SelectField({
 	label,
 	name,
 	value,
-	onSelect,
+	onChange,
 	options,
-	preview,
 }: {
 	label: string;
 	name: string;
 	value: string;
-	onSelect: (value: string) => void;
+	onChange: (event: { target: { name: string; value: string; type?: string; checked?: boolean } }) => void;
 	options: ReadonlyArray<{ value: string; label: string; description?: string }>;
-	preview?: (option: { value: string; label: string; description?: string }) => ReactNode;
 }) {
-	const [open, setOpen] = useState(false);
-	const fieldRef = useRef<HTMLDivElement>(null);
-	const selected = options.find((option) => option.value === value) || options[0];
-
-	useEffect(() => {
-		if (!open) return;
-
-		function handleOutsideClick(event: MouseEvent) {
-			if (fieldRef.current && !fieldRef.current.contains(event.target as Node)) {
-				setOpen(false);
-			}
-		}
-
-		document.addEventListener('mousedown', handleOutsideClick);
-		return () => document.removeEventListener('mousedown', handleOutsideClick);
-	}, [open]);
+	const [isOpen, setIsOpen] = useState(false);
+	const selectedOption = options.find((o) => o.value === value) || options[0];
 
 	return (
-		<div ref={fieldRef} className="relative block">
+		<div className="block relative">
 			<span className="text-sm text-slate-300">{label}</span>
 			<button
 				type="button"
-				onClick={() => setOpen((current) => !current)}
-				className="mt-2 flex w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-left text-sm text-white outline-none transition hover:border-sky-400/40 hover:bg-slate-950/90 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
+				onClick={() => setIsOpen(!isOpen)}
+				className="mt-2 w-full flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition hover:border-white/20 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
 			>
-				<div className="min-w-0">
-					<p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">Selected</p>
-					<p className="mt-1 truncate text-sm font-semibold text-white">{preview ? preview(selected) : selected.label}</p>
-					{selected.description ? <p className="mt-1 text-xs text-slate-400">{selected.description}</p> : null}
-				</div>
-				<ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+				<span className="truncate">
+					{selectedOption?.label} {selectedOption?.description ? `- ${selectedOption.description}` : ''}
+				</span>
+				<ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
 			</button>
 
-			{open && (
-				<div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#0a1020] shadow-2xl shadow-black/40">
-					<div className="max-h-72 overflow-auto p-2">
-						{options.map((option) => {
-							const isSelected = option.value === value;
-							return (
-								<button
-									key={option.value}
-									type="button"
-									onClick={() => {
-										onSelect(option.value);
-										setOpen(false);
-									}}
-									className={`flex w-full items-start justify-between gap-4 rounded-xl px-4 py-3 text-left transition ${isSelected ? 'bg-sky-400/15 ring-1 ring-sky-400/40' : 'hover:bg-white/5'}`}
-								>
-									<div className="flex items-start gap-3">
-										<div className={`mt-1 flex h-4 w-4 items-center justify-center rounded-full border ${isSelected ? 'border-sky-300 bg-sky-400' : 'border-slate-500'}`}>
-											{isSelected ? <span className="h-1.5 w-1.5 rounded-full bg-slate-950" /> : null}
-										</div>
-										<div>
-											<p className="text-sm font-semibold text-white">{option.label}</p>
-											{option.description ? <p className="mt-1 text-xs text-slate-400">{option.description}</p> : null}
-										</div>
-									</div>
-									<span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-										{name === 'dropletSize' ? option.value : option.label}
-									</span>
-								</button>
-							);
-						})}
+			{isOpen && (
+				<>
+					<div
+						className="fixed inset-0 z-10"
+						onClick={() => setIsOpen(false)}
+					/>
+					<div className="absolute z-20 mt-2 max-h-60 w-full overflow-auto rounded-2xl border border-white/10 bg-slate-900 py-1 shadow-xl shadow-black/50 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+						{options.map((option) => (
+							<button
+								key={option.value}
+								type="button"
+								onClick={() => {
+									onChange({ target: { name, value: option.value } });
+									setIsOpen(false);
+								}}
+								className={`flex w-full flex-col items-start px-4 py-3 text-left transition hover:bg-white/5 ${
+									value === option.value ? 'bg-sky-500/10 text-sky-400' : 'text-slate-200'
+								}`}
+							>
+								<span className="font-medium">{option.label}</span>
+								{option.description && (
+									<span className="mt-0.5 text-xs text-slate-400">{option.description}</span>
+								)}
+							</button>
+						))}
 					</div>
-				</div>
+				</>
 			)}
 		</div>
 	);

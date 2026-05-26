@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { Client } from 'ssh2';
 import { getRotateConfig } from '@/models/RotateConfig';
-import { getDoTokenField, getRotationTarget } from '@/lib/rotationTargets';
 
 const DO_API = 'https://api.digitalocean.com/v2';
 const CF_API = 'https://api.cloudflare.com/client/v4';
@@ -60,9 +59,9 @@ function sftpDownload(host: string, remotePath: string, localPath: string): Prom
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn.on('ready', () => {
-      conn.sftp((err: Error | undefined, sftp: any) => {
+      conn.sftp((err, sftp) => {
         if (err) { conn.end(); return reject(err); }
-        sftp.fastGet(remotePath, localPath, {}, (downloadErr: Error | undefined) => {
+        sftp.fastGet(remotePath, localPath, {}, (downloadErr) => {
           conn.end();
           if (downloadErr) reject(downloadErr);
           else resolve();
@@ -83,9 +82,7 @@ function sftpDownload(host: string, remotePath: string, localPath: string): Prom
 // Step 2: Backup Function
 export async function actionBackupServer(serverName: string) {
   const config = await getRotateConfig();
-  const target = getRotationTarget(serverName);
-  if (!target) throw new Error(`Unknown rotation server: ${serverName}`);
-  const doToken = config[getDoTokenField(serverName)];
+  const doToken = ['jan', 'sg1', 'sg4'].includes(serverName) ? config.doToken1 : config.doToken2;
   
   // 1. Get current IP from DO
   const res = await fetch(`${DO_API}/droplets`, {
@@ -94,7 +91,7 @@ export async function actionBackupServer(serverName: string) {
   const data = await res.json();
   const droplet = data.droplets?.find((d: any) => d.name === serverName);
   
-  if (!droplet) throw new Error(`Droplet ${serverName} not found in ${target.accountLabel}.`);
+  if (!droplet) throw new Error(`Droplet ${serverName} not found in DigitalOcean account.`);
   const oldIp = droplet.networks.v4.find((n: any) => n.type === 'public')?.ip_address;
   if (!oldIp) throw new Error("Could not find public IP for current droplet.");
 
@@ -134,10 +131,8 @@ export async function actionBackupServer(serverName: string) {
 // Step 3: Recreate VPS
 export async function actionRecreateServer(serverName: string) {
   const config = await getRotateConfig();
-  const target = getRotationTarget(serverName);
-  if (!target) throw new Error(`Unknown rotation server: ${serverName}`);
-  const doToken = config[getDoTokenField(serverName)];
-  const region = target.region;
+  const doToken = ['jan', 'sg1', 'sg4'].includes(serverName) ? config.doToken1 : config.doToken2;
+  const region = serverName === 'sg4' ? 'nyc1' : 'sgp1';
   
   // Custom Cloud-Init to force specific root password as requested
   const userData = `#cloud-config
@@ -189,10 +184,8 @@ ssh_pwauth: True
 // Step 4: Update DNS
 export async function actionUpdateDNS(serverName: string) {
   const config = await getRotateConfig();
-  const target = getRotationTarget(serverName);
-  if (!target) throw new Error(`Unknown rotation server: ${serverName}`);
-  const doToken = config[getDoTokenField(serverName)];
-  const DOMAIN = target.domain;
+  const doToken = ['jan', 'sg1', 'sg4'].includes(serverName) ? config.doToken1 : config.doToken2;
+  const DOMAIN = `${serverName}.burmesedigital.store`;
 
   // Get New IP
   let newIp: string;
@@ -202,12 +195,7 @@ export async function actionUpdateDNS(serverName: string) {
     throw new Error(`DigitalOcean Fetch Error: ${err.message}`);
   }
 
-  const cfHeaders: {
-    Authorization?: string;
-    'Content-Type': string;
-    'X-Auth-Email'?: string;
-    'X-Auth-Key'?: string;
-  } = {
+  const cfHeaders = {
     'Authorization': `Bearer ${config.cfToken?.trim()}`,
     'Content-Type': 'application/json'
   };
@@ -227,7 +215,7 @@ export async function actionUpdateDNS(serverName: string) {
       // Fallback to try global key if Bearer failed
       cfHeaders['X-Auth-Email'] = config.cfEmail?.trim();
       cfHeaders['X-Auth-Key'] = config.cfToken?.trim();
-      delete cfHeaders.Authorization;
+      delete cfHeaders['Authorization'];
       throw new Error(`Cloudflare Fetch Failed. Invalid headers or network issue. Try saving config again.`);
     }
     throw new Error(`Cloudflare Zones Error: ${err.message}`);
@@ -271,14 +259,14 @@ function execSsh(host: string, command: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn.on('ready', () => {
-      conn.exec(command, (err: Error | undefined, stream: any) => {
+      conn.exec(command, (err, stream) => {
         if (err) { conn.end(); return reject(err); }
         let output = '';
-        stream.on('close', (code: number) => {
+        stream.on('close', (code: any) => {
           conn.end();
           if (code !== 0) return reject(new Error(`Command failed with code ${code}. Output: ${output}`));
           resolve(output);
-        }).on('data', (d: string | Buffer) => output += d.toString()).stderr.on('data', (d: string | Buffer) => output += d.toString());
+        }).on('data', (d: any) => output += d).stderr.on('data', (d: any) => output += d);
       });
     }).on('error', reject).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: 20000 });
   });
@@ -289,9 +277,9 @@ function sftpUpload(host: string, localPath: string, remotePath: string): Promis
   return new Promise((resolve, reject) => {
     const conn = new Client();
     conn.on('ready', () => {
-      conn.sftp((err: Error | undefined, sftp: any) => {
+      conn.sftp((err, sftp) => {
         if (err) { conn.end(); return reject(err); }
-        sftp.fastPut(localPath, remotePath, (err: Error | undefined) => {
+        sftp.fastPut(localPath, remotePath, (err) => {
           conn.end();
           if (err) reject(err);
           else resolve();
@@ -304,9 +292,7 @@ function sftpUpload(host: string, localPath: string, remotePath: string): Promis
 // Step 5: Install & Restore
 export async function actionInstall3xUI(serverName: string) {
   const config = await getRotateConfig();
-  const target = getRotationTarget(serverName);
-  if (!target) throw new Error(`Unknown rotation server: ${serverName}`);
-  const doToken = config[getDoTokenField(serverName)];
+  const doToken = ['jan', 'sg1', 'sg4'].includes(serverName) ? config.doToken1 : config.doToken2;
   const adminPort = serverName === 'sg4' ? 2053 : 8080; // Only node 4 uses 2053
 
   // Get New IP

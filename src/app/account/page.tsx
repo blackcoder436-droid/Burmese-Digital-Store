@@ -314,7 +314,7 @@ export default function AccountPage() {
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-[120px]" />
         <div className="absolute top-10 right-1/4 w-72 h-72 bg-cyan-500/5 rounded-full blur-[100px]" />
 
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 pb-8">
+        <div className="relative w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 pb-8">
           <div className="scroll-fade">
             <div className="flex flex-col sm:flex-row items-center gap-5 sm:gap-7">
               {/* Avatar - Enhanced */}
@@ -385,7 +385,7 @@ export default function AccountPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
         {/* ===== Session Info Bar ===== */}
         <div className="scroll-fade -mt-2 mb-8" data-delay="50">
           <div className="relative overflow-hidden rounded-2xl bg-dark-800/60 border border-dark-600/40 backdrop-blur-sm p-4 sm:p-5">

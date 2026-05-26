@@ -161,7 +161,9 @@ export default function PaymentUpload({
               <p className="text-sm text-gray-500">
                 {verificationResult.verified
                   ? t('components.payment.canPlaceOrder')
-                  : t('components.payment.teamWillReview')}
+                  : verificationResult.confidence < 60 
+                    ? "ပုံမရှင်းလင်းပါ၊ ပြေစာပုံအား သေချာစွာ ပြန်လည်ရိုက်ကူး၍ တင်ပေးပါ။" 
+                    : t('components.payment.teamWillReview')}
               </p>
             </div>
           </div>

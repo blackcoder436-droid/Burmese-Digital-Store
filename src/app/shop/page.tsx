@@ -184,7 +184,7 @@ function ShopContent() {
 
   return (
     <div className="min-h-screen pt-[2.5rem] pb-12" ref={containerRef}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
         {/* Hero row: tagline left + search right */}
         <div className="scroll-fade relative z-[60] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           {/* Left: tagline */}

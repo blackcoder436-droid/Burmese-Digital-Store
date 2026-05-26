@@ -22,15 +22,16 @@
 
   ::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-dark-950;
+    @apply bg-transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-dark-600 rounded-full;
+    @apply bg-dark-600/50 rounded-full;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-purple-600;
+    @apply bg-purple-500/80;
   }
 
   ::selection {

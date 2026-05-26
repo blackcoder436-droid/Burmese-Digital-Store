@@ -31,7 +31,7 @@ function SkeletonProductCard() {
 export default function ShopLoading() {
   return (
     <div className="min-h-screen bg-dark-950 pt-2 pb-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header skeleton */}
         <div className="text-center mb-8">
           <div className="h-9 w-48 bg-dark-700 rounded mx-auto mb-3 animate-pulse" />

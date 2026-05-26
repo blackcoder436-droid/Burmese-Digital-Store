@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB, { default as clientPromise } from '@/lib/mongodb';
 import Order from '@/models/Order';
+import { rateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
+
+const subLimiter = rateLimit({ windowMs: 60000, maxRequests: 30, prefix: 'sub' });
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
+  const limited = await subLimiter(req);
+  if (limited) return limited;
+
   try {
     const { token } = await params;
     if (!token) return new NextResponse('Missing token', { status: 400 });
