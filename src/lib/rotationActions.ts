@@ -19,6 +19,11 @@ type JsonObject = Record<string, any>;
 type HeaderMap = Record<string, string>;
 type ProgressReporter = (message: string) => void | Promise<void>;
 type PanelProtocol = 'https' | 'http';
+type BackupCandidate = {
+  kind: 'archive' | 'sqlite';
+  localPath: string;
+  remotePath: string;
+};
 
 export async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -47,6 +52,30 @@ function getPanelBasePath(panelPath: string): string {
 function getPanelUiPath(panelPath: string): string {
   const basePath = getPanelBasePath(panelPath);
   return `${basePath}/panel`;
+}
+
+function getBackupCandidates(backupsDir: string, serverName: string): BackupCandidate[] {
+  const candidates: BackupCandidate[] = [];
+  const archivePath = path.join(backupsDir, `${serverName}_backup.tar.gz`);
+  const sqlitePath = path.join(backupsDir, `${serverName}_backup.db`);
+
+  if (fs.existsSync(archivePath)) {
+    candidates.push({
+      kind: 'archive',
+      localPath: archivePath,
+      remotePath: '/root/backup.tar.gz',
+    });
+  }
+
+  if (fs.existsSync(sqlitePath)) {
+    candidates.push({
+      kind: 'sqlite',
+      localPath: sqlitePath,
+      remotePath: '/root/backup.db',
+    });
+  }
+
+  return candidates;
 }
 
 function getPortFromUrl(value?: string): number | null {
@@ -569,6 +598,62 @@ curl -kfsS --max-time 15 -b "$cookie" \
   return data.obj.length;
 }
 
+async function getRemoteBackupInboundCount(host: string, backup: BackupCandidate): Promise<number> {
+  const prepareDb = backup.kind === 'archive'
+    ? `
+workdir=$(mktemp -d)
+cleanup() { rm -rf "$workdir"; }
+trap cleanup EXIT
+mkdir -p "$workdir"
+tar -tzf ${shellQuote(backup.remotePath)} | grep -qx 'etc/x-ui/x-ui.db'
+tar -xzf ${shellQuote(backup.remotePath)} -C "$workdir" etc/x-ui/x-ui.db
+tar -xzf ${shellQuote(backup.remotePath)} -C "$workdir" etc/x-ui/x-ui.db-wal 2>/dev/null || true
+tar -xzf ${shellQuote(backup.remotePath)} -C "$workdir" etc/x-ui/x-ui.db-shm 2>/dev/null || true
+db="$workdir/etc/x-ui/x-ui.db"
+`
+    : `
+db=${shellQuote(backup.remotePath)}
+`;
+
+  const command = `
+set -e
+${prepareDb}
+[ -s "$db" ] || { echo "BACKUP_DB_MISSING"; exit 1; }
+python3 - "$db" <<'PY'
+import sqlite3
+import sys
+
+db_path = sys.argv[1]
+conn = sqlite3.connect(db_path)
+try:
+    table_exists = conn.execute(
+        "select count(*) from sqlite_master where type='table' and name='inbounds'"
+    ).fetchone()[0]
+    if not table_exists:
+        print("INBOUND_COUNT:0")
+        sys.exit(0)
+
+    count = conn.execute("select count(*) from inbounds").fetchone()[0]
+    print(f"INBOUND_COUNT:{count}")
+    sys.exit(0)
+finally:
+    conn.close()
+PY
+`;
+  const output = await execSsh(host, command, 30000);
+  const match = output.match(/INBOUND_COUNT:(\d+)/);
+  if (!match) {
+    throw new Error(`Could not verify backup database. Output: ${output.slice(0, 300) || '(empty)'}`);
+  }
+
+  const count = Number(match[1]);
+  if (count < 1) {
+    throw new Error('Backup database contains 0 inbounds.');
+  }
+
+  return count;
+}
+
 // SFTP Upload helper
 function sftpUpload(host: string, localPath: string, remotePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -638,28 +723,61 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.0.2
 
   // Restore DB and SSL Certificates
   const backupsDir = path.join(process.cwd(), 'backups');
-  const localTarPath = path.join(backupsDir, `${serverName}_backup.tar.gz`);
+  const backupCandidates = getBackupCandidates(backupsDir, serverName);
 
-  if (fs.existsSync(localTarPath)) {
-    await reportProgress(progress, 'Uploading backup archive to the new VPS...');
-    const remoteTarPath = '/root/backup.tar.gz';
-    await sftpUpload(newIp, localTarPath, remoteTarPath);
+  if (backupCandidates.length > 0) {
+    let selectedBackup: (BackupCandidate & { inboundCount: number }) | null = null;
+    const validationErrors: string[] = [];
+
+    for (const candidate of backupCandidates) {
+      const fileName = path.basename(candidate.localPath);
+      await reportProgress(progress, `Uploading and validating ${fileName}...`);
+      await sftpUpload(newIp, candidate.localPath, candidate.remotePath);
+
+      try {
+        const inboundCount = await getRemoteBackupInboundCount(newIp, candidate);
+        selectedBackup = { ...candidate, inboundCount };
+        await reportProgress(progress, `Backup ${fileName} contains ${inboundCount} inbound(s).`);
+        break;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        validationErrors.push(`${fileName}: ${message}`);
+        await execSsh(newIp, `rm -f ${shellQuote(candidate.remotePath)}`).catch(() => {});
+      }
+    }
+
+    if (!selectedBackup) {
+      throw new Error(`No usable x-ui backup found for ${serverName}. ${validationErrors.join(' | ')}. Put a valid ${serverName}_backup.tar.gz or ${serverName}_backup.db in the backups folder and rerun Panel.`);
+    }
 
     await reportProgress(progress, 'Stopping 3x-ui before database and certificate restore...');
     await execSsh(newIp, 'systemctl stop x-ui || true');
 
-    // Extract the tar file (which contains etc/x-ui/x-ui.db, optional WAL files, root/cert, root/.acme.sh) relative to /
+    // Restore either the new tar archive (DB + optional certs) or the legacy .db file.
     await reportProgress(progress, 'Restoring x-ui database and SSL certificate files...');
-    const extractCmd = `
+    const extractCmd = selectedBackup.kind === 'archive'
+      ? `
 set -e
-tar -tzf ${remoteTarPath} | grep -qx 'etc/x-ui/x-ui.db'
+backup=${shellQuote(selectedBackup.remotePath)}
+tar -tzf "$backup" | grep -qx 'etc/x-ui/x-ui.db'
 mkdir -p /etc/x-ui
 rm -f /etc/x-ui/x-ui.db /etc/x-ui/x-ui.db-wal /etc/x-ui/x-ui.db-shm
-tar -xzf ${remoteTarPath} -C /
-rm -f ${remoteTarPath}
+tar -xzf "$backup" -C /
+rm -f "$backup"
 [ -s /etc/x-ui/x-ui.db ] || { echo "Restored x-ui.db is missing or empty"; exit 1; }
 chown root:root /etc/x-ui/x-ui.db* 2>/dev/null || true
 chmod 600 /etc/x-ui/x-ui.db* 2>/dev/null || true
+`
+      : `
+set -e
+backup=${shellQuote(selectedBackup.remotePath)}
+mkdir -p /etc/x-ui
+rm -f /etc/x-ui/x-ui.db /etc/x-ui/x-ui.db-wal /etc/x-ui/x-ui.db-shm
+cp "$backup" /etc/x-ui/x-ui.db
+rm -f "$backup"
+[ -s /etc/x-ui/x-ui.db ] || { echo "Restored x-ui.db is missing or empty"; exit 1; }
+chown root:root /etc/x-ui/x-ui.db
+chmod 600 /etc/x-ui/x-ui.db
 `;
     await execSsh(newIp, extractCmd);
 
@@ -728,7 +846,7 @@ fi
     );
 
     if (inboundCount < 1) {
-      throw new Error('Database restore completed, but the panel API still shows 0 inbounds. The backup archive is empty/stale or the old SQLite WAL data was not captured. Run Backup again from the old server before recreating, or restore a valid jan_backup.tar.gz from Telegram/backups.');
+      throw new Error(`Database restore completed from ${path.basename(selectedBackup.localPath)}, but the panel API still shows 0 inbounds. Restore a valid ${serverName}_backup.tar.gz or legacy ${serverName}_backup.db from Telegram/backups.`);
     }
 
     const urlPath = getPanelUiPath(panelTarget.panelPath);
@@ -738,6 +856,6 @@ fi
 
     return { success: true, message: `3X-UI successfully restored ${inboundCount} inbound(s)! Panel: ${protocol}://${panelTarget.domain}:${panelTarget.port}${urlPath}${sslNote}` };
   } else {
-    throw new Error(`Backup file not found to restore! Looked for: ${localTarPath}`);
+    throw new Error(`Backup file not found to restore! Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)} or ${path.join(backupsDir, `${serverName}_backup.db`)}`);
   }
 }
