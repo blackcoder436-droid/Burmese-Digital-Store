@@ -10,6 +10,8 @@ const DROPLET_IP_WAIT_MS = 5 * 60 * 1000;
 const DROPLET_IP_POLL_MS = 15000;
 const XUI_READY_WAIT_MS = 5 * 60 * 1000;
 const XUI_READY_POLL_MS = 10000;
+const SSH_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+const XUI_INSTALL_TIMEOUT_MS = 12 * 60 * 1000;
 
 // ================= Helpers =================
 
@@ -406,21 +408,51 @@ export async function actionUpdateDNS(serverName: string) {
 }
 
 // SSH execution helper 
-function execSsh(host: string, command: string): Promise<string> {
+function execSsh(host: string, command: string, timeoutMs = SSH_COMMAND_TIMEOUT_MS): Promise<string> {
   return new Promise((resolve, reject) => {
     const conn = new Client();
+    let output = '';
+    let settled = false;
+    let timer: NodeJS.Timeout | null = null;
+
+    const appendOutput = (data: any) => {
+      output += data?.toString?.() || String(data);
+      if (output.length > 20000) {
+        output = output.slice(-20000);
+      }
+    };
+
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      conn.end();
+      if (error) reject(error);
+      else resolve(output);
+    };
+
     conn.on('ready', () => {
       conn.exec(command, (err: any, stream: any) => {
-        if (err) { conn.end(); return reject(err); }
-        let output = '';
+        if (err) return finish(err);
+        timer = setTimeout(() => {
+          finish(new Error(`SSH command timed out after ${Math.round(timeoutMs / 1000)} seconds. Output: ${output || '(no output)'}`));
+        }, timeoutMs);
         stream.on('close', (code: any) => {
-          conn.end();
-          if (code !== 0) return reject(new Error(`Command failed with code ${code}. Output: ${output}`));
-          resolve(output);
-        }).on('data', (d: any) => output += d).stderr.on('data', (d: any) => output += d);
+          if (code !== 0) return finish(new Error(`Command failed with code ${code}. Output: ${output}`));
+          finish();
+        }).on('data', appendOutput).stderr.on('data', appendOutput);
       });
-    }).on('error', reject).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: 20000 });
+    }).on('error', (err) => finish(err)).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: 20000 });
   });
+}
+
+async function isXuiInstalled(host: string): Promise<boolean> {
+  try {
+    await execSsh(host, '[ -x /usr/local/x-ui/x-ui ] || command -v x-ui >/dev/null 2>&1', 30000);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // SFTP Upload helper
@@ -455,26 +487,39 @@ export async function actionInstall3xUI(serverName: string, progress?: ProgressR
   await reportProgress(progress, `New IP is ${newIp}. Waiting for SSH to become ready...`);
   await sleep(30000);
 
-  // Use the exact installation script version requested by the user: v3.0.2
-  // We feed "1" (SQLite), "n" (No custom port/user right now), "4" (Skip SSL setup)
-  // because we are going to overwrite everything with our backup immediately after.
-  const echoInputs = `1\nn\n4\n`;
-  const installCmd = `echo -e "${echoInputs}" | bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) v3.0.2`;
+  let installed = await isXuiInstalled(newIp);
 
-  let attempt = 0;
-  let installed = false;
-  while(attempt < 3 && !installed) {
-    try {
-      attempt++;
-      await reportProgress(progress, `Installing 3x-ui on ${newIp} (attempt ${attempt}/3)...`);
-      await execSsh(newIp, installCmd);
-      installed = true;
-    } catch(err) {
-      await reportProgress(progress, `SSH/install attempt ${attempt} failed. Retrying in 10 seconds...`);
-      await sleep(10000); // Wait 10s and test connection again
+  if (installed) {
+    await reportProgress(progress, '3x-ui is already installed. Continuing with restore/setup...');
+  } else {
+    const installScript = `
+set -e
+export DEBIAN_FRONTEND=noninteractive
+curl -fsSL https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh -o /tmp/3x-ui-install.sh
+printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.0.2
+`;
+    const installCmd = `timeout 12m bash -lc ${shellQuote(installScript)}`;
+
+    let attempt = 0;
+    while(attempt < 3 && !installed) {
+      try {
+        attempt++;
+        await reportProgress(progress, `Installing 3x-ui on ${newIp} (attempt ${attempt}/3)...`);
+        await execSsh(newIp, installCmd, XUI_INSTALL_TIMEOUT_MS + 60000);
+        installed = await isXuiInstalled(newIp);
+      } catch(err) {
+        if (await isXuiInstalled(newIp)) {
+          installed = true;
+          await reportProgress(progress, '3x-ui install command did not exit cleanly, but the panel binary is installed. Continuing...');
+          break;
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        await reportProgress(progress, `SSH/install attempt ${attempt} failed: ${message.slice(0, 500)}. Retrying in 10 seconds...`);
+        await sleep(10000);
+      }
     }
   }
-  
+
   if (!installed) throw new Error("Failed to connect via SSH and install 3x-ui. VPS might still be booting.");
 
   // Restore DB and SSL Certificates

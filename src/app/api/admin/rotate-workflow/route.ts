@@ -8,6 +8,8 @@ import RotateJobModel from '@/models/RotateJob';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 900;
+const PROCESS_STARTED_AT = new Date();
+const STALE_RUNNING_JOB_MS = 20 * 60 * 1000;
 
 type RotateJobUpdate = {
   jobId: string;
@@ -22,10 +24,16 @@ type RotateJobUpdate = {
 };
 
 async function cleanupRotateJobs() {
-  const cutoff = Date.now() - 60 * 60 * 1000;
+  const cutoff = new Date(Date.now() - STALE_RUNNING_JOB_MS);
   await RotateJobModel.updateMany(
-    { status: 'running', updatedAt: { $lt: new Date(cutoff) } },
-    { $set: { status: 'error', error: 'Background job timed out.', message: 'Background job timed out.', updatedAt: new Date() } }
+    {
+      status: 'running',
+      $or: [
+        { updatedAt: { $lt: cutoff } },
+        { updatedAt: { $lt: PROCESS_STARTED_AT } },
+      ],
+    },
+    { $set: { status: 'error', error: 'Background job was interrupted or timed out.', message: 'Background job was interrupted or timed out.', updatedAt: new Date() } }
   );
 }
 
