@@ -18,6 +18,7 @@ const XUI_INSTALL_TIMEOUT_MS = 12 * 60 * 1000;
 type JsonObject = Record<string, any>;
 type HeaderMap = Record<string, string>;
 type ProgressReporter = (message: string) => void | Promise<void>;
+type PanelProtocol = 'https' | 'http';
 
 export async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -36,6 +37,16 @@ function normalizePanelPath(value?: string): string {
   const raw = (value || '/mka').trim();
   if (!raw || raw === '/') return '/';
   return `/${raw.replace(/^\/+|\/+$/g, '')}`;
+}
+
+function getPanelBasePath(panelPath: string): string {
+  if (panelPath === '/') return '';
+  return panelPath.endsWith('/') ? panelPath.slice(0, -1) : panelPath;
+}
+
+function getPanelUiPath(panelPath: string): string {
+  const basePath = getPanelBasePath(panelPath);
+  return `${basePath}/panel`;
 }
 
 function getPortFromUrl(value?: string): number | null {
@@ -271,9 +282,34 @@ export async function actionBackupServer(serverName: string) {
   }
   const localDbPath = path.join(backupsDir, `${serverName}_backup.tar.gz`);
   
-  // Compress x-ui.db, cert directory, and .acme.sh directory relative to root (/)
-  // Use a soft bash approach: touch dummy files or just add what's available so tar doesn't hard fail if .acme.sh is missing.
-  const tarCmd = `cd / && rm -f /root/${serverName}_backup.tar.gz && tar -czf /root/${serverName}_backup.tar.gz etc/x-ui/x-ui.db $([ -d "root/cert" ] && echo "root/cert") $([ -d "root/.acme.sh" ] && echo "root/.acme.sh")`;
+  // Stop x-ui briefly so SQLite checkpoints WAL data before the DB snapshot.
+  const tarCmd = `
+set -e
+backup=/root/${serverName}_backup.tar.gz
+restart_needed=0
+if systemctl is-active --quiet x-ui; then restart_needed=1; fi
+cleanup() {
+  if [ "$restart_needed" = "1" ]; then
+    systemctl start x-ui >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+systemctl stop x-ui >/dev/null 2>&1 || true
+sleep 3
+[ -s /etc/x-ui/x-ui.db ] || { echo "x-ui.db is missing or empty"; exit 1; }
+if command -v sqlite3 >/dev/null 2>&1; then
+  sqlite3 /etc/x-ui/x-ui.db 'PRAGMA wal_checkpoint(TRUNCATE);' >/dev/null 2>&1 || true
+fi
+cd /
+rm -f "$backup"
+tar -czf "$backup" \
+  etc/x-ui/x-ui.db \
+  $([ -f "etc/x-ui/x-ui.db-wal" ] && echo "etc/x-ui/x-ui.db-wal") \
+  $([ -f "etc/x-ui/x-ui.db-shm" ] && echo "etc/x-ui/x-ui.db-shm") \
+  $([ -d "root/cert" ] && echo "root/cert") \
+  $([ -d "root/.acme.sh" ] && echo "root/.acme.sh")
+tar -tzf "$backup" | grep -qx 'etc/x-ui/x-ui.db'
+`;
   await execSsh(oldIp, tarCmd);
   
   // Verify the file was created
@@ -473,9 +509,8 @@ async function restartPanelAndXray(host: string, progress?: ProgressReporter) {
   await sleep(5000);
 }
 
-async function detectPanelProtocol(host: string, port: number, panelPath: string): Promise<'https' | 'http'> {
-  const finalBasePath = panelPath.endsWith('/') ? panelPath : `${panelPath}/`;
-  const urlPath = finalBasePath === '/' ? '/panel' : `${finalBasePath}`;
+async function detectPanelProtocol(host: string, port: number, panelPath: string): Promise<PanelProtocol> {
+  const urlPath = getPanelUiPath(panelPath);
 
   for (const protocol of ['https', 'http'] as const) {
     try {
@@ -487,6 +522,41 @@ async function detectPanelProtocol(host: string, port: number, panelPath: string
   }
 
   throw new Error(`x-ui service is active, but the panel did not respond on port ${port}${urlPath} via HTTPS or HTTP after restart.`);
+}
+
+async function getRestoredInboundCount(
+  host: string,
+  protocol: PanelProtocol,
+  port: number,
+  panelPath: string,
+  username: string,
+  password: string
+): Promise<number> {
+  const basePath = getPanelBasePath(panelPath);
+  const baseUrl = `${protocol}://127.0.0.1:${port}${basePath}`;
+  const loginBody = JSON.stringify({ username, password });
+  const command = `
+set -e
+cookie=$(mktemp)
+cleanup() { rm -f "$cookie"; }
+trap cleanup EXIT
+curl -kfsS --max-time 15 -c "$cookie" \
+  -H 'Content-Type: application/json' \
+  -H 'X-Requested-With: XMLHttpRequest' \
+  --data ${shellQuote(loginBody)} \
+  ${shellQuote(`${baseUrl}/login`)} >/dev/null
+curl -kfsS --max-time 15 -b "$cookie" \
+  -H 'Accept: application/json' \
+  ${shellQuote(`${baseUrl}/panel/api/inbounds/list`)}
+`;
+  const output = await execSsh(host, command, 30000);
+  const data = JSON.parse(output) as { success?: boolean; obj?: unknown; msg?: string };
+
+  if (!data.success || !Array.isArray(data.obj)) {
+    throw new Error(`Panel API did not return an inbound list after restore: ${data.msg || output.slice(0, 200)}`);
+  }
+
+  return data.obj.length;
 }
 
 // SFTP Upload helper
@@ -568,9 +638,19 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.0.2
     await reportProgress(progress, 'Stopping 3x-ui before database and certificate restore...');
     await execSsh(newIp, 'systemctl stop x-ui || true');
 
-    // Extract the tar file (which contains etc/x-ui/x-ui.db, root/cert, root/.acme.sh) relative to /
+    // Extract the tar file (which contains etc/x-ui/x-ui.db, optional WAL files, root/cert, root/.acme.sh) relative to /
     await reportProgress(progress, 'Restoring x-ui database and SSL certificate files...');
-    const extractCmd = `tar -xzf ${remoteTarPath} -C / && rm -f ${remoteTarPath} && (chmod 600 /etc/x-ui/x-ui.db || true)`;
+    const extractCmd = `
+set -e
+tar -tzf ${remoteTarPath} | grep -qx 'etc/x-ui/x-ui.db'
+mkdir -p /etc/x-ui
+rm -f /etc/x-ui/x-ui.db /etc/x-ui/x-ui.db-wal /etc/x-ui/x-ui.db-shm
+tar -xzf ${remoteTarPath} -C /
+rm -f ${remoteTarPath}
+[ -s /etc/x-ui/x-ui.db ] || { echo "Restored x-ui.db is missing or empty"; exit 1; }
+chown root:root /etc/x-ui/x-ui.db* 2>/dev/null || true
+chmod 600 /etc/x-ui/x-ui.db* 2>/dev/null || true
+`;
     await execSsh(newIp, extractCmd);
 
     await reportProgress(progress, 'Applying panel username, password, port, and base path...');
@@ -589,10 +669,10 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.0.2
 
     await reportProgress(progress, `Looking for restored SSL files for ${panelTarget.domain}...`);
     const sslCmd = `
-cert=$(find /root/cert /root/.acme.sh -type f \\( -name 'fullchain.cer' -o -name '*.cer' -o -name '*.crt' -o -name 'fullchain.pem' -o -name '*.pem' \\) 2>/dev/null | grep -i ${shellQuote(panelTarget.domain)} | head -n 1)
-key=$(find /root/cert /root/.acme.sh -type f -name '*.key' 2>/dev/null | grep -i ${shellQuote(panelTarget.domain)} | head -n 1)
-if [ -z "$cert" ]; then cert=$(find /root/cert /root/.acme.sh -type f \\( -name 'fullchain.cer' -o -name '*.cer' -o -name '*.crt' -o -name 'fullchain.pem' -o -name '*.pem' \\) 2>/dev/null | head -n 1); fi
-if [ -z "$key" ]; then key=$(find /root/cert /root/.acme.sh -type f -name '*.key' 2>/dev/null | head -n 1); fi
+domain=${shellQuote(panelTarget.domain)}
+cert=$(find /root/cert /root/.acme.sh -type f \\( -name 'fullchain.pem' -o -name 'fullchain.cer' \\) 2>/dev/null | grep -Fi "$domain" | sort | head -n 1)
+if [ -z "$cert" ]; then cert=$(find /root/cert /root/.acme.sh -type f \\( -name '*.cer' -o -name '*.crt' \\) ! -name 'privkey.pem' ! -name '*.key' 2>/dev/null | grep -Fi "$domain" | sort | head -n 1); fi
+key=$(find /root/cert /root/.acme.sh -type f \\( -name 'privkey.pem' -o -name '*.key' \\) 2>/dev/null | grep -Fi "$domain" | sort | head -n 1)
 if [ -n "$cert" ] && [ -n "$key" ]; then
   /usr/local/x-ui/x-ui cert -webCert "$cert" -webCertKey "$key" || { echo "SSL_APPLY_FAILED"; exit 1; }
   echo "SSL_APPLIED:$cert"
@@ -627,13 +707,26 @@ fi
 
     await reportProgress(progress, 'Checking whether the restored panel is serving HTTPS...');
     const protocol = await detectPanelProtocol(newIp, panelTarget.port, panelTarget.panelPath);
-    const finalBasePath = panelTarget.panelPath.endsWith('/') ? panelTarget.panelPath : `${panelTarget.panelPath}/`;
-    const urlPath = finalBasePath === '/' ? '/panel' : `${finalBasePath}`;
+    await reportProgress(progress, 'Verifying restored database through the panel API...');
+    const inboundCount = await getRestoredInboundCount(
+      newIp,
+      protocol,
+      panelTarget.port,
+      panelTarget.panelPath,
+      config.xuiUsername || 'admin',
+      config.xuiPassword || 'admin'
+    );
+
+    if (inboundCount < 1) {
+      throw new Error('Database restore completed, but the panel API still shows 0 inbounds. The backup archive is empty/stale or the old SQLite WAL data was not captured. Run Backup again from the old server before recreating, or restore a valid jan_backup.tar.gz from Telegram/backups.');
+    }
+
+    const urlPath = getPanelUiPath(panelTarget.panelPath);
     const sslNote = sslApplied
       ? (protocol === 'https' ? '' : ' SSL certificate files were applied, but HTTPS did not respond after restart, so the panel URL is HTTP.')
       : ' SSL certificate files were not found in the backup, so the panel URL is HTTP.';
 
-    return { success: true, message: `3X-UI successfully restored! Panel: ${protocol}://${panelTarget.domain}:${panelTarget.port}${urlPath}${sslNote}` };
+    return { success: true, message: `3X-UI successfully restored ${inboundCount} inbound(s)! Panel: ${protocol}://${panelTarget.domain}:${panelTarget.port}${urlPath}${sslNote}` };
   } else {
     throw new Error(`Backup file not found to restore! Looked for: ${localTarPath}`);
   }
