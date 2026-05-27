@@ -4,7 +4,7 @@ import Order from '@/models/Order';
 import Product from '@/models/Product';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
-import { logActivity } from '@/models/ActivityLog';
+import { logActivity, type ActivityAction } from '@/models/ActivityLog';
 import { provisionVpnKey, revokeVpnKey } from '@/lib/xui';
 import { getPlan } from '@/lib/vpn-plans';
 import { getServer } from '@/lib/vpn-servers';
@@ -14,7 +14,8 @@ import { createLogger } from '@/lib/logger';
 import { expireOverdueOrders } from '@/lib/fraud-detection';
 import { isValidObjectId as isValidOid } from 'mongoose';
 import { releaseFromQuarantine, deleteFromQuarantine } from '@/lib/quarantine';
-import { approveOrder, rejectOrder } from '@/lib/order-actions';
+import { approveOrder, rejectOrder, notifyBotUser } from '@/lib/order-actions';
+import { sanitizeString } from '@/lib/security';
 
 const log = createLogger({ route: '/api/admin/orders' });
 
@@ -99,7 +100,8 @@ export async function PATCH(request: NextRequest) {
     const admin = await requireAdmin();
     await connectDB();
 
-    const { orderId, status, adminNote, rejectReason, verificationChecklist } = await request.json();
+    const { orderId, status, adminNote, rejectReason, verificationChecklist, deliveryMessage } = await request.json();
+    const sanitizedDeliveryMessage = sanitizeString((deliveryMessage as string) || '');
 
     if (!orderId || !status) {
       return NextResponse.json(
@@ -140,6 +142,7 @@ export async function PATCH(request: NextRequest) {
         adminName: admin.email || 'Web Admin',
         source: 'web',
         adminNote,
+        deliveryMessage: sanitizedDeliveryMessage || undefined,
         verificationChecklist,
       });
 
@@ -195,21 +198,30 @@ export async function PATCH(request: NextRequest) {
     if (
       status === 'refunded' &&
       order.orderType === 'vpn' &&
-      order.vpnProvisionStatus === 'provisioned' &&
-      order.vpnKey?.clientEmail &&
-      order.vpnPlan?.serverId
+      order.vpnProvisionStatus === 'provisioned'
     ) {
       try {
-        const revoked = await revokeVpnKey(order.vpnPlan.serverId, order.vpnKey.clientEmail);
+        let revoked = false;
+        const vpnKeys = Array.isArray(order.vpnKeys) ? order.vpnKeys : [];
+        if (vpnKeys.length > 0) {
+          for (const key of vpnKeys) {
+            if (!key.serverId || !key.clientEmail) continue;
+            const ok = await revokeVpnKey(key.serverId, key.clientEmail);
+            if (ok) revoked = true;
+          }
+        } else if (order.vpnKey?.clientEmail && order.vpnPlan?.serverId) {
+          revoked = await revokeVpnKey(order.vpnPlan.serverId, order.vpnKey.clientEmail);
+        }
+
         if (revoked) {
           order.vpnProvisionStatus = 'revoked';
-          log.info('VPN key revoked on refund', { orderId: order._id });
+          log.info('VPN key revoked on refund', { orderId: order._id, serverCount: vpnKeys.length || 1 });
           await logActivity({
             admin: admin.userId,
             action: 'vpn_revoked',
             target: `VPN Order #${order._id.toString().slice(-8)}`,
             details: `Key revoked on refund`,
-            metadata: { orderId: order._id, serverId: order.vpnPlan.serverId },
+            metadata: { orderId: order._id, serverCount: vpnKeys.length || 1 },
           });
         }
       } catch (revokeErr) {
@@ -221,6 +233,12 @@ export async function PATCH(request: NextRequest) {
     if (adminNote) order.adminNote = adminNote;
     if (rejectReason) order.rejectReason = rejectReason;
     await order.save();
+
+    if (status === 'pending' || status === 'verifying') {
+      try {
+        await notifyBotUser(order, status);
+      } catch { /* non-blocking */ }
+    }
 
     // Notification for other status changes
     if (previousStatus !== status) {
@@ -250,7 +268,7 @@ export async function PATCH(request: NextRequest) {
 
       // Activity log
       try {
-        const actionMap: Record<string, string> = { refunded: 'order_refunded' };
+        const actionMap: Partial<Record<string, ActivityAction>> = { refunded: 'order_refunded' };
         if (actionMap[status]) {
           await logActivity({
             admin: admin.userId,
@@ -416,14 +434,26 @@ export async function PUT(request: NextRequest) {
 
     // ---- REVOKE KEY ----
     if (action === 'revoke_key') {
-      if (order.vpnProvisionStatus !== 'provisioned' || !order.vpnKey?.clientEmail) {
+      const vpnKeys = Array.isArray(order.vpnKeys) ? order.vpnKeys : [];
+      const hasSingleKey = Boolean(order.vpnKey?.clientEmail && order.vpnPlan?.serverId);
+      if (order.vpnProvisionStatus !== 'provisioned' || (vpnKeys.length === 0 && !hasSingleKey)) {
         return NextResponse.json(
           { success: false, error: 'No active VPN key to revoke' },
           { status: 400 }
         );
       }
 
-      const revoked = await revokeVpnKey(order.vpnPlan!.serverId, order.vpnKey.clientEmail);
+      let revoked = false;
+      if (vpnKeys.length > 0) {
+        for (const key of vpnKeys) {
+          if (!key.serverId || !key.clientEmail) continue;
+          const ok = await revokeVpnKey(key.serverId, key.clientEmail);
+          if (ok) revoked = true;
+        }
+      } else {
+        revoked = await revokeVpnKey(order.vpnPlan!.serverId, order.vpnKey!.clientEmail);
+      }
+
       if (!revoked) {
         return NextResponse.json(
           { success: false, error: 'Failed to revoke key from panel' },
@@ -455,7 +485,11 @@ export async function PUT(request: NextRequest) {
           action: 'vpn_revoked',
           target: `VPN Order #${order._id.toString().slice(-8)}`,
           details: `Manually revoked`,
-          metadata: { orderId: order._id, serverId: order.vpnPlan!.serverId, clientEmail: order.vpnKey.clientEmail },
+          metadata: {
+            orderId: order._id,
+            serverCount: vpnKeys.length || 1,
+            clientEmail: order.vpnKey?.clientEmail,
+          },
         });
       } catch { /* */ }
 

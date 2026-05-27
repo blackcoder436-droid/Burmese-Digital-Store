@@ -11,6 +11,7 @@ import {
 	Database,
 	Globe,
 	Loader2,
+	Plus,
 	PlayCircle,
 	Server,
 	Settings,
@@ -21,6 +22,10 @@ import {
 type RotateConfig = {
 	doToken1: string;
 	doToken2: string;
+	doToken3: string;
+	doToken4: string;
+	doTokens?: RotateTokenRow[];
+	serverLinks?: RotateServerLinkRow[];
 	cfToken: string;
 	cfEmail: string;
 	xuiUsername: string;
@@ -35,6 +40,20 @@ type StepResult = {
 	message?: string;
 	newIp?: string;
 	jobId?: string;
+};
+
+type RotateTokenRow = {
+	id: string;
+	label: string;
+	token: string;
+	enabled: boolean;
+};
+
+type RotateServerLinkRow = {
+	id: string;
+	serverName: string;
+	tokenId: string;
+	enabled: boolean;
 };
 
 const STEPS = [
@@ -57,6 +76,10 @@ const SERVER_OPTIONS = [
 const DEFAULT_CONFIG: RotateConfig = {
 	doToken1: '',
 	doToken2: '',
+	doToken3: '',
+	doToken4: '',
+	doTokens: [],
+	serverLinks: [],
 	cfToken: '',
 	cfEmail: 'blackcoder436@gmail.com',
 	xuiUsername: 'Blackcoder',
@@ -85,6 +108,48 @@ const DROPLET_IMAGE_OPTIONS = [
 	{ value: 'rockylinux-9-x64', label: 'Rocky Linux 9 x64' },
 	{ value: 'fedora-41-x64', label: 'Fedora 41 x64' },
 ] as const;
+
+function createId(prefix: string) {
+	return `${prefix}_${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeTokensFromConfig(config: Partial<RotateConfig>): RotateTokenRow[] {
+	const arrayTokens = Array.isArray(config.doTokens) ? config.doTokens : [];
+	if (arrayTokens.length > 0) {
+		return arrayTokens.map((row, index) => ({
+			id: row.id || createId(`do_token_${index + 1}`),
+			label: row.label || `Token ${index + 1}`,
+			token: row.token || '',
+			enabled: row.enabled !== false,
+		}));
+	}
+
+	const legacyTokens = [
+		{ id: 'do_token_1', label: 'Token 1', token: config.doToken1 || '', enabled: true },
+		{ id: 'do_token_2', label: 'Token 2', token: config.doToken2 || '', enabled: true },
+		{ id: 'do_token_3', label: 'Token 3', token: config.doToken3 || '', enabled: true },
+		{ id: 'do_token_4', label: 'Token 4', token: config.doToken4 || '', enabled: true },
+	].filter((row) => row.token);
+
+	if (legacyTokens.length > 0) {
+		return legacyTokens;
+	}
+
+	return [
+		{ id: 'do_token_1', label: 'Token 1', token: '', enabled: true },
+		{ id: 'do_token_2', label: 'Token 2', token: '', enabled: true },
+	];
+}
+
+function normalizeServerLinksFromConfig(config: Partial<RotateConfig>): RotateServerLinkRow[] {
+	const arrayLinks = Array.isArray(config.serverLinks) ? config.serverLinks : [];
+	return arrayLinks.map((row, index) => ({
+		id: row.id || createId(`server_link_${index + 1}`),
+		serverName: row.serverName || '',
+		tokenId: row.tokenId || '',
+		enabled: row.enabled !== false,
+	}));
+}
 
 async function readApiJson(response: Response) {
 	const text = await response.text();
@@ -126,6 +191,9 @@ export default function RotateWizardPage() {
 	const [targetServer, setTargetServer] = useState('sg1');
 	const [config, setConfig] = useState(DEFAULT_CONFIG);
 	const [stepResults, setStepResults] = useState<Record<number, StepResult>>({});
+	const [doTokens, setDoTokens] = useState<RotateTokenRow[]>(normalizeTokensFromConfig(DEFAULT_CONFIG));
+	const [serverLinks, setServerLinks] = useState<RotateServerLinkRow[]>([]);
+	const availableTokens = doTokens.filter((row) => row.token);
 
 	useEffect(() => {
 		let mounted = true;
@@ -136,7 +204,10 @@ export default function RotateWizardPage() {
 				const data = await readApiJson(response);
 
 				if (mounted && data?.success && data?.data?.config) {
-					setConfig((prev) => ({ ...prev, ...data.data.config }));
+					const loadedConfig = { ...DEFAULT_CONFIG, ...data.data.config } as RotateConfig;
+					setConfig(loadedConfig);
+					setDoTokens(normalizeTokensFromConfig(loadedConfig));
+					setServerLinks(normalizeServerLinksFromConfig(loadedConfig));
 				}
 			} catch {
 				toast.error('Unable to load rotation config');
@@ -165,14 +236,94 @@ export default function RotateWizardPage() {
 		} as RotateConfig));
 	}
 
+	function updateDoToken(index: number, field: keyof RotateTokenRow, value: string | boolean) {
+		setDoTokens((current) => {
+			const next = [...current];
+			next[index] = { ...next[index], [field]: value } as RotateTokenRow;
+			return next;
+		});
+	}
+
+	function addDoTokenRow() {
+		setDoTokens((current) => [
+			...current,
+			{ id: createId('do_token'), label: `Token ${current.length + 1}`, token: '', enabled: true },
+		]);
+	}
+
+	function removeDoTokenRow(index: number) {
+		setDoTokens((current) => {
+			const next = current.filter((_, i) => i !== index);
+			return next.length > 0
+				? next.map((row, i) => ({ ...row, label: row.label || `Token ${i + 1}` }))
+				: [
+					{ id: 'do_token_1', label: 'Token 1', token: '', enabled: true },
+					{ id: 'do_token_2', label: 'Token 2', token: '', enabled: true },
+				];
+		});
+	}
+
+	function addServerLinkRow() {
+		setServerLinks((current) => [
+			...current,
+			{ id: createId('server_link'), serverName: '', tokenId: '', enabled: true },
+		]);
+	}
+
+	function updateServerLink(index: number, field: keyof RotateServerLinkRow, value: string | boolean) {
+		setServerLinks((current) => {
+			const next = [...current];
+			next[index] = { ...next[index], [field]: value } as RotateServerLinkRow;
+			return next;
+		});
+	}
+
+	function removeServerLinkRow(index: number) {
+		setServerLinks((current) => current.filter((_, i) => i !== index));
+	}
+
+	function selectServerToken(linkIndex: number, tokenId: string, checked: boolean) {
+		setServerLinks((current) => current.map((row, index) => ({
+			...row,
+			tokenId: index === linkIndex ? (checked ? tokenId : '') : row.tokenId,
+		})));
+	}
+
 	async function handleSaveConfig() {
 		setActionLoading(true);
 
 		try {
+			const cleanedTokens = doTokens
+				.map((row, index) => ({
+					id: row.id || createId(`do_token_${index + 1}`),
+					label: row.label || `Token ${index + 1}`,
+					token: String(row.token || '').trim(),
+					enabled: row.enabled !== false,
+				}))
+				.filter((row) => row.token);
+			const cleanedServerLinks = serverLinks
+				.map((row, index) => ({
+					id: row.id || createId(`server_link_${index + 1}`),
+					serverName: String(row.serverName || '').trim(),
+					tokenId: String(row.tokenId || '').trim(),
+					enabled: row.enabled !== false,
+				}))
+				.filter((row) => row.serverName && row.tokenId);
+
+			const payload = {
+				...config,
+				doToken1: cleanedTokens[0]?.token || '',
+				doToken2: cleanedTokens[1]?.token || '',
+				doToken3: cleanedTokens[2]?.token || '',
+				doToken4: cleanedTokens[3]?.token || '',
+				doTokens: cleanedTokens,
+				serverLinks: cleanedServerLinks,
+			};
+
 			const response = await fetch('/api/admin/rotate-config', {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(config),
+				body: JSON.stringify(payload),
 			});
 
 			const data = await readApiJson(response);
@@ -472,10 +623,160 @@ export default function RotateWizardPage() {
 									</div>
 
 									<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-										<h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-300/80">DO</h3>
+										<div className="flex items-center justify-between gap-3">
+											<h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-300/80">Server ↔ Token Links</h3>
+											<button
+												type="button"
+												onClick={addServerLinkRow}
+												className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1.5 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+											>
+												<Plus className="h-3.5 w-3.5" />
+												Add server
+											</button>
+										</div>
+
+										<div className="mt-4 space-y-4">
+											{serverLinks.length === 0 ? (
+												<div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/30 p-4 text-sm text-slate-400">
+													Add a server row, then choose which token should be used for that server.
+												</div>
+											) : null}
+
+											{serverLinks.map((row, index) => (
+												<div key={row.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+													<div className="flex items-center justify-between gap-3">
+														<div className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300/80">
+															Server {index + 1}
+														</div>
+														<button
+															type="button"
+															onClick={() => removeServerLinkRow(index)}
+															className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white"
+														>
+															<XCircle className="h-3.5 w-3.5" />
+															Remove
+														</button>
+													</div>
+
+													<div className="mt-3">
+														<Field
+															label="Server name"
+															name={`serverName-${index}`}
+															value={row.serverName}
+															onChange={(event) => updateServerLink(index, 'serverName', event.target.value)}
+															help="Use the same name you want to manage in rotation."
+														/>
+													</div>
+
+													<div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+														<div className="flex items-center justify-between gap-3">
+															<p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300/80">Link token</p>
+															<p className="text-[11px] text-slate-400">Choose one token for this server</p>
+														</div>
+
+														{availableTokens.length === 0 ? (
+															<div className="mt-3 rounded-xl border border-dashed border-white/10 bg-slate-950/30 px-3 py-3 text-sm text-slate-400">
+																Add and save a token above first.
+															</div>
+														) : (
+															<div className="mt-3 grid gap-2 sm:grid-cols-2">
+																{availableTokens.map((token) => (
+																	<label
+																		key={token.id}
+																		className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-3 text-sm transition ${
+																			row.tokenId === token.id
+																				? 'border-sky-400/60 bg-sky-400/10 text-white'
+																				: 'border-white/10 bg-slate-950/40 text-slate-300 hover:border-white/20 hover:bg-white/5'
+																		}`}
+																	>
+																		<input
+																			type="checkbox"
+																			checked={row.tokenId === token.id}
+																			disabled={token.enabled === false}
+																			onChange={(event) => selectServerToken(index, token.id, event.target.checked)}
+																			className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-sky-500 focus:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+																		/>
+																		<div className="min-w-0">
+																			<div className="truncate font-medium">{token.label || 'Token'}</div>
+																			<div className="truncate text-xs text-slate-400">
+																				{token.enabled === false ? 'Disabled' : 'Enabled'}
+																			</div>
+																		</div>
+																	</label>
+																))}
+															</div>
+														)}
+													</div>
+												</div>
+											))}
+										</div>
+									</div>
+
+									<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+										<div className="flex items-center justify-between gap-3">
+											<h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-300/80">DO</h3>
+											<button
+												type="button"
+												onClick={addDoTokenRow}
+												className="inline-flex items-center gap-2 rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1.5 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+											>
+												<Plus className="h-3.5 w-3.5" />
+												Add token
+												</button>
+										</div>
+										<p className="mt-2 text-xs text-slate-400">
+											Toggle is only for parking a token temporarily without deleting it.
+										</p>
 										<div className="mt-4 grid gap-4">
-											<Field label="Token 1" name="doToken1" value={config.doToken1} onChange={handleConfigChange} type="password" />
-											<Field label="Token 2" name="doToken2" value={config.doToken2} onChange={handleConfigChange} type="password" />
+											<div className="space-y-3">
+												{doTokens.map((row, index) => (
+													<div key={row.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+														<div className="flex items-center justify-between gap-3">
+															<div className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300/80">
+																{row.label || `Token ${index + 1}`}
+															</div>
+															<button
+																type="button"
+																onClick={() => removeDoTokenRow(index)}
+																className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white"
+															>
+																<XCircle className="h-3.5 w-3.5" />
+																Remove
+															</button>
+														</div>
+														<div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+															<input
+																type="text"
+																value={row.label}
+																onChange={(e) => updateDoToken(index, 'label', e.target.value)}
+																placeholder="Token label"
+																className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
+															/>
+															<button
+																type="button"
+																onClick={() => updateDoToken(index, 'enabled', !row.enabled)}
+																className={`inline-flex w-fit items-center gap-2 justify-self-start rounded-full border px-3 py-2 text-xs font-semibold transition ${
+																	row.enabled
+																		? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+																		: 'border-white/10 bg-white/5 text-slate-400'
+																}`}
+															>
+																<span className={`h-2.5 w-2.5 rounded-full ${row.enabled ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+																{row.enabled ? 'On' : 'Off'}
+															</button>
+														</div>
+														<div className="mt-3">
+															<Field
+																label="Token"
+																name={`doToken-${index}`}
+																value={row.token}
+																onChange={(event) => updateDoToken(index, 'token', event.target.value)}
+																type="password"
+															/>
+														</div>
+													</div>
+												))}
+											</div>
 											<div className="grid gap-4 sm:grid-cols-2">
 												<SelectField
 													label="Droplet size"

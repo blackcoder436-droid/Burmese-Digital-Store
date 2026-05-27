@@ -16,9 +16,12 @@ import { validateCoupon, recordCouponUsage } from '@/models/Coupon';
 import PaymentGateway from '@/models/PaymentGateway';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import { saveToQuarantine } from '@/lib/quarantine';
-import { sendPaymentScreenshot, buildScreenshotCaption, sendOrderWithApproveButtons } from '@/lib/telegram';
+import { sanitizeCustomerOrder } from '@/lib/order-sanitize';
+import { buildApproveRejectKeyboard, sendPaymentScreenshot, buildScreenshotCaption } from '@/lib/telegram';
+import { notifyBotUser } from '@/lib/order-actions';
 import User from '@/models/User';
 import { createNotification, notifyAdmins } from '@/models/Notification';
+import { Types } from 'mongoose';
 
 import {
   validateImageUpload,
@@ -78,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     const sanitizedOrders = orders.map((order: any) => {
       const { ocrExtractedData, ocrVerified, transactionId, ...safeOrder } = order;
-      return safeOrder;
+      return sanitizeCustomerOrder(safeOrder);
     });
 
     return NextResponse.json({
@@ -289,46 +292,18 @@ export async function POST(request: NextRequest) {
       highAmountThreshold: siteSettings.highAmountThreshold || 50000,
     });
 
-    // If strict fraud flags (duplicate txid/screenshot), block auto-complete
-    const hasStrictFraud = fraudResult.flags.some((f) =>
-      ['duplicate_txid', 'duplicate_screenshot'].includes(f)
-    );
-
     // Calculate payment expiry window
     const paymentWindowMinutes = siteSettings.paymentWindowMinutes || 30;
     const paymentExpiresAt = new Date(Date.now() + paymentWindowMinutes * 60 * 1000);
 
-    // Send screenshot to Telegram channel
-    let telegramFileId: string | undefined;
-    let telegramMessageId: number | undefined;
-    try {
-      const caption = buildScreenshotCaption({
-        orderNumber: '', // Will update after order is created
-        userName: authUser.email,
-        productName: product.name,
-        amount: totalAmount,
-        paymentMethod,
-        transactionId: transactionId || (ocrData?.transactionId ?? undefined),
-      });
-      const tgResult = await sendPaymentScreenshot(screenshotBuffer, filename, caption);
-      if (tgResult) {
-        telegramFileId = tgResult.fileId;
-        telegramMessageId = tgResult.messageId;
-      }
-    } catch (e) {
-      log.warn('Telegram screenshot upload failed (non-blocking)', { error: e instanceof Error ? e.message : String(e) });
-    }
-
-    // Create order
     const order = await Order.create({
+      _id: new Types.ObjectId(),
       user: authUser.userId,
       product: productId,
       quantity,
       totalAmount,
       paymentMethod,
       paymentScreenshot: screenshotUrl,
-      telegramFileId,
-      telegramMessageId,
       transactionId: transactionId || (ocrData?.transactionId ?? ''),
       contactInfo: contactInfo || undefined,
       ocrVerified: ocrEnabled && ocrData ? ocrData.confidence > 60 && ocrData.transactionId !== null : false,
@@ -350,6 +325,36 @@ export async function POST(request: NextRequest) {
       reviewReason: fraudResult.reviewReason,
     });
 
+    // Send screenshot to Telegram channel
+    let telegramFileId: string | undefined;
+    let telegramMessageId: number | undefined;
+    try {
+      const caption = buildScreenshotCaption({
+        orderNumber: order.orderNumber,
+        userName: authUser.email,
+        productName: product.name,
+        amount: totalAmount,
+        paymentMethod,
+        transactionId: transactionId || (ocrData?.transactionId ?? undefined),
+      });
+      const tgResult = await sendPaymentScreenshot(
+        screenshotBuffer,
+        filename,
+        caption,
+        buildApproveRejectKeyboard(order._id.toString())
+      );
+      if (tgResult) {
+        telegramFileId = tgResult.fileId;
+        telegramMessageId = tgResult.messageId;
+        await Order.findByIdAndUpdate(order._id, {
+          telegramFileId,
+          telegramMessageId,
+        });
+      }
+    } catch (e) {
+      log.warn('Telegram screenshot upload failed (non-blocking)', { error: e instanceof Error ? e.message : String(e) });
+    }
+
     // Record coupon usage after successful order creation
     if (couponId) {
       try {
@@ -358,50 +363,6 @@ export async function POST(request: NextRequest) {
         log.warn('Failed to record coupon usage', { error: e instanceof Error ? e.message : String(e) });
       }
     }
-
-    let autoCompleted = false;
-
-    // If OCR verified with high confidence, amount matches, AND no strict fraud flags → auto-complete
-    if (
-      ocrEnabled &&
-      !hasStrictFraud &&
-      !fraudResult.requiresManualReview &&
-      ocrData &&
-      ocrData.confidence > 80 &&
-      ocrData.transactionId &&
-      ocrData.amount &&
-      Math.abs(parseFloat(ocrData.amount) - totalAmount) <= totalAmount * 0.02 // 2% tolerance for OCR extraction variance
-    ) {
-      // Auto-deliver keys
-      const keysToDeliver = product.details
-        .filter((d) => !d.sold)
-        .slice(0, quantity);
-
-      for (const key of keysToDeliver) {
-        key.sold = true;
-        key.soldTo = authUser.userId as any;
-        key.soldAt = new Date();
-      }
-      await product.save();
-
-      order.status = 'completed';
-      order.deliveredKeys = keysToDeliver.map((k) => ({
-        serialKey: k.serialKey,
-        loginEmail: k.loginEmail,
-        loginPassword: k.loginPassword,
-        additionalInfo: k.additionalInfo,
-      }));
-      await order.save();
-
-      // Update stock count
-      await Product.findByIdAndUpdate(productId, {
-        stock: product.details.filter((d) => !d.sold).length,
-      });
-
-      autoCompleted = true;
-    }
-
-
 
     try {
       const userNotificationType =
@@ -428,28 +389,14 @@ export async function POST(request: NextRequest) {
         message: `Order ${order.orderNumber} from ${authUser.email} (${totalAmount.toLocaleString()} MMK).`,
         orderId: order._id,
       });
+
+      if (order.status !== 'completed') {
+        await notifyBotUser(order, order.status === 'verifying' ? 'verifying' : 'pending');
+      }
     } catch (notificationError: unknown) {
       log.warn('Order notification creation failed (non-blocking)', {
         error: notificationError instanceof Error ? notificationError.message : String(notificationError),
       });
-    }
-
-    // Send Telegram approve/reject buttons (only for non-auto-completed orders)
-    if (order.status !== 'completed') {
-      try {
-        await sendOrderWithApproveButtons({
-          orderId: order._id.toString(),
-          orderNumber: order.orderNumber,
-          userName: authUser.email,
-          productName: product.name,
-          amount: totalAmount,
-          paymentMethod,
-          orderType: 'product',
-          transactionId: transactionId || (ocrData?.transactionId ?? undefined),
-        });
-      } catch (e) {
-        log.warn('Telegram approve buttons failed (non-blocking)', { error: e instanceof Error ? e.message : String(e) });
-      }
     }
 
     return NextResponse.json(

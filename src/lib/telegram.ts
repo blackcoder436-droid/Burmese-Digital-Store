@@ -23,13 +23,18 @@ interface TelegramPhotoResult {
   messageId: number;
 }
 
+export interface TelegramInlineKeyboard {
+  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
+}
+
 /**
  * Send a payment screenshot to Telegram channel and get file reference
  */
 export async function sendPaymentScreenshot(
   buffer: Buffer,
   filename: string,
-  caption: string
+  caption: string,
+  replyMarkup?: TelegramInlineKeyboard
 ): Promise<TelegramPhotoResult | null> {
   if (!BOT_TOKEN || !CHANNEL_ID) {
     log.warn('Telegram not configured — BOT_TOKEN or CHANNEL_ID missing');
@@ -42,6 +47,9 @@ export async function sendPaymentScreenshot(
     formData.append('photo', new Blob([new Uint8Array(buffer)]), filename);
     formData.append('caption', caption);
     formData.append('parse_mode', 'HTML');
+    if (replyMarkup) {
+      formData.append('reply_markup', JSON.stringify(replyMarkup));
+    }
 
     const res = await fetch(`${TELEGRAM_API}/sendPhoto`, {
       method: 'POST',
@@ -76,6 +84,17 @@ export async function sendPaymentScreenshot(
     });
     return null;
   }
+}
+
+export function buildApproveRejectKeyboard(orderId: string): TelegramInlineKeyboard {
+  return {
+    inline_keyboard: [
+      [
+        { text: '✅ Approve', callback_data: `approve_order:${orderId}` },
+        { text: '❌ Reject', callback_data: `reject_order:${orderId}` },
+      ],
+    ],
+  };
 }
 
 /**
@@ -169,10 +188,10 @@ export async function sendOrderWithApproveButtons(params: {
   paymentMethod: string;
   orderType: string;
   transactionId?: string;
-}): Promise<boolean> {
+}): Promise<number | null> {
   if (!BOT_TOKEN || !CHANNEL_ID) {
     log.warn('Telegram not configured — skipping approve button notification');
-    return false;
+    return null;
   }
 
   try {
@@ -213,7 +232,7 @@ export async function sendOrderWithApproveButtons(params: {
     const data = await res.json();
     if (!data.ok) {
       log.error('Telegram sendMessage with buttons failed', { error: data.description });
-      return false;
+      return null;
     }
 
     log.info('Order approve buttons sent to Telegram', {
@@ -246,12 +265,12 @@ export async function sendOrderWithApproveButtons(params: {
       }
     }
 
-    return true;
+    return data.result.message_id as number;
   } catch (error) {
     log.error('Telegram approve buttons error', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return false;
+    return null;
   }
 }
 
@@ -271,7 +290,32 @@ export async function editTelegramMessage(messageId: number, newText: string): P
         text: newText,
         parse_mode: 'HTML',
         // Remove inline keyboard buttons after action to prevent duplicate clicks
-        reply_markup: JSON.stringify({ inline_keyboard: [] }),
+        reply_markup: { inline_keyboard: [] },
+      }),
+    });
+    const data = await res.json();
+    return data.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Edit the caption of a Telegram photo/document message
+ */
+export async function editTelegramCaption(messageId: number, newCaption: string): Promise<boolean> {
+  if (!BOT_TOKEN || !CHANNEL_ID) return false;
+
+  try {
+    const res = await fetch(`${TELEGRAM_API}/editMessageCaption`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHANNEL_ID,
+        message_id: messageId,
+        caption: newCaption,
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [] },
       }),
     });
     const data = await res.json();

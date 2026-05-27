@@ -20,12 +20,13 @@ import Order from '@/models/Order';
 import Product from '@/models/Product';
 import User from '@/models/User';
 import { createNotification } from '@/models/Notification';
-import { provisionVpnKey, revokeVpnKey, VpnProvisionResult } from '@/lib/xui';
+import { provisionVpnKey, revokeVpnKey, type CreateClientResult } from '@/lib/xui';
 import { getPlan } from '@/lib/vpn-plans';
 import { getServer, getEnabledServers } from '@/lib/vpn-servers';
 import { releaseFromQuarantine, deleteFromQuarantine } from '@/lib/quarantine';
 import { logActivity, type ActivityAction } from '@/models/ActivityLog';
 import { createLogger } from '@/lib/logger';
+import { editTelegramCaption, editTelegramMessage } from '@/lib/telegram';
 import { Types } from 'mongoose';
 
 const log = createLogger({ module: 'order-actions' });
@@ -90,8 +91,19 @@ export interface OrderActionContext {
   source: 'web' | 'noti-bot' | 'vpn-bot' | 'auto-approve';
   /** Optional admin note */
   adminNote?: string;
+  /** Optional manual delivery text shown to the customer for non-VPN orders */
+  deliveryMessage?: string;
   /** Optional verification checklist (web admin) */
   verificationChecklist?: Record<string, boolean>;
+}
+
+async function getTelegramUserId(orderUserId: unknown): Promise<number | null> {
+  try {
+    const user = await User.findById(orderUserId).select('telegramId').lean() as { telegramId?: number } | null;
+    return user?.telegramId || null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── APPROVE ────────────────────────────────────────
@@ -121,18 +133,41 @@ export async function approveOrder(
     // ── VPN ORDER ──
     if (order.orderType === 'vpn' && order.vpnPlan) {
       // Idempotency guard: already provisioned
-      if (order.vpnProvisionStatus === 'provisioned' && order.vpnKey?.clientUUID) {
+      const hasMultiServerKey = Boolean(
+        order.multiSubToken &&
+        Array.isArray(order.vpnKeys) &&
+        order.vpnKeys.length >= 2
+      );
+
+      if (order.vpnProvisionStatus === 'provisioned' && order.vpnKey?.clientUUID && hasMultiServerKey) {
         log.warn('VPN already provisioned, skipping duplicate', { orderId: order._id });
         order.status = 'completed';
         if (ctx.adminNote) order.adminNote = ctx.adminNote;
         await order.save();
       } else {
+        const legacySingleKey =
+          order.vpnProvisionStatus === 'provisioned' &&
+          !hasMultiServerKey &&
+          order.vpnKey?.clientEmail &&
+          order.vpnPlan?.serverId
+            ? { serverId: order.vpnPlan.serverId, clientEmail: order.vpnKey.clientEmail }
+            : null;
+
         const plan = getPlan(order.vpnPlan.planId);
         const server = await getServer(order.vpnPlan.serverId); // fallback/primary server
-        const enabledServers = await getEnabledServers();
+        const requestedProtocol = order.vpnPlan.protocol || 'trojan';
+        const enabledServers = (await getEnabledServers())
+          .filter((srv) => srv.enabledProtocols.includes(requestedProtocol));
 
         if (!plan || !server || enabledServers.length === 0) {
           return { success: false, error: 'Invalid VPN plan or no enabled servers' };
+        }
+
+        if (enabledServers.length < 2) {
+          return {
+            success: false,
+            error: `Multi-server VPN requires at least 2 enabled servers with ${requestedProtocol.toUpperCase()} support.`,
+          };
         }
 
         const user = await User.findById(order.user)
@@ -144,11 +179,20 @@ export async function approveOrder(
           orderId: order._id,
           primaryServer: order.vpnPlan.serverId,
           servers: enabledServers.map((s) => s.id),
+          protocol: requestedProtocol,
           source: ctx.source,
         });
 
-        const vpnKeysArr = [];
-        let firstResult: VpnProvisionResult | null = null;
+        const vpnKeysArr: Array<{
+          serverId: string;
+          clientEmail: string;
+          clientUUID: string;
+          subId: string;
+          subLink: string;
+          configLink: string;
+          protocol: string;
+        }> = [];
+        let firstResult: CreateClientResult | null = null;
         let anySuccess = false;
 
         for (const srv of enabledServers) {
@@ -160,7 +204,7 @@ export async function approveOrder(
               devices: plan.devices,
               expiryDays: plan.expiryDays,
               dataLimitGB: plan.dataLimitGB,
-              protocol: order.vpnPlan.protocol || 'trojan',
+              protocol: requestedProtocol,
             });
 
             if (result) {
@@ -181,16 +225,31 @@ export async function approveOrder(
           }
         }
 
-        if (!anySuccess || !firstResult) {
+        if (!anySuccess || !firstResult || vpnKeysArr.length < 2) {
+          for (const key of vpnKeysArr) {
+            try {
+              await revokeVpnKey(key.serverId, key.clientEmail);
+            } catch (revokeErr) {
+              log.warn('Failed to clean up partial multi-server key', {
+                orderId: order._id,
+                serverId: key.serverId,
+                error: revokeErr instanceof Error ? revokeErr.message : String(revokeErr),
+              });
+            }
+          }
+
           order.vpnProvisionStatus = 'failed';
           await order.save();
 
           logActivitySafe(ctx.adminId, 'vpn_provision_failed', `VPN Order #${order._id.toString().slice(-8)}`, {
-            details: `Failed to provision (${ctx.source}) on all servers`,
-            metadata: { orderId: order._id },
+            details: `Failed to provision multi-server key (${ctx.source})`,
+            metadata: { orderId: order._id, successCount: vpnKeysArr.length, targetCount: enabledServers.length },
           });
 
-          return { success: false, error: 'VPN key provisioning failed on all servers. Check server connectivity.' };
+          return {
+            success: false,
+            error: 'VPN key provisioning failed to create a multi-server key. At least 2 servers must succeed.',
+          };
         }
 
         // Generate a cryptographically random token for the multi-server subscription link
@@ -213,6 +272,16 @@ export async function approveOrder(
         order.status = 'completed';
         if (ctx.adminNote) order.adminNote = ctx.adminNote;
         await order.save();
+
+        if (legacySingleKey) {
+          revokeVpnKey(legacySingleKey.serverId, legacySingleKey.clientEmail).catch((revokeErr) => {
+            log.warn('Failed to revoke legacy single-server key after multi-server reprovision', {
+              orderId: order._id,
+              serverId: legacySingleKey.serverId,
+              error: revokeErr instanceof Error ? revokeErr.message : String(revokeErr),
+            });
+          });
+        }
       }
 
     } else {
@@ -222,31 +291,54 @@ export async function approveOrder(
         return { success: false, error: 'Product not found' };
       }
 
-      const keysToDeliver = product.details
-        .filter((d: { sold: boolean }) => !d.sold)
-        .slice(0, order.quantity);
+      const manualDeliveryMessage = ctx.deliveryMessage?.trim();
+      const productDetails = Array.isArray(product.details) ? product.details : [];
+      const availableKeys = productDetails
+        .filter((d: { sold: boolean }) => !d.sold);
 
-      if (keysToDeliver.length < order.quantity) {
-        return { success: false, error: `Not enough stock (${keysToDeliver.length}/${order.quantity})` };
+      if (manualDeliveryMessage) {
+        const keysToMarkSold = availableKeys.slice(0, order.quantity);
+        if (keysToMarkSold.length > 0) {
+          for (const key of keysToMarkSold) {
+            key.sold = true;
+            key.soldTo = order.user;
+            key.soldAt = new Date();
+          }
+          await product.save();
+
+          await Product.findByIdAndUpdate(product._id, {
+            stock: productDetails.filter((d: { sold: boolean }) => !d.sold).length,
+          });
+        }
+
+        order.deliveredKeys = [{
+          additionalInfo: manualDeliveryMessage,
+        }];
+      } else {
+        const keysToDeliver = availableKeys.slice(0, order.quantity);
+
+        if (keysToDeliver.length < order.quantity) {
+          return { success: false, error: `Not enough stock (${keysToDeliver.length}/${order.quantity})` };
+        }
+
+        for (const key of keysToDeliver) {
+          key.sold = true;
+          key.soldTo = order.user;
+          key.soldAt = new Date();
+        }
+        await product.save();
+
+        await Product.findByIdAndUpdate(product._id, {
+          stock: productDetails.filter((d: { sold: boolean }) => !d.sold).length,
+        });
+
+        order.deliveredKeys = keysToDeliver.map((k: { serialKey?: string; loginEmail?: string; loginPassword?: string; additionalInfo?: string }) => ({
+          serialKey: k.serialKey,
+          loginEmail: k.loginEmail,
+          loginPassword: k.loginPassword,
+          additionalInfo: k.additionalInfo,
+        }));
       }
-
-      for (const key of keysToDeliver) {
-        key.sold = true;
-        key.soldTo = order.user;
-        key.soldAt = new Date();
-      }
-      await product.save();
-
-      await Product.findByIdAndUpdate(product._id, {
-        stock: product.details.filter((d: { sold: boolean }) => !d.sold).length,
-      });
-
-      order.deliveredKeys = keysToDeliver.map((k: { serialKey?: string; loginEmail?: string; loginPassword?: string; additionalInfo?: string }) => ({
-        serialKey: k.serialKey,
-        loginEmail: k.loginEmail,
-        loginPassword: k.loginPassword,
-        additionalInfo: k.additionalInfo,
-      }));
       order.status = 'completed';
       if (ctx.adminNote) order.adminNote = ctx.adminNote;
       await order.save();
@@ -283,6 +375,9 @@ export async function approveOrder(
 
       // 2. Telegram bot message to buyer (if user has telegramId)
       notifyBotUser(order, 'approved'),
+
+      // 2b. Telegram admin/channel message for website order approval flow
+      finalizeTelegramOrderMessage(order, 'approved', ctx.adminName),
 
       // 3. Activity log
       logActivitySafe(ctx.adminId, 'order_approved', `Order #${order.orderNumber}`, {
@@ -385,6 +480,9 @@ export async function rejectOrder(
       // 2. Telegram bot message to buyer
       notifyBotUser(order, 'rejected'),
 
+      // 2b. Telegram admin/channel message for website order rejection flow
+      finalizeTelegramOrderMessage(order, 'rejected', ctx.adminName, ctx.rejectReason),
+
       // 3. Activity log
       logActivitySafe(ctx.adminId, 'order_rejected', `Order #${order.orderNumber}`, {
         details: `Rejected via ${ctx.source} by ${ctx.adminName}${ctx.rejectReason ? ` — ${ctx.rejectReason}` : ''}`,
@@ -408,18 +506,18 @@ export async function rejectOrder(
 /**
  * Notify the buyer via Telegram VPN bot if they have a telegramId
  */
-async function notifyBotUser(
+export async function notifyBotUser(
   order: InstanceType<typeof Order>,
-  action: 'approved' | 'rejected'
+  action: 'approved' | 'rejected' | 'pending' | 'verifying'
 ): Promise<void> {
   try {
-    const user = await User.findById(order.user).select('telegramId').lean() as { telegramId?: number } | null;
-    if (!user?.telegramId) return;
+    const telegramId = await getTelegramUserId(order.user);
+    if (!telegramId) return;
 
     if (action === 'approved') {
       const typeText = order.orderType === 'vpn' ? 'VPN Key' : 'Product Keys';
       await sendBotMessage(
-        user.telegramId,
+        telegramId,
         `✅ Order ${order.orderNumber} အတည်ပြုပြီးပါပြီ!\n\n🔑 ${typeText} ကို အောက်မှာ ကြည့်ပါ 👇`
       );
 
@@ -433,16 +531,16 @@ async function notifyBotUser(
           
           const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://burmesedigital.store';
           const multiSubUrl = order.multiSubToken ? `${appUrl}/api/vpn/sub/${order.multiSubToken}` : order.vpnKey.subLink;
+          const subLabel = order.multiSubToken ? 'Subscription Link (Multi-Server)' : 'Subscription Link';
 
           const keyMsg =
             `🔑 <b>${plan?.name || 'VPN Key'}</b>\n\n` +
             `🌐 Server: ${order.multiSubToken ? 'All Enabled Servers' : (server ? `${server.flag} ${server.name}` : 'Unknown')}\n` +
             `⚙️ Protocol: ${order.vpnKey.protocol?.toUpperCase()}\n` +
             `📅 Expires: ${expiryDate}\n\n` +
-            `📋 <b>Subscription Link (Multi-Server):</b>\n<code>${multiSubUrl}</code>\n\n` +
-            `⚙️ <b>Fallback Config Link:</b>\n<code>${order.vpnKey.configLink}</code>\n\n` +
+            `📋 <b>${subLabel}:</b>\n<code>${multiSubUrl}</code>\n\n` +
             `📲 V2RayNG/Hiddify app မှာ Sub Link ကို add ပါ`;
-          await sendBotMessage(user.telegramId, keyMsg);
+          await sendBotMessage(telegramId, keyMsg);
         } else if (order.deliveredKeys?.length > 0) {
           let keyMsg = `🔑 <b>Your Product Keys</b>\n\n`;
         for (const key of order.deliveredKeys) {
@@ -452,11 +550,17 @@ async function notifyBotUser(
           if (key.additionalInfo) keyMsg += `Info: ${key.additionalInfo}\n`;
           keyMsg += `\n`;
         }
-        await sendBotMessage(user.telegramId, keyMsg);
+        await sendBotMessage(telegramId, keyMsg);
       }
+    } else if (action === 'pending' || action === 'verifying') {
+      const message =
+        action === 'pending'
+          ? `⏳ Order ${order.orderNumber} က pending review အခြေအနေမှာ ရှိနေပါသေးတယ်။\n\nသင့် payment မပြီးသေးရင် အခုဘဲ ငွေလွှဲပြီး screenshot ပို့ပေးပါ။\nပြီးသွားပြီးသားဆိုရင် admin စစ်ဆေးနေပါပြီ — ခဏစောင့်ပေးပါ။`
+          : `⏳ Order ${order.orderNumber} ကို payment verify လုပ်နေဆဲပါ။\n\nPayment မပြီးသေးရင် အခုဘဲ ငွေလွှဲပြီး screenshot ပို့ပေးပါ။\nပြီးသွားပြီးသားဆိုရင် review ပြီးတာနဲ့ ဆက်လက်လုပ်ပေးပါမယ်။`;
+      await sendBotMessage(telegramId, message);
     } else {
       await sendBotMessage(
-        user.telegramId,
+        telegramId,
         `❌ Order ${order.orderNumber} ကို ငြင်းပယ်ပါပြီ\n\n` +
         (order.rejectReason ? `📝 အကြောင်းပြချက်: ${order.rejectReason}\n\n` : '') +
         `📞 ပြဿနာရှိပါက @BurmeseDigitalStore သို့ ဆက်သွယ်ပါ`
@@ -464,6 +568,35 @@ async function notifyBotUser(
     }
   } catch (err) {
     log.warn('Failed to notify bot user', {
+      orderId: order._id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Update the Telegram admin/channel message for web orders so buttons disappear after action.
+ */
+async function finalizeTelegramOrderMessage(
+  order: InstanceType<typeof Order>,
+  action: 'approved' | 'rejected',
+  adminName: string,
+  rejectReason?: string
+): Promise<void> {
+  try {
+    if (!order.telegramMessageId) return;
+
+    const statusText =
+      action === 'approved'
+        ? `✅ <b>APPROVED</b> by ${adminName}`
+        : `❌ <b>REJECTED</b> by ${adminName}${rejectReason ? `\n\n📝 ${rejectReason}` : ''}`;
+
+    const photoEdited = await editTelegramCaption(order.telegramMessageId, statusText);
+    if (photoEdited) return;
+
+    await editTelegramMessage(order.telegramMessageId, statusText);
+  } catch (err) {
+    log.warn('Failed to finalize Telegram order message', {
       orderId: order._id,
       error: err instanceof Error ? err.message : String(err),
     });

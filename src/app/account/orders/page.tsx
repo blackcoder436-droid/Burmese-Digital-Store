@@ -33,11 +33,12 @@ interface Order {
   vpnKey?: {
     clientEmail: string;
     subLink: string;
-    configLink: string;
+    configLink?: string;
     protocol: string;
     expiryTime: number;
     provisionedAt?: string;
   };
+  multiSubToken?: string;
   vpnProvisionStatus?: string;
   createdAt: string;
 }

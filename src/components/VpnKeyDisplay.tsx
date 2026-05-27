@@ -1,15 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Copy, Check, Globe, Clock, Shield, ExternalLink, QrCode } from 'lucide-react';
+import { useState } from 'react';
+import { Copy, Check, Globe, Clock, Shield, ExternalLink } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
-import QRCode from 'qrcode';
 
 interface VpnKeyProps {
   vpnKey: {
     clientEmail: string;
     subLink: string;
-    configLink: string;
     protocol: string;
     expiryTime: number;
     provisionedAt?: string;
@@ -26,18 +24,6 @@ interface VpnKeyProps {
 export default function VpnKeyDisplay({ vpnKey, vpnPlan, multiSubToken }: VpnKeyProps) {
   const { t } = useLanguage();
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [showQr, setShowQr] = useState(false);
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
-
-  useEffect(() => {
-    if (showQr && vpnKey.configLink && !qrDataUrl) {
-      QRCode.toDataURL(vpnKey.configLink, {
-        width: 280,
-        margin: 2,
-        color: { dark: '#c084fc', light: '#0a0a1f' },
-      }).then(setQrDataUrl).catch(() => {});
-    }
-  }, [showQr, vpnKey.configLink, qrDataUrl]);
 
   const copyToClipboard = async (text: string, fieldId: string) => {
     try {
@@ -110,44 +96,6 @@ export default function VpnKeyDisplay({ vpnKey, vpnPlan, multiSubToken }: VpnKey
           <span className="inline-flex items-center gap-1 px-2 py-1 bg-dark-800 border border-dark-600 rounded-md text-gray-300">
             📱 {vpnPlan.devices} Device{vpnPlan.devices > 1 ? 's' : ''}
           </span>
-        )}
-      </div>
-
-      {/* Config Link (VPN Key) */}
-      <div className="p-3 sm:p-4 bg-dark-900 border border-dark-600/50 rounded-lg">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wider">
-            {t('components.vpnKey.vpnKeyLabel')}
-          </span>
-          <button
-            onClick={() => copyToClipboard(vpnKey.configLink, 'config')}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs font-medium bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-md text-purple-300 transition-all"
-          >
-            {copiedField === 'config' ? (
-              <><Check className="w-3.5 h-3.5 text-emerald-400" /> {t('components.vpnKey.copied')}</>
-            ) : (
-              <><Copy className="w-3.5 h-3.5" /> {t('components.vpnKey.copyKey')}</>
-            )}
-          </button>
-        </div>
-        <code className="text-xs sm:text-sm text-purple-400 font-mono break-all leading-relaxed block">
-          {vpnKey.configLink}
-        </code>
-        {/* QR toggle */}
-        <button
-          onClick={() => setShowQr(!showQr)}
-          className="mt-1.5 flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs font-medium bg-dark-800 hover:bg-dark-700 border border-dark-600 rounded-md text-gray-400 hover:text-purple-300 transition-all"
-        >
-          <QrCode className="w-3 h-3" />
-          {showQr ? t('components.vpnKey.hideQr') : t('components.vpnKey.showQr')}
-        </button>
-        {showQr && qrDataUrl && (
-          <div className="mt-2 flex justify-center">
-            <div className="p-2 bg-dark-800 rounded-lg border border-purple-500/20 inline-block">
-              <img src={qrDataUrl} alt="VPN Config QR" className="w-[160px] h-[160px] sm:w-[220px] sm:h-[220px]" />
-              <p className="text-[10px] text-gray-600 text-center mt-1">{t('components.vpnKey.scanWith')}</p>
-            </div>
-          </div>
         )}
       </div>
 

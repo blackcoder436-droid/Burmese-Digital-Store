@@ -108,7 +108,6 @@ const SiteSettingsSchema: Schema = new Schema(
       default: [
         { name: 'referral_system', enabled: true },
         { name: 'free_test_key', enabled: true },
-        { name: 'protocol_change', enabled: true },
         { name: 'auto_approve', enabled: true },
       ],
     },
@@ -164,7 +163,11 @@ export async function setFeatureFlag(
   updatedBy?: string
 ): Promise<void> {
   const settings = await getSiteSettings();
-  const flag = settings.featureFlags?.find((f) => f.name === name);
+  if (!Array.isArray(settings.featureFlags)) {
+    settings.featureFlags = [];
+  }
+
+  const flag = settings.featureFlags.find((f) => f && typeof f === 'object' && f.name === name);
   if (flag) {
     flag.enabled = enabled;
     flag.updatedBy = updatedBy;
@@ -179,5 +182,7 @@ export async function setFeatureFlag(
  */
 export async function getAllFeatureFlags(): Promise<IFeatureFlag[]> {
   const settings = await getSiteSettings();
-  return settings.featureFlags || [];
+  return (Array.isArray(settings.featureFlags) ? settings.featureFlags : [])
+    .filter((flag): flag is IFeatureFlag => Boolean(flag && typeof flag === 'object' && flag.name))
+    .filter((flag) => flag.name !== 'protocol_change');
 }

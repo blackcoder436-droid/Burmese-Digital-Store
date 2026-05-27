@@ -5,6 +5,7 @@ import { getAuthUser } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { isValidObjectId } from '@/lib/security';
 import { createLogger } from '@/lib/logger';
+import { sanitizeCustomerOrder } from '@/lib/order-sanitize';
 
 const log = createLogger({ route: '/api/orders/[id]' });
 
@@ -54,7 +55,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: { order: safeOrder },
+      data: { order: sanitizeCustomerOrder(safeOrder) },
     });
   } catch (error: unknown) {
     log.error('Order GET error', {

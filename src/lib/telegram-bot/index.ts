@@ -51,9 +51,6 @@ import {
 import {
   handleMyKeys,
   handleViewKey,
-  handleExchangeKey,
-  handleExKeySelect,
-  handleExProtoSelect,
   handleCheckUsage,
 } from './handlers/keys';
 
@@ -453,27 +450,6 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
       await handleViewKey(ctx.chatId, ctx.userId, orderId, ctx.messageId);
     } else if (data === 'check_usage') {
       await handleCheckUsage(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
-    }
-    // ---- Exchange Key ----
-    else if (data === 'exchange_key') {
-      await handleExchangeKey(ctx.chatId, ctx.userId, ctx.firstName, ctx.username, ctx.messageId);
-    } else if (data.startsWith('exkey_')) {
-      const orderId = data.substring(6);
-      await handleExKeySelect(ctx.chatId, ctx.userId, orderId, ctx.messageId);
-    } else if (data.startsWith('expro_') || data.startsWith('expro:')) {
-      const parsed = parseTwoPartCallback(data, 'expro', 'expro');
-      if (!parsed) return;
-      const keyId = parsed.first;
-      const protocol = parsed.second;
-      await handleExProtoSelect(
-        ctx.chatId,
-        ctx.userId,
-        ctx.firstName,
-        ctx.username,
-        keyId,
-        protocol,
-        ctx.messageId!
-      );
     }
     // ---- Referral ----
     else if (data === 'referral') {

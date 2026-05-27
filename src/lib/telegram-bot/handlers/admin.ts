@@ -425,7 +425,6 @@ export async function handleAdminFeatures(chatId: number): Promise<void> {
     const featureNames: Record<string, string> = {
       referral_system: 'Referral System',
       free_test_key: 'Free Test Key',
-      protocol_change: 'Protocol ပြောင်း',
       auto_approve: 'Auto Approve',
     };
 

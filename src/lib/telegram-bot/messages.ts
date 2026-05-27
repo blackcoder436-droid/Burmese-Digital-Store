@@ -1,4 +1,4 @@
-// ==========================================
+﻿// ==========================================
 // Burmese Message Templates
 // Burmese Digital Store - Integrated Bot
 // ==========================================
@@ -7,76 +7,76 @@
 export const MSG = {
   // ---- Dynamic Welcome ----
   welcomeBilingual: (name, lang) => lang === 'en' ? 
-    `🌟 <b>Burmese Digital Store</b> Welcome!\n\nHello ${name}! 👋\n\n🔐 Premium VPN Service\n⚡ Fast Servers\n🛡️ Full Security\n💰 Cheap Prices\n\nPlease choose an option from the menu below 👇` :
-    `🌟 <b>Burmese Digital Store</b> မှ ကြိုဆိုပါတယ်!\n\nမင်္ဂလာပါ ${name}! 👋\n\n🔐 Premium VPN Service\n⚡ မြန်ဆန်သော Server များ\n🛡️ လုံခြုံမှုအပြည့်\n💰 စျေးနှုန်းသက်သာ\n\nအောက်ပါ menu မှ ရွေးချယ်ပါ 👇`,
+    `ðŸŒŸ <b>Burmese Digital Store</b> Welcome!\n\nHello ${name}! ðŸ‘‹\n\nðŸ” Premium VPN Service\nâš¡ Fast Servers\nðŸ›¡ï¸ Full Security\nðŸ’° Cheap Prices\n\nPlease choose an option from the menu below ðŸ‘‡` :
+    `ðŸŒŸ <b>Burmese Digital Store</b> á€™á€¾ á€€á€¼á€­á€¯á€†á€­á€¯á€•á€«á€á€šá€º!\n\ná€™á€„á€ºá€¹á€‚á€œá€¬á€•á€« ${name}! ðŸ‘‹\n\nðŸ” Premium VPN Service\nâš¡ á€™á€¼á€”á€ºá€†á€”á€ºá€žá€±á€¬ Server á€™á€»á€¬á€¸\nðŸ›¡ï¸ á€œá€¯á€¶á€á€¼á€¯á€¶á€™á€¾á€¯á€¡á€•á€¼á€Šá€·á€º\nðŸ’° á€…á€»á€±á€¸á€”á€¾á€¯á€”á€ºá€¸á€žá€€á€ºá€žá€¬\n\ná€¡á€±á€¬á€€á€ºá€•á€« menu á€™á€¾ á€›á€½á€±á€¸á€á€»á€šá€ºá€•á€« ðŸ‘‡`,
 
   helpBilingual: (lang) => lang === 'en' ? 
-    `📖 <b>How to use</b>\n\n🔑 <b>Buy VPN Key:</b>\n1️⃣ Click "🛒 Buy VPN"\n2️⃣ Select Server\n3️⃣ Select Protocol\n4️⃣ Select Devices\n5️⃣ Select Plan\n6️⃣ Transfer money & Send Screenshot\n7️⃣ Get your Key\n\n🎁 <b>Free Test Key:</b>\n• Join our channel to get 3GB / 72 hours free test\n\n🔄 <b>Exchange Protocol:</b>\n• Change current key to another protocol\n\n📞 <b>Help:</b>\n• Contact @BurmeseDigitalStore` :
-    `📖 <b>အသုံးပြုနည်း</b>\n\n🔑 <b>VPN Key ဝယ်နည်း:</b>\n1️⃣ "🛒 VPN ဝယ်မည်" ကိုနှိပ်ပါ\n2️⃣ Server ရွေးပါ\n3️⃣ Protocol ရွေးပါ\n4️⃣ Device အရေအတွက် ရွေးပါ\n5️⃣ Plan ရွေးပါ\n6️⃣ ငွေလွှဲပြီး Screenshot ပို့ပါ\n7️⃣ Key ရရှိပါမည်\n\n🎁 <b>Free Test Key:</b>\n• Channel join ပြီးရင် 3GB / 72 နာရီ free test ရနိုင်ပါတယ်\n\n🔄 <b>Protocol ပြောင်းခြင်း:</b>\n• လက်ရှိ key ကို တခြား protocol ပြောင်းနိုင်ပါတယ်\n\n📞 <b>အကူအညီ:</b>\n• @BurmeseDigitalStore ကို ဆက်သွယ်ပါ`,
+    `ðŸ“– <b>How to use</b>\n\nðŸ”‘ <b>Buy VPN Key:</b>\n1ï¸âƒ£ Click "ðŸ›’ Buy VPN"\n2ï¸âƒ£ Select Server\n3ï¸âƒ£ Select Protocol\n4ï¸âƒ£ Select Devices\n5ï¸âƒ£ Select Plan\n6ï¸âƒ£ Transfer money & Send Screenshot\n7ï¸âƒ£ Get your Key\n\nðŸŽ <b>Free Test Key:</b>\nâ€¢ Join our channel to get 3GB / 72 hours free test\n\nðŸ“ž <b>Help:</b>\nâ€¢ Contact @BurmeseDigitalStore` :
+    `ðŸ“– <b>á€¡á€žá€¯á€¶á€¸á€•á€¼á€¯á€”á€Šá€ºá€¸</b>\n\nðŸ”‘ <b>VPN Key á€á€šá€ºá€”á€Šá€ºá€¸:</b>\n1ï¸âƒ£ "ðŸ›’ VPN á€á€šá€ºá€™á€Šá€º" á€€á€­á€¯á€”á€¾á€­á€•á€ºá€•á€«\n2ï¸âƒ£ Server á€›á€½á€±á€¸á€•á€«\n3ï¸âƒ£ Protocol á€›á€½á€±á€¸á€•á€«\n4ï¸âƒ£ Device á€¡á€›á€±á€¡á€á€½á€€á€º á€›á€½á€±á€¸á€•á€«\n5ï¸âƒ£ Plan á€›á€½á€±á€¸á€•á€«\n6ï¸âƒ£ á€„á€½á€±á€œá€½á€¾á€²á€•á€¼á€®á€¸ Screenshot á€•á€­á€¯á€·á€•á€«\n7ï¸âƒ£ Key á€›á€›á€¾á€­á€•á€«á€™á€Šá€º\n\nðŸŽ <b>Free Test Key:</b>\nâ€¢ Channel join á€•á€¼á€®á€¸á€›á€„á€º 3GB / 72 á€”á€¬á€›á€® free test á€›á€”á€­á€¯á€„á€ºá€•á€«á€á€šá€º\n\nðŸ“ž <b>á€¡á€€á€°á€¡á€Šá€®:</b>\nâ€¢ @BurmeseDigitalStore á€€á€­á€¯ á€†á€€á€ºá€žá€½á€šá€ºá€•á€«`,
 
   contactBilingual: (lang) => lang === 'en' ?
-    `📞 <b>Contact Support</b>\n\n📱 Telegram: @BurmeseDigitalStore\n🌐 Website: https://burmesedigital.store\n📧 Email: support@burmesedigital.store\n\n⏰ Response Time: 1-12 hours` :
-    `📞 <b>ဆက်သွယ်ရန်</b>\n\n📱 Telegram: @BurmeseDigitalStore\n🌐 Website: https://burmesedigital.store\n📧 Email: support@burmesedigital.store\n\n⏰ တုံ့ပြန်ချိန်: 1-12 နာရီအတွင်း`,
+    `ðŸ“ž <b>Contact Support</b>\n\nðŸ“± Telegram: @BurmeseDigitalStore\nðŸŒ Website: https://burmesedigital.store\nðŸ“§ Email: support@burmesedigital.store\n\nâ° Response Time: 1-12 hours` :
+    `ðŸ“ž <b>á€†á€€á€ºá€žá€½á€šá€ºá€›á€”á€º</b>\n\nðŸ“± Telegram: @BurmeseDigitalStore\nðŸŒ Website: https://burmesedigital.store\nðŸ“§ Email: support@burmesedigital.store\n\nâ° á€á€¯á€¶á€·á€•á€¼á€”á€ºá€á€»á€­á€”á€º: 1-12 á€”á€¬á€›á€®á€¡á€á€½á€„á€ºá€¸`,
   // ---- Welcome & Menu ----
   welcome: (name: string) =>
-    `🌟 <b>Burmese Digital Store</b> မှ ကြိုဆိုပါတယ်!\n\n` +
-    `မင်္ဂလာပါ ${name}! 👋\n\n` +
-    `🔐 Premium VPN Service\n` +
-    `⚡ မြန်ဆန်သော Server များ\n` +
-    `🛡️ လုံခြုံမှုအပြည့်\n` +
-    `💰 စျေးနှုန်းသက်သာ\n\n` +
-    `အောက်ပါ menu မှ ရွေးချယ်ပါ 👇`,
+    `ðŸŒŸ <b>Burmese Digital Store</b> á€™á€¾ á€€á€¼á€­á€¯á€†á€­á€¯á€•á€«á€á€šá€º!\n\n` +
+    `á€™á€„á€ºá€¹á€‚á€œá€¬á€•á€« ${name}! ðŸ‘‹\n\n` +
+    `ðŸ” Premium VPN Service\n` +
+    `âš¡ á€™á€¼á€”á€ºá€†á€”á€ºá€žá€±á€¬ Server á€™á€»á€¬á€¸\n` +
+    `ðŸ›¡ï¸ á€œá€¯á€¶á€á€¼á€¯á€¶á€™á€¾á€¯á€¡á€•á€¼á€Šá€·á€º\n` +
+    `ðŸ’° á€…á€»á€±á€¸á€”á€¾á€¯á€”á€ºá€¸á€žá€€á€ºá€žá€¬\n\n` +
+    `á€¡á€±á€¬á€€á€ºá€•á€« menu á€™á€¾ á€›á€½á€±á€¸á€á€»á€šá€ºá€•á€« ðŸ‘‡`,
 
   help:
-    `📖 <b>အသုံးပြုနည်း</b>\n\n` +
-    `🔑 <b>VPN Key ဝယ်နည်း:</b>\n` +
-    `1️⃣ "🛒 VPN Key ဝယ်မည်" ကိုနှိပ်ပါ\n` +
-    `2️⃣ Server ရွေးပါ\n` +
-    `3️⃣ Protocol ရွေးပါ\n` +
-    `4️⃣ Device အရေအတွက် ရွေးပါ\n` +
-    `5️⃣ Plan ရွေးပါ\n` +
-    `6️⃣ ငွေလွှဲပြီး Screenshot ပို့ပါ\n` +
-    `7️⃣ Key ရရှိပါမည်\n\n` +
-    `🎁 <b>Free Test Key:</b>\n` +
-    `• Channel join ပြီးရင် 3GB / 72 နာရီ free test ရနိုင်ပါတယ်\n\n` +
-    `🔄 <b>Protocol ပြောင်းခြင်း:</b>\n` +
-    `• လက်ရှိ key ကို တခြား protocol ပြောင်းနိုင်ပါတယ်\n\n` +
-    `📞 <b>အကူအညီ:</b>\n` +
-    `• @BurmeseDigitalStore ကို ဆက်သွယ်ပါ`,
+    `ðŸ“– <b>á€¡á€žá€¯á€¶á€¸á€•á€¼á€¯á€”á€Šá€ºá€¸</b>\n\n` +
+    `ðŸ”‘ <b>VPN Key á€á€šá€ºá€”á€Šá€ºá€¸:</b>\n` +
+    `1ï¸âƒ£ "ðŸ›’ VPN Key á€á€šá€ºá€™á€Šá€º" á€€á€­á€¯á€”á€¾á€­á€•á€ºá€•á€«\n` +
+    `2ï¸âƒ£ Server á€›á€½á€±á€¸á€•á€«\n` +
+    `3ï¸âƒ£ Protocol á€›á€½á€±á€¸á€•á€«\n` +
+    `4ï¸âƒ£ Device á€¡á€›á€±á€¡á€á€½á€€á€º á€›á€½á€±á€¸á€•á€«\n` +
+    `5ï¸âƒ£ Plan á€›á€½á€±á€¸á€•á€«\n` +
+    `6ï¸âƒ£ á€„á€½á€±á€œá€½á€¾á€²á€•á€¼á€®á€¸ Screenshot á€•á€­á€¯á€·á€•á€«\n` +
+    `7ï¸âƒ£ Key á€›á€›á€¾á€­á€•á€«á€™á€Šá€º\n\n` +
+    `ðŸŽ <b>Free Test Key:</b>\n` +
+    `â€¢ Channel join á€•á€¼á€®á€¸á€›á€„á€º 3GB / 72 á€”á€¬á€›á€® free test á€›á€”á€­á€¯á€„á€ºá€•á€«á€á€šá€º\n\n` +
+    `ðŸ”„ <b>Protocol á€•á€¼á€±á€¬á€„á€ºá€¸á€á€¼á€„á€ºá€¸:</b>\n` +
+    `â€¢ á€œá€€á€ºá€›á€¾á€­ key á€€á€­á€¯ á€á€á€¼á€¬á€¸ protocol á€•á€¼á€±á€¬á€„á€ºá€¸á€”á€­á€¯á€„á€ºá€•á€«á€á€šá€º\n\n` +
+    `ðŸ“ž <b>á€¡á€€á€°á€¡á€Šá€®:</b>\n` +
+    `â€¢ @BurmeseDigitalStore á€€á€­á€¯ á€†á€€á€ºá€žá€½á€šá€ºá€•á€«`,
 
   contact:
-    `📞 <b>ဆက်သွယ်ရန်</b>\n\n` +
-    `📱 Telegram: @BurmeseDigitalStore\n` +
-    `🌐 Website: https://burmesedigital.store\n` +
-    `📧 Email: support@burmesedigital.store\n\n` +
-    `⏰ တုံ့ပြန်ချိန်: 1-12 နာရီအတွင်း`,
+    `ðŸ“ž <b>á€†á€€á€ºá€žá€½á€šá€ºá€›á€”á€º</b>\n\n` +
+    `ðŸ“± Telegram: @BurmeseDigitalStore\n` +
+    `ðŸŒ Website: https://burmesedigital.store\n` +
+    `ðŸ“§ Email: support@burmesedigital.store\n\n` +
+    `â° á€á€¯á€¶á€·á€•á€¼á€”á€ºá€á€»á€­á€”á€º: 1-12 á€”á€¬á€›á€®á€¡á€á€½á€„á€ºá€¸`,
 
   // ---- Server Selection ----
-  selectServer: `🌐 <b>Server ရွေးချယ်ပါ</b>\n\nသင့်အတွက် အသင့်တော်ဆုံး server ကို ရွေးပါ:`,
+  selectServer: `ðŸŒ <b>Server á€›á€½á€±á€¸á€á€»á€šá€ºá€•á€«</b>\n\ná€žá€„á€·á€ºá€¡á€á€½á€€á€º á€¡á€žá€„á€·á€ºá€á€±á€¬á€ºá€†á€¯á€¶á€¸ server á€€á€­á€¯ á€›á€½á€±á€¸á€•á€«:`,
 
   // ---- Protocol Selection ----
   selectProtocol: (serverName: string) =>
-    `⚙️ <b>Protocol ရွေးချယ်ပါ</b>\n\n` +
+    `âš™ï¸ <b>Protocol á€›á€½á€±á€¸á€á€»á€šá€ºá€•á€«</b>\n\n` +
     `Server: ${serverName}\n\n` +
-    `⭐ Trojan - အကောင်းဆုံး (လျင်မြန်၊ လုံခြုံ)\n` +
-    `VLESS - ပေါ့ပါးပြီး မြန်ဆန်\n` +
-    `VMess - ယုံကြည်စိတ်ချရ\n` +
-    `Shadowsocks - သမားတော်`,
+    `â­ Trojan - á€¡á€€á€±á€¬á€„á€ºá€¸á€†á€¯á€¶á€¸ (á€œá€»á€„á€ºá€™á€¼á€”á€ºáŠ á€œá€¯á€¶á€á€¼á€¯á€¶)\n` +
+    `VLESS - á€•á€±á€«á€·á€•á€«á€¸á€•á€¼á€®á€¸ á€™á€¼á€”á€ºá€†á€”á€º\n` +
+    `VMess - á€šá€¯á€¶á€€á€¼á€Šá€ºá€…á€­á€á€ºá€á€»á€›\n` +
+    `Shadowsocks - á€žá€™á€¬á€¸á€á€±á€¬á€º`,
 
   // ---- Device Selection ----
   selectDevices: (serverName: string, protocol: string) =>
-    `📱 <b>Device အရေအတွက် ရွေးပါ</b>\n\n` +
+    `ðŸ“± <b>Device á€¡á€›á€±á€¡á€á€½á€€á€º á€›á€½á€±á€¸á€•á€«</b>\n\n` +
     `Server: ${serverName}\n` +
     `Protocol: ${protocol.toUpperCase()}\n\n` +
-    `တစ်ပြိုင်နက်သုံးမည့် device အရေအတွက်ကို ရွေးပါ:`,
+    `á€á€…á€ºá€•á€¼á€­á€¯á€„á€ºá€”á€€á€ºá€žá€¯á€¶á€¸á€™á€Šá€·á€º device á€¡á€›á€±á€¡á€á€½á€€á€ºá€€á€­á€¯ á€›á€½á€±á€¸á€•á€«:`,
 
   // ---- Plan Selection ----
   selectPlan: (serverName: string, protocol: string, devices: number) =>
-    `📋 <b>Plan ရွေးချယ်ပါ</b>\n\n` +
+    `ðŸ“‹ <b>Plan á€›á€½á€±á€¸á€á€»á€šá€ºá€•á€«</b>\n\n` +
     `Server: ${serverName}\n` +
     `Protocol: ${protocol.toUpperCase()}\n` +
     `Devices: ${devices}\n\n` +
-    `ကြိုက်နှစ်သက်ရာ plan ကို ရွေးပါ:`,
+    `á€€á€¼á€­á€¯á€€á€ºá€”á€¾á€…á€ºá€žá€€á€ºá€›á€¬ plan á€€á€­á€¯ á€›á€½á€±á€¸á€•á€«:`,
 
   // ---- Payment ----
   paymentInfo: (params: {
@@ -87,37 +87,37 @@ export const MSG = {
     amount: number;
     orderId: string;
   }) =>
-    `💳 <b>ငွေပေးချေရန်</b>\n\n` +
-    `📦 Order: ${params.orderNumber}\n` +
-    `🛒 ${params.planName}\n` +
-    `🌐 Server: ${params.serverName}\n` +
-    `⚙️ Protocol: ${params.protocol.toUpperCase()}\n` +
-    `💰 <b>ကျသင့်ငွေ: ${params.amount.toLocaleString()} Ks</b>\n\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `📱 <b>ငွေလွှဲရန် အကောင့်:</b>\n` +
-    `👤 အမည်: Myo Ko Aung\n` +
-    `📞 ဖုန်း: <code>09950569539</code>\n\n` +
-    `💳 KBZPay / WavePay / AYA Pay / UAB Pay\n` +
-    `━━━━━━━━━━━━━━━━━━\n\n` +
-    `✅ ငွေလွှဲပြီးပါက Screenshot ပို့ပေးပါ 📸\n` +
-    `⏰ 30 မိနစ်အတွင်း Screenshot ပို့ပါ`,
+    `ðŸ’³ <b>á€„á€½á€±á€•á€±á€¸á€á€»á€±á€›á€”á€º</b>\n\n` +
+    `ðŸ“¦ Order: ${params.orderNumber}\n` +
+    `ðŸ›’ ${params.planName}\n` +
+    `ðŸŒ Server: ${params.serverName}\n` +
+    `âš™ï¸ Protocol: ${params.protocol.toUpperCase()}\n` +
+    `ðŸ’° <b>á€€á€»á€žá€„á€·á€ºá€„á€½á€±: ${params.amount.toLocaleString()} Ks</b>\n\n` +
+    `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+    `ðŸ“± <b>á€„á€½á€±á€œá€½á€¾á€²á€›á€”á€º á€¡á€€á€±á€¬á€„á€·á€º:</b>\n` +
+    `ðŸ‘¤ á€¡á€™á€Šá€º: Myo Ko Aung\n` +
+    `ðŸ“ž á€–á€¯á€”á€ºá€¸: <code>09950569539</code>\n\n` +
+    `ðŸ’³ KBZPay / WavePay / AYA Pay / UAB Pay\n` +
+    `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n` +
+    `âœ… á€„á€½á€±á€œá€½á€¾á€²á€•á€¼á€®á€¸á€•á€«á€€ Screenshot á€•á€­á€¯á€·á€•á€±á€¸á€•á€« ðŸ“¸\n` +
+    `â° 30 á€™á€­á€”á€…á€ºá€¡á€á€½á€„á€ºá€¸ Screenshot á€•á€­á€¯á€·á€•á€«`,
 
   waitingScreenshot:
-    `📸 <b>ငွေလွှဲပြေစာ Screenshot ပို့ပေးပါ</b>\n\n` +
-    `⚠️ ရှင်းလင်းတဲ့ Screenshot ဖြစ်ရပါမယ်\n` +
-    `📋 ငွေပမာဏ ပါရပါမယ်\n` +
-    `⏰ 30 မိနစ်အတွင်း ပို့ပေးပါ`,
+    `ðŸ“¸ <b>á€„á€½á€±á€œá€½á€¾á€²á€•á€¼á€±á€…á€¬ Screenshot á€•á€­á€¯á€·á€•á€±á€¸á€•á€«</b>\n\n` +
+    `âš ï¸ á€›á€¾á€„á€ºá€¸á€œá€„á€ºá€¸á€á€²á€· Screenshot á€–á€¼á€…á€ºá€›á€•á€«á€™á€šá€º\n` +
+    `ðŸ“‹ á€„á€½á€±á€•á€™á€¬á€ á€•á€«á€›á€•á€«á€™á€šá€º\n` +
+    `â° 30 á€™á€­á€”á€…á€ºá€¡á€á€½á€„á€ºá€¸ á€•á€­á€¯á€·á€•á€±á€¸á€•á€«`,
 
   screenshotReceived:
-    `✅ <b>Screenshot ရရှိပါပြီ!</b>\n\n` +
-    `🔍 စစ်ဆေးနေပါသည်...\n` +
-    `⏳ ခဏစောင့်ပေးပါ`,
+    `âœ… <b>Screenshot á€›á€›á€¾á€­á€•á€«á€•á€¼á€®!</b>\n\n` +
+    `ðŸ” á€…á€…á€ºá€†á€±á€¸á€”á€±á€•á€«á€žá€Šá€º...\n` +
+    `â³ á€á€á€…á€±á€¬á€„á€·á€ºá€•á€±á€¸á€•á€«`,
 
   orderPending:
-    `⏳ <b>Order ကို စစ်ဆေးနေပါသည်</b>\n\n` +
-    `✅ Admin မှ အတည်ပြုပါက VPN Key ကို\n` +
-    `ဤ chat ထဲသို့ ပို့ပေးပါမည်\n\n` +
-    `⏰ ပုံမှန် 5 မိနစ် - 1 နာရီအတွင်း ရရှိပါမည်`,
+    `â³ <b>Order á€€á€­á€¯ á€…á€…á€ºá€†á€±á€¸á€”á€±á€•á€«á€žá€Šá€º</b>\n\n` +
+    `âœ… Admin á€™á€¾ á€¡á€á€Šá€ºá€•á€¼á€¯á€•á€«á€€ VPN Key á€€á€­á€¯\n` +
+    `á€¤ chat á€‘á€²á€žá€­á€¯á€· á€•á€­á€¯á€·á€•á€±á€¸á€•á€«á€™á€Šá€º\n\n` +
+    `â° á€•á€¯á€¶á€™á€¾á€”á€º 5 á€™á€­á€”á€…á€º - 1 á€”á€¬á€›á€®á€¡á€á€½á€„á€ºá€¸ á€›á€›á€¾á€­á€•á€«á€™á€Šá€º`,
 
   // ---- Key Generated ----
   keyGenerated: (params: {
@@ -126,42 +126,40 @@ export const MSG = {
     protocol: string;
     expiryDate: string;
     subLink: string;
-    configLink: string;
+    configLink?: string;
   }) =>
-    `🎉 <b>VPN Key ရရှိပါပြီ!</b>\n\n` +
-    `📋 Plan: ${params.planName}\n` +
-    `🌐 Server: ${params.serverName}\n` +
-    `⚙️ Protocol: ${params.protocol.toUpperCase()}\n` +
-    `📅 သက်တမ်း: ${params.expiryDate}\n\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `🔗 <b>Subscription Link:</b>\n` +
+    `ðŸŽ‰ <b>VPN Key á€›á€›á€¾á€­á€•á€«á€•á€¼á€®!</b>\n\n` +
+    `ðŸ“‹ Plan: ${params.planName}\n` +
+    `ðŸŒ Server: ${params.serverName}\n` +
+    `âš™ï¸ Protocol: ${params.protocol.toUpperCase()}\n` +
+    `ðŸ“… á€žá€€á€ºá€á€™á€ºá€¸: ${params.expiryDate}\n\n` +
+    `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+    `ðŸ”— <b>Subscription Link:</b>\n` +
     `<code>${params.subLink}</code>\n\n` +
-    `🔑 <b>Config Link:</b>\n` +
-    `<code>${params.configLink}</code>\n` +
-    `━━━━━━━━━━━━━━━━━━\n\n` +
-    `📱 <b>အသုံးပြုနည်း:</b>\n` +
-    `• V2rayNG (Android) - Subscription link copy ပြုလုပ်ပါ\n` +
-    `• Streisand (iOS) - Subscription link copy ပြုလုပ်ပါ\n` +
-    `• V2rayN (Windows) - Subscription link copy ပြုလုပ်ပါ`,
+    `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n\n` +
+    `ðŸ“± <b>á€¡á€žá€¯á€¶á€¸á€•á€¼á€¯á€”á€Šá€ºá€¸:</b>\n` +
+    `â€¢ V2rayNG (Android) - Subscription link copy á€•á€¼á€¯á€œá€¯á€•á€ºá€•á€«\n` +
+    `â€¢ Streisand (iOS) - Subscription link copy á€•á€¼á€¯á€œá€¯á€•á€ºá€•á€«\n` +
+    `â€¢ V2rayN (Windows) - Subscription link copy á€•á€¼á€¯á€œá€¯á€•á€ºá€•á€«`,
 
   // ---- My Keys ----
-  noKeys: `😔 <b>VPN Key မရှိပါ</b>\n\nVPN Key ဝယ်ယူရန် "🛒 VPN Key ဝယ်မည်" ကိုနှိပ်ပါ`,
+  noKeys: `ðŸ˜” <b>VPN Key á€™á€›á€¾á€­á€•á€«</b>\n\nVPN Key á€á€šá€ºá€šá€°á€›á€”á€º "ðŸ›’ VPN Key á€á€šá€ºá€™á€Šá€º" á€€á€­á€¯á€”á€¾á€­á€•á€ºá€•á€«`,
 
   // ---- Free Test ----
   freeTestJoinChannel:
-    `🎁 <b>Free Test Key ရယူရန်</b>\n\n` +
-    `📢 အရင်ဆုံး Channel ကို Join လုပ်ပေးပါ:\n` +
+    `ðŸŽ <b>Free Test Key á€›á€šá€°á€›á€”á€º</b>\n\n` +
+    `ðŸ“¢ á€¡á€›á€„á€ºá€†á€¯á€¶á€¸ Channel á€€á€­á€¯ Join á€œá€¯á€•á€ºá€•á€±á€¸á€•á€«:\n` +
     `@BurmeseDigitalStore\n\n` +
-    `Join ပြီးပါက "✅ စစ်ဆေးမည်" ကိုနှိပ်ပါ`,
+    `Join á€•á€¼á€®á€¸á€•á€«á€€ "âœ… á€…á€…á€ºá€†á€±á€¸á€™á€Šá€º" á€€á€­á€¯á€”á€¾á€­á€•á€ºá€•á€«`,
 
   freeTestNotJoined:
-    `❌ Channel ကို မ Join ရသေးပါ\n\n` +
-    `@BurmeseDigitalStore ကို Join ပြီးမှ ထပ်ကြိုးစားပါ`,
+    `âŒ Channel á€€á€­á€¯ á€™ Join á€›á€žá€±á€¸á€•á€«\n\n` +
+    `@BurmeseDigitalStore á€€á€­á€¯ Join á€•á€¼á€®á€¸á€™á€¾ á€‘á€•á€ºá€€á€¼á€­á€¯á€¸á€…á€¬á€¸á€•á€«`,
 
   freeTestAlreadyUsed:
-    `⚠️ <b>Free Test Key ကို တစ်ကြိမ်သာ ရယူနိုင်ပါသည်</b>\n\n` +
-    `သင် Free Test Key ယူပြီးပါပြီ\n` +
-    `VPN ကို ဆက်သုံးလိုပါက Key ဝယ်ယူပေးပါ`,
+    `âš ï¸ <b>Free Test Key á€€á€­á€¯ á€á€…á€ºá€€á€¼á€­á€™á€ºá€žá€¬ á€›á€šá€°á€”á€­á€¯á€„á€ºá€•á€«á€žá€Šá€º</b>\n\n` +
+    `á€žá€„á€º Free Test Key á€šá€°á€•á€¼á€®á€¸á€•á€«á€•á€¼á€®\n` +
+    `VPN á€€á€­á€¯ á€†á€€á€ºá€žá€¯á€¶á€¸á€œá€­á€¯á€•á€«á€€ Key á€á€šá€ºá€šá€°á€•á€±á€¸á€•á€«`,
 
   freeTestGenerated: (params: {
     serverName: string;
@@ -169,29 +167,17 @@ export const MSG = {
     subLink: string;
     configLink: string;
   }) =>
-    `🎉 <b>Free Test Key ရရှိပါပြီ!</b>\n\n` +
-    `🌐 Server: ${params.serverName}\n` +
-    `⚙️ Protocol: ${params.protocol.toUpperCase()}\n` +
-    `📊 Data: 3 GB\n` +
-    `⏰ သက်တမ်း: 72 နာရီ\n` +
-    `📱 Device: 1\n\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `🔗 <b>Subscription Link:</b>\n` +
+    `ðŸŽ‰ <b>Free Test Key á€›á€›á€¾á€­á€•á€«á€•á€¼á€®!</b>\n\n` +
+    `ðŸŒ Server: ${params.serverName}\n` +
+    `âš™ï¸ Protocol: ${params.protocol.toUpperCase()}\n` +
+    `ðŸ“Š Data: 3 GB\n` +
+    `â° á€žá€€á€ºá€á€™á€ºá€¸: 72 á€”á€¬á€›á€®\n` +
+    `ðŸ“± Device: 1\n\n` +
+    `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+    `ðŸ”— <b>Subscription Link:</b>\n` +
     `<code>${params.subLink}</code>\n` +
-    (params.configLink ? `\n🔑 <b>Config Link:</b>\n<code>${params.configLink}</code>\n` : '') +
-    `━━━━━━━━━━━━━━━━━━`,
-
-  // ---- Exchange Key ----
-  exchangeDisabled: `⚠️ Protocol ပြောင်းခြင်း ယာယီပိတ်ထားပါသည်`,
-  exchangeNoKeys: `😔 ပြောင်းလဲနိုင်သော active key မရှိပါ`,
-  exchangeSelectProtocol: (currentProtocol: string) =>
-    `🔄 <b>Protocol ပြောင်းမည်</b>\n\n` +
-    `လက်ရှိ: ${currentProtocol.toUpperCase()}\n\n` +
-    `ပြောင်းလိုသော protocol ကို ရွေးပါ:`,
-  exchangeSuccess: (protocol: string) =>
-    `✅ Protocol ကို ${protocol.toUpperCase()} သို့ အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ!\n\n` +
-    `Key အသစ်ကို အောက်မှာ ကြည့်ပါ 👇`,
-  exchangeFailed: `❌ Protocol ပြောင်းလဲရာတွင် အမှားဖြစ်ပါသည်။ ပြန်လည်ကြိုးစားပါ`,
+    (params.configLink ? `\nðŸ”‘ <b>Config Link:</b>\n<code>${params.configLink}</code>\n` : '') +
+    `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”`,
 
   // ---- Referral ----
   referralInfo: (params: {
@@ -201,40 +187,40 @@ export const MSG = {
     bonusDays: number;
     canClaimFreeMonth: boolean;
   }) =>
-    `🎯 <b>Referral Program</b>\n\n` +
-    `🔗 သင့် Referral Link:\n` +
+    `ðŸŽ¯ <b>Referral Program</b>\n\n` +
+    `ðŸ”— á€žá€„á€·á€º Referral Link:\n` +
     `<code>https://t.me/BurmeseDigitalStore_bot?start=REF_${params.referralCode}</code>\n\n` +
-    `📊 <b>စာရင်း:</b>\n` +
-    `👥 စုစုပေါင်း Refer: ${params.totalReferred}\n` +
-    `✅ ဝယ်ယူပြီး: ${params.paidReferrals}\n` +
-    `📅 Bonus ရက်: ${params.bonusDays}\n\n` +
-    `🎁 <b>Reward:</b>\n` +
-    `• Refer တစ်ယောက်ဝယ်တိုင်း: +5 ရက် bonus\n` +
-    `• 3 ယောက်ဝယ်ရင်: 1 လ free key 🎉\n\n` +
-    (params.canClaimFreeMonth ? `✨ <b>Free Month Key ရယူနိုင်ပါပြီ!</b>` : ''),
+    `ðŸ“Š <b>á€…á€¬á€›á€„á€ºá€¸:</b>\n` +
+    `ðŸ‘¥ á€…á€¯á€…á€¯á€•á€±á€«á€„á€ºá€¸ Refer: ${params.totalReferred}\n` +
+    `âœ… á€á€šá€ºá€šá€°á€•á€¼á€®á€¸: ${params.paidReferrals}\n` +
+    `ðŸ“… Bonus á€›á€€á€º: ${params.bonusDays}\n\n` +
+    `ðŸŽ <b>Reward:</b>\n` +
+    `â€¢ Refer á€á€…á€ºá€šá€±á€¬á€€á€ºá€á€šá€ºá€á€­á€¯á€„á€ºá€¸: +5 á€›á€€á€º bonus\n` +
+    `â€¢ 3 á€šá€±á€¬á€€á€ºá€á€šá€ºá€›á€„á€º: 1 á€œ free key ðŸŽ‰\n\n` +
+    (params.canClaimFreeMonth ? `âœ¨ <b>Free Month Key á€›á€šá€°á€”á€­á€¯á€„á€ºá€•á€«á€•á€¼á€®!</b>` : ''),
 
   referralRewardEarned: (referrerName: string, bonusDays: number) =>
-    `🎉 ${referrerName}! သင် Refer ပေးထားတဲ့ user key ဝယ်ပါပြီ!\n` +
-    `📅 +${bonusDays} ရက် bonus ရရှိပါပြီ!`,
+    `ðŸŽ‰ ${referrerName}! á€žá€„á€º Refer á€•á€±á€¸á€‘á€¬á€¸á€á€²á€· user key á€á€šá€ºá€•á€«á€•á€¼á€®!\n` +
+    `ðŸ“… +${bonusDays} á€›á€€á€º bonus á€›á€›á€¾á€­á€•á€«á€•á€¼á€®!`,
 
-  referralDisabled: `⚠️ Referral system ယာယီပိတ်ထားပါသည်`,
+  referralDisabled: `âš ï¸ Referral system á€šá€¬á€šá€®á€•á€­á€á€ºá€‘á€¬á€¸á€•á€«á€žá€Šá€º`,
 
   // ---- Admin ----
   adminPanel:
-    `🔧 <b>Admin Panel</b>\n\n` +
-    `လုပ်ဆောင်ချက်ကို ရွေးပါ:`,
+    `ðŸ”§ <b>Admin Panel</b>\n\n` +
+    `á€œá€¯á€•á€ºá€†á€±á€¬á€„á€ºá€á€»á€€á€ºá€€á€­á€¯ á€›á€½á€±á€¸á€•á€«:`,
 
   // ---- Errors ----
-  error: `❌ အမှားတစ်ခု ဖြစ်ပေါ်ပါသည်။ ပြန်လည်ကြိုးစားပါ`,
-  banned: `🚫 သင့် account ကို ပိတ်ထားပါသည်\n\nအကြောင်းအရာ: `,
-  rateLimited: `⚠️ ခဏနေမှ ထပ်ကြိုးစားပါ`,
-  notAvailable: `⚠️ ဤလုပ်ဆောင်ချက်ကို ယာယီရပ်ထားပါသည်`,
+  error: `âŒ á€¡á€™á€¾á€¬á€¸á€á€…á€ºá€á€¯ á€–á€¼á€…á€ºá€•á€±á€«á€ºá€•á€«á€žá€Šá€ºá‹ á€•á€¼á€”á€ºá€œá€Šá€ºá€€á€¼á€­á€¯á€¸á€…á€¬á€¸á€•á€«`,
+  banned: `ðŸš« á€žá€„á€·á€º account á€€á€­á€¯ á€•á€­á€á€ºá€‘á€¬á€¸á€•á€«á€žá€Šá€º\n\ná€¡á€€á€¼á€±á€¬á€„á€ºá€¸á€¡á€›á€¬: `,
+  rateLimited: `âš ï¸ á€á€á€”á€±á€™á€¾ á€‘á€•á€ºá€€á€¼á€­á€¯á€¸á€…á€¬á€¸á€•á€«`,
+  notAvailable: `âš ï¸ á€¤á€œá€¯á€•á€ºá€†á€±á€¬á€„á€ºá€á€»á€€á€ºá€€á€­á€¯ á€šá€¬á€šá€®á€›á€•á€ºá€‘á€¬á€¸á€•á€«á€žá€Šá€º`,
 
   // ---- Order Statuses ----
   orderApproved: (orderNumber: string) =>
-    `✅ Order ${orderNumber} အတည်ပြုပြီးပါပြီ!\n\n🔑 VPN Key ကို အောက်မှာ ကြည့်ပါ 👇`,
+    `âœ… Order ${orderNumber} á€¡á€á€Šá€ºá€•á€¼á€¯á€•á€¼á€®á€¸á€•á€«á€•á€¼á€®!\n\nðŸ”‘ VPN Key á€€á€­á€¯ á€¡á€±á€¬á€€á€ºá€™á€¾á€¬ á€€á€¼á€Šá€·á€ºá€•á€« ðŸ‘‡`,
   orderRejected: (orderNumber: string) =>
-    `❌ Order ${orderNumber} ကို ငြင်းပယ်ပါပြီ\n\n📞 ပြဿနာရှိပါက @BurmeseDigitalStore သို့ ဆက်သွယ်ပါ`,
+    `âŒ Order ${orderNumber} á€€á€­á€¯ á€„á€¼á€„á€ºá€¸á€•á€šá€ºá€•á€«á€•á€¼á€®\n\nðŸ“ž á€•á€¼á€¿á€”á€¬á€›á€¾á€­á€•á€«á€€ @BurmeseDigitalStore á€žá€­á€¯á€· á€†á€€á€ºá€žá€½á€šá€ºá€•á€«`,
 
   // ---- Admin Notifications ----
   adminNewOrder: (params: {
@@ -247,14 +233,15 @@ export const MSG = {
     telegramId: number;
     ocrMatch?: boolean;
   }) =>
-    `📦 <b>New Bot Order: ${params.orderNumber}</b>\n\n` +
-    `👤 ${params.userName} (ID: ${params.telegramId})\n` +
-    `🛒 ${params.planName}\n` +
-    `🌐 Server: ${params.serverName}\n` +
-    `⚙️ Protocol: ${params.protocol.toUpperCase()}\n` +
-    `💰 <b>${params.amount.toLocaleString()} Ks</b>\n` +
+    `ðŸ“¦ <b>New Bot Order: ${params.orderNumber}</b>\n\n` +
+    `ðŸ‘¤ ${params.userName} (ID: ${params.telegramId})\n` +
+    `ðŸ›’ ${params.planName}\n` +
+    `ðŸŒ Server: ${params.serverName}\n` +
+    `âš™ï¸ Protocol: ${params.protocol.toUpperCase()}\n` +
+    `ðŸ’° <b>${params.amount.toLocaleString()} Ks</b>\n` +
     (params.ocrMatch !== undefined
-      ? `\n🔍 OCR: ${params.ocrMatch ? '✅ Match' : '❌ No match'}\n`
+      ? `\nðŸ” OCR: ${params.ocrMatch ? 'âœ… Match' : 'âŒ No match'}\n`
       : '') +
-    `\n⏳ Awaiting approval...`,
+    `\nâ³ Awaiting approval...`,
 } as const;
+

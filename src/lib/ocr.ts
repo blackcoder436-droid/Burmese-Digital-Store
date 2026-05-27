@@ -11,45 +11,169 @@ const log = createLogger({ module: 'ocr' });
 
 /** OCR language(s) — configurable via OCR_LANGUAGE env var. Default: 'eng' */
 const OCR_LANGUAGE = process.env.OCR_LANGUAGE || 'eng';
+const OCR_LANG_PATH = (process.env.OCR_LANG_PATH || '').trim();
+const OCR_MAX_ATTEMPTS = Math.max(1, parseInt(process.env.OCR_MAX_ATTEMPTS || '2', 10));
+const OCR_NETWORK_TIMEOUT_MS = Math.max(1000, parseInt(process.env.OCR_NETWORK_TIMEOUT_MS || '5000', 10));
+const OCR_RETRY_DELAY_MS = Math.max(0, parseInt(process.env.OCR_RETRY_DELAY_MS || '400', 10));
+
+const FALLBACK_LANG_PATHS = [
+  'https://tessdata.projectnaptha.com/4.0.0/',
+  'https://tessdata.projectnaptha.com/4.0.0_best/',
+  'https://raw.githubusercontent.com/naptha/tessdata/gh-pages/4.0.0_best_int/',
+  'https://unpkg.com/@tesseract.js-data/',
+];
+
+const langPathAvailabilityCache = new Map<string, boolean>();
+
+const EMPTY_OCR_RESULT: OCRResult = {
+  transactionId: null,
+  amount: null,
+  confidence: 0,
+  rawText: '',
+};
+
+function normalizeLangPath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  return trimmed.endsWith('/') ? trimmed : `${trimmed}/`;
+}
+
+function unique<T>(items: T[]): T[] {
+  return Array.from(new Set(items));
+}
+
+function primaryLanguage(language: string): string {
+  const first = language.split('+')[0]?.trim().toLowerCase();
+  return first || 'eng';
+}
+
+function buildLangPathCandidates(language: string): string[] {
+  const primary = primaryLanguage(language);
+  const normalizedEnvPath = normalizeLangPath(OCR_LANG_PATH);
+
+  const dynamicDefaults = FALLBACK_LANG_PATHS.map((pathValue) => {
+    if (pathValue.endsWith('/@tesseract.js-data/')) {
+      return `${pathValue}${primary}/4.0.0_best_int/`;
+    }
+    return pathValue;
+  });
+
+  return unique([normalizedEnvPath, ...dynamicDefaults].filter(Boolean));
+}
+
+function buildTrainedDataUrl(langPath: string, language: string): string {
+  return `${normalizeLangPath(langPath)}${primaryLanguage(language)}.traineddata.gz`;
+}
+
+async function isUrlReachable(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OCR_NETWORK_TIMEOUT_MS);
+
+  try {
+    const head = await fetch(url, { method: 'HEAD', signal: controller.signal, cache: 'no-store' });
+    if (head.ok) return true;
+    if (head.status === 405 || head.status === 403) {
+      const range = await fetch(url, {
+        method: 'GET',
+        headers: { Range: 'bytes=0-0' },
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      return range.ok || range.status === 206;
+    }
+    return false;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function isLangPathAvailable(langPath: string, language: string): Promise<boolean> {
+  const key = `${langPath}|${primaryLanguage(language)}`;
+  const cached = langPathAvailabilityCache.get(key);
+  if (typeof cached === 'boolean') return cached;
+
+  const reachable = await isUrlReachable(buildTrainedDataUrl(langPath, language));
+  langPathAvailabilityCache.set(key, reachable);
+  return reachable;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * Extract transaction details from a payment screenshot
  * Supports: Kpay, WaveMoney, UAB Pay, AYA Pay
  */
 export async function extractPaymentInfo(imagePath: string): Promise<OCRResult> {
-  try {
-    const result = await Tesseract.recognize(imagePath, OCR_LANGUAGE, {
-      logger: (info) => {
-        if (info.status === 'recognizing text') {
-          log.debug(`OCR Progress: ${Math.round(info.progress * 100)}%`);
+  const language = OCR_LANGUAGE.trim() || 'eng';
+  const langPathCandidates = buildLangPathCandidates(language);
+  let hadReachableSource = false;
+
+  for (const langPath of langPathCandidates) {
+    if (!(await isLangPathAvailable(langPath, language))) {
+      log.warn('OCR langPath unavailable', { candidate: langPath, language });
+      continue;
+    }
+
+    hadReachableSource = true;
+    for (let attempt = 1; attempt <= OCR_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const recognizeOptions: Record<string, unknown> = {
+          langPath,
+          logger: (info: { status?: string; progress?: number }) => {
+            if (info.status === 'recognizing text' && typeof info.progress === 'number') {
+              log.debug(`OCR Progress: ${Math.round(info.progress * 100)}%`);
+            }
+          },
+          errorHandler: (error: unknown) => {
+            log.warn('OCR worker reported error', {
+              langPath,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        };
+
+        const result = await Tesseract.recognize(imagePath, language, recognizeOptions as any);
+
+        const rawText = result.data.text;
+        const confidence = result.data.confidence;
+
+        // Extract Transaction ID
+        const transactionId = extractTransactionId(rawText);
+
+        // Extract Amount
+        const amount = extractAmount(rawText);
+
+        return {
+          transactionId,
+          amount,
+          confidence,
+          rawText,
+        };
+      } catch (error) {
+        log.error('OCR recognize attempt failed', {
+          langPath,
+          attempt,
+          maxAttempts: OCR_MAX_ATTEMPTS,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        if (attempt < OCR_MAX_ATTEMPTS && OCR_RETRY_DELAY_MS > 0) {
+          await sleep(OCR_RETRY_DELAY_MS);
         }
-      },
-    });
-
-    const rawText = result.data.text;
-    const confidence = result.data.confidence;
-
-    // Extract Transaction ID
-    const transactionId = extractTransactionId(rawText);
-
-    // Extract Amount
-    const amount = extractAmount(rawText);
-
-    return {
-      transactionId,
-      amount,
-      confidence,
-      rawText,
-    };
-  } catch (error) {
-    log.error('OCR extraction failed', { error: error instanceof Error ? error.message : String(error) });
-    return {
-      transactionId: null,
-      amount: null,
-      confidence: 0,
-      rawText: '',
-    };
+      }
+    }
   }
+
+  if (!hadReachableSource) {
+    log.error('OCR skipped - no reachable language data source', { language, langPathCandidates });
+    return EMPTY_OCR_RESULT;
+  }
+
+  log.error('OCR extraction failed after all sources/attempts', { language, langPathCandidates });
+  return EMPTY_OCR_RESULT;
 }
 
 /**

@@ -51,11 +51,12 @@ interface OrderDetail {
   vpnKey?: {
     clientEmail: string;
     subLink: string;
-    configLink: string;
+    configLink?: string;
     protocol: string;
     expiryTime: number;
     provisionedAt?: string;
   };
+  multiSubToken?: string;
   vpnProvisionStatus?: string;
   couponCode?: string;
   discountAmount?: number;

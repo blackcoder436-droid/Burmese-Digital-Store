@@ -15,6 +15,7 @@ import PaymentGateway from '@/models/PaymentGateway';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import { saveToQuarantine } from '@/lib/quarantine';
 import { sendPaymentScreenshot, buildScreenshotCaption, sendOrderWithApproveButtons } from '@/lib/telegram';
+import { notifyBotUser } from '@/lib/order-actions';
 import path from 'path';
 import User from '@/models/User';
 import { createNotification, notifyAdmins } from '@/models/Notification';
@@ -353,6 +354,12 @@ export async function POST(request: NextRequest) {
           message: `${authUser.email} placed ${createdOrders.length} order(s), total ${totalAfterDiscount.toLocaleString()} MMK.`,
           orderId: firstOrder._id,
         });
+
+        for (const co of createdOrders) {
+          if (co.status !== 'completed') {
+            await notifyBotUser(co, co.status === 'verifying' ? 'verifying' : 'pending');
+          }
+        }
       } catch (notificationError: unknown) {
         log.warn('Cart order notification creation failed (non-blocking)', {
           error: notificationError instanceof Error ? notificationError.message : String(notificationError),
@@ -364,7 +371,7 @@ export async function POST(request: NextRequest) {
     for (const co of createdOrders) {
       try {
         const prod = products.find((p) => p._id.toString() === co.product?.toString());
-        await sendOrderWithApproveButtons({
+        const messageId = await sendOrderWithApproveButtons({
           orderId: co._id.toString(),
           orderNumber: co.orderNumber,
           userName: authUser.email,
@@ -373,6 +380,10 @@ export async function POST(request: NextRequest) {
           paymentMethod,
           orderType: 'product',
         });
+        if (messageId) {
+          co.telegramMessageId = messageId;
+          await co.save();
+        }
       } catch (e) {
         log.warn('Telegram approve buttons failed (non-blocking)', { error: e instanceof Error ? e.message : String(e) });
       }

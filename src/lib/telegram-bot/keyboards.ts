@@ -27,7 +27,6 @@ export function mainMenuKeyboard(lang: 'en' | 'my' = 'my'): InlineKeyboardMarkup
       { text: '🎁 Free Test', callback_data: 'free_test' }
     ],
     [
-      { text: lang === 'en' ? '🔄 Exchange Protocol' : '🔄 Protocol ပြောင်း', callback_data: 'exchange_key' },
       { text: lang === 'en' ? '📊 Check Usage' : '📊 Usage စစ်ဆေး', callback_data: 'check_usage' }
     ],
     [
@@ -209,36 +208,6 @@ export function viewKeyKeyboard(keyId: string): InlineKeyboardMarkup {
   return markup([
     [{ text: '📋 Key Details', callback_data: `view_key_${keyId}` }],
   ]);
-}
-
-// ---- Exchange Key: Select Protocol ----
-
-export function exchangeProtocolKeyboard(
-  keyId: string,
-  enabledProtocols: string[],
-  currentProtocol: string
-): InlineKeyboardMarkup {
-  const keyboard: InlineKeyboard = [];
-
-  const protocolLabels: Record<string, string> = {
-    trojan: '⭐ Trojan',
-    vless: '⚡ VLESS',
-    vmess: '🔒 VMess',
-    shadowsocks: '🌐 Shadowsocks',
-  };
-
-  for (const proto of enabledProtocols) {
-    if (proto === currentProtocol) continue;
-    keyboard.push([
-      {
-        text: protocolLabels[proto] || proto,
-        callback_data: `expro:${keyId}:${proto}`,
-      },
-    ]);
-  }
-
-  keyboard.push([{ text: '◀️ နောက်သို့', callback_data: 'my_keys' }]);
-  return markup(keyboard);
 }
 
 // ---- Referral Menu ----

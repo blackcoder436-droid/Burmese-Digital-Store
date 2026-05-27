@@ -1,6 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import {
+  CheckCircle,
+  Copy,
+  Eye,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Search,
+  Shield,
+  Trash2,
+  XCircle,
+  X,
+} from 'lucide-react';
 
 interface MultiServerKeyRecord {
   _id: string;
@@ -14,6 +27,38 @@ interface MultiServerKeyRecord {
   serverSubLinks?: string[];
   serverConfigLinks?: string[];
   migratedFromToken?: string;
+}
+
+interface ResolvedClient {
+  serverId: string;
+  serverName: string;
+  source: 'config' | 'sub' | 'name';
+  link?: string;
+  client: {
+    email: string;
+    protocol: string;
+    enable: boolean;
+    expiryTime: number;
+    limitIp: number;
+    totalGB: number;
+    up: number;
+    down: number;
+    tgId: string;
+    subId: string;
+    serverId: string;
+    serverName: string;
+  };
+}
+
+interface MultiServerKeyDetailsResponse {
+  record: MultiServerKeyRecord;
+  clients: ResolvedClient[];
+  unresolvedLinks: string[];
+  summary: {
+    resolvedServers: number;
+    totalServers: number;
+    totalLinks: number;
+  };
 }
 
 interface SummaryCounts {
@@ -34,6 +79,11 @@ export default function AdminMultiServerKeysPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryCounts>({ active: 0, expired: 0, disabled: 0, total: 0 });
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState('');
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<MultiServerKeyRecord | null>(null);
+  const [selectedDetails, setSelectedDetails] = useState<MultiServerKeyDetailsResponse | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -79,6 +129,28 @@ export default function AdminMultiServerKeysPage() {
     }
   }
 
+  async function openDetails(record: MultiServerKeyRecord) {
+    setSelectedRecord(record);
+    setSelectedDetails(null);
+    setDetailsError('');
+    setDetailsLoading(true);
+    setShowDetailsModal(true);
+    try {
+      const res = await fetch(`/api/admin/multi-server-keys/details?id=${encodeURIComponent(record._id)}`);
+      const data = await res.json();
+      if (data.success) {
+        setSelectedDetails(data.data as MultiServerKeyDetailsResponse);
+      } else {
+        setDetailsError(data.error || 'Failed to load key details');
+      }
+    } catch (err) {
+      setDetailsError('Network error. Please try again.');
+      console.error(err);
+    } finally {
+      setDetailsLoading(false);
+    }
+  }
+
   function formatDate(ms?: number) {
     if (!ms || ms <= 0) return 'Unlimited';
     return new Date(ms).toLocaleDateString('en-GB', {
@@ -86,6 +158,11 @@ export default function AdminMultiServerKeysPage() {
       month: 'short',
       year: 'numeric',
     });
+  }
+
+  function formatGb(bytes?: number) {
+    if (!bytes || bytes <= 0) return '∞';
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   }
 
   function getStatusBadge(status?: string) {
@@ -224,35 +301,34 @@ export default function AdminMultiServerKeysPage() {
   }
 
   return (
-    <div className="min-h-screen py-10 px-4">
-      <div className="max-w-[1400px] mx-auto">
-        <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Multi-Server Key Management</h1>
-            <p className="text-sm text-gray-400 mt-1">View all migrated multi-server VPN keys and server subscriptions in one place.</p>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <input
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search token or username"
-              className="min-w-[220px] rounded-2xl border border-white/10 bg-[#0b0b19] px-4 py-2 text-sm text-white outline-none focus:border-purple-400"
-            />
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="rounded-2xl border border-white/10 bg-[#0b0b19] px-4 py-2 text-sm text-white outline-none focus:border-purple-400"
-            >
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="disabled">Disabled</option>
-              <option value="expired">Expired</option>
-            </select>
-          </div>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Multi-Server Key Management</h1>
+          <p className="text-sm text-gray-400 mt-1">All bot/web VPN orders and migrated multi-server keys live here in one place.</p>
         </div>
 
-        <div className="bg-[#10101f] rounded-3xl border border-white/10 p-5 shadow-xl shadow-black/10">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search token or username"
+            className="min-w-[220px] rounded-2xl border border-white/10 bg-[#0b0b19] px-4 py-2 text-sm text-white outline-none focus:border-purple-400"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+            className="rounded-2xl border border-white/10 bg-[#0b0b19] px-4 py-2 text-sm text-white outline-none focus:border-purple-400"
+          >
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="disabled">Disabled</option>
+            <option value="expired">Expired</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="game-card p-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
             <div className="rounded-3xl border border-purple-500/10 bg-[#0d0d1f] p-4">
               <div className="text-sm text-gray-400">Total</div>
@@ -296,7 +372,11 @@ export default function AdminMultiServerKeysPage() {
               </thead>
               <tbody>
                 {keys.map((record) => (
-                  <tr key={record._id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
+                  <tr
+                    key={record._id}
+                    onClick={() => openDetails(record)}
+                    className="border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer"
+                  >
                     <td className="px-4 py-3 text-white">
                       <div className="font-medium">{record.token.slice(0, 8)}…</div>
                       <div className="text-[10px] text-gray-500">{record.migratedFromToken ? `from ${record.migratedFromToken.slice(0, 8)}…` : 'direct'}</div>
@@ -341,7 +421,7 @@ export default function AdminMultiServerKeysPage() {
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
-                          onClick={() => openEditModal(record)}
+                          onClick={(e) => { e.stopPropagation(); openEditModal(record); }}
                           disabled={syncingId === record._id || editingId === record._id}
                           className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white hover:bg-white/10 transition-colors disabled:opacity-50 min-w-[56px] flex justify-center"
                         >
@@ -351,7 +431,7 @@ export default function AdminMultiServerKeysPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => syncRecord(record)}
+                          onClick={(e) => { e.stopPropagation(); syncRecord(record); }}
                           disabled={syncingId === record._id}
                           className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-2.5 py-1.5 text-xs text-blue-300 hover:bg-blue-500/20 transition-colors disabled:opacity-50 min-w-[56px] flex justify-center"
                           title="Sync expiry/data limits and automatically add missing new servers"
@@ -362,13 +442,13 @@ export default function AdminMultiServerKeysPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => toggleStatus(record)}
+                          onClick={(e) => { e.stopPropagation(); toggleStatus(record); }}
                           disabled={syncingId === record._id}
                           className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white hover:bg-white/10 transition-colors disabled:opacity-50"
                         >{record.status === 'disabled' ? 'Enable' : 'Disable'}</button>
                         <button
                           type="button"
-                          onClick={() => deleteRecord(record._id)}
+                          onClick={(e) => { e.stopPropagation(); deleteRecord(record._id); }}
                           disabled={syncingId === record._id}
                           className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
                         >Delete</button>
@@ -380,9 +460,9 @@ export default function AdminMultiServerKeysPage() {
             </table>
             </div>
           )}
-        </div>
+      </div>
 
-        <div className="mt-6 flex items-center justify-between text-sm text-gray-400">
+      <div className="flex items-center justify-between text-sm text-gray-400">
           <div>{keys.length} records</div>
           <div className="flex items-center gap-2">
             <button
@@ -398,7 +478,262 @@ export default function AdminMultiServerKeysPage() {
             >Next</button>
           </div>
         </div>
-      </div>
+      {/* Details Modal */}
+      {showDetailsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#10101f] border border-white/10 rounded-3xl w-full max-w-5xl max-h-[90vh] shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between gap-4 p-5 border-b border-white/10">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-cyan-300" />
+                  <h2 className="text-xl font-bold text-white truncate">Multi-Server Key Details</h2>
+                </div>
+                <p className="text-sm text-gray-400 mt-1 truncate">
+                  {selectedRecord?.username || 'Selected key'} · {selectedRecord?.token?.slice(0, 10)}…
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedRecord && (
+                  <button
+                    onClick={() => syncRecord(selectedRecord)}
+                    disabled={syncingId === selectedRecord._id || detailsLoading}
+                    className="inline-flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm text-blue-300 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                  >
+                    {syncingId === selectedRecord._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    Sync
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setShowDetailsModal(false);
+                    setSelectedRecord(null);
+                    setSelectedDetails(null);
+                    setDetailsError('');
+                  }}
+                  className="p-2 text-gray-400 hover:text-white rounded-xl transition-colors hover:bg-white/5"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              {detailsLoading ? (
+                <div className="py-16 text-center text-gray-400">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3" />
+                  Loading live 3xUI client info...
+                </div>
+              ) : detailsError ? (
+                <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-red-300">
+                  {detailsError}
+                </div>
+              ) : selectedDetails ? (
+                <>
+                  <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                    <div className="rounded-3xl border border-white/10 bg-[#0b0b19] p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Record</div>
+                          <div className="text-lg font-semibold text-white mt-1">{selectedDetails.record.username}</div>
+                        </div>
+                        <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${getStatusBadge(selectedDetails.record.status)}`}>
+                          {selectedDetails.record.status || 'active'}
+                        </span>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="text-xs text-gray-500">Token</div>
+                          <div className="mt-1 font-mono text-white break-all">{selectedDetails.record.token}</div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="text-xs text-gray-500">Migrated From</div>
+                          <div className="mt-1 text-white">{selectedDetails.record.migratedFromToken ? selectedDetails.record.migratedFromToken : 'Direct'}</div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="text-xs text-gray-500">Devices</div>
+                          <div className="mt-1 text-white">{selectedDetails.record.devices || 1}</div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="text-xs text-gray-500">Expiry</div>
+                          <div className="mt-1 text-white">{formatDate(selectedDetails.record.expiryTime)}</div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="text-xs text-gray-500">Data Limit</div>
+                          <div className="mt-1 text-white">{(selectedDetails.record.dataLimitGB ?? 0) === 0 ? 'Unlimited' : `${selectedDetails.record.dataLimitGB} GB`}</div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="text-xs text-gray-500">Link Count</div>
+                          <div className="mt-1 text-white">{selectedDetails.summary.totalLinks} total links</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-white/10 bg-[#0b0b19] p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-white font-semibold">
+                        <Shield className="w-4 h-4 text-cyan-300" />
+                        API / Sync Summary
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="text-xs text-gray-500">Resolved Servers</div>
+                          <div className="mt-1 text-2xl font-semibold text-emerald-300">{selectedDetails.summary.resolvedServers}</div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="text-xs text-gray-500">Total Servers</div>
+                          <div className="mt-1 text-2xl font-semibold text-white">{selectedDetails.summary.totalServers}</div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="text-xs text-gray-500">Sub Links</div>
+                          <div className="mt-1 text-xl font-semibold text-cyan-300">{selectedDetails.record.serverSubLinks?.length || 0}</div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                          <div className="text-xs text-gray-500">Config Links</div>
+                          <div className="mt-1 text-xl font-semibold text-purple-300">{selectedDetails.record.serverConfigLinks?.length || 0}</div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 space-y-2">
+                        <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Subscription Link</div>
+                        <div className="flex items-center justify-between gap-3">
+                          <a
+                            href={`/api/vpn/sub/${selectedDetails.record.token}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="min-w-0 truncate text-cyan-300 hover:underline"
+                          >
+                            /api/vpn/sub/{selectedDetails.record.token}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(`/api/vpn/sub/${selectedDetails.record.token}`, selectedDetails.record._id)}
+                            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white hover:bg-white/10 transition-colors"
+                          >
+                            {copiedId === selectedDetails.record._id ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {selectedDetails.unresolvedLinks.length > 0 && (
+                        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-200">
+                          <div className="font-semibold mb-1">Unresolved links</div>
+                          <div className="space-y-1">
+                            {selectedDetails.unresolvedLinks.map((link) => (
+                              <div key={link} className="break-all text-amber-100/90">
+                                {link}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-white/10 bg-[#0b0b19] p-4">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Live 3xUI Client Info</div>
+                        <div className="text-lg font-semibold text-white mt-1">Connected clients across servers</div>
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        {selectedDetails.clients.length} server{selectedDetails.clients.length !== 1 ? 's' : ''} resolved
+                      </div>
+                    </div>
+
+                    {selectedDetails.clients.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-gray-400">
+                        No live client data resolved yet. Try Sync to re-check the panels.
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        {selectedDetails.clients.map(({ serverId, serverName, source, client }) => {
+                          const usedGb = (client.up + client.down) / (1024 * 1024 * 1024);
+                          const expired = client.expiryTime > 0 && client.expiryTime < Date.now();
+                          return (
+                            <div key={serverId} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <div className="font-semibold text-white">{serverName}</div>
+                                  <div className="text-xs text-gray-500">{serverId} · {source}</div>
+                                </div>
+                                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium ${client.enable && !expired ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-red-500/20 bg-red-500/10 text-red-300'}`}>
+                                  {client.enable && !expired ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                                  {client.enable && !expired ? 'Active' : expired ? 'Expired' : 'Disabled'}
+                                </span>
+                              </div>
+
+                              <div className="space-y-1 text-sm text-gray-300">
+                                <div><span className="text-gray-500">Email:</span> {client.email}</div>
+                                <div><span className="text-gray-500">Protocol:</span> {client.protocol.toUpperCase()}</div>
+                                <div><span className="text-gray-500">Devices:</span> {client.limitIp || 0}</div>
+                                <div><span className="text-gray-500">Expiry:</span> {client.expiryTime > 0 ? formatDate(client.expiryTime) : 'Unlimited'}</div>
+                                <div><span className="text-gray-500">Usage:</span> {usedGb.toFixed(2)} GB / {formatGb(client.totalGB)}</div>
+                                <div><span className="text-gray-500">Telegram ID:</span> {client.tgId || '—'}</div>
+                                <div className="break-all"><span className="text-gray-500">Sub ID:</span> {client.subId || '—'}</div>
+                              </div>
+
+                              <div className="flex items-center gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(client.email, `${serverId}-email`)}
+                                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 transition-colors"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                  Copy email
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(client.subId, `${serverId}-sub`)}
+                                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 transition-colors"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                  Copy sub ID
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    {selectedRecord && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setShowDetailsModal(false);
+                            openEditModal(selectedRecord);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white hover:bg-white/10 transition-colors"
+                        >
+                          <Pencil className="w-4 h-4" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => toggleStatus(selectedRecord)}
+                          disabled={syncingId === selectedRecord._id}
+                          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                        >
+                          {selectedRecord.status === 'disabled' ? 'Enable' : 'Disable'}
+                        </button>
+                        <button
+                          onClick={() => deleteRecord(selectedRecord._id)}
+                          disabled={syncingId === selectedRecord._id}
+                          className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       {showEditModal && editingRecord && (

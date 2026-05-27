@@ -99,6 +99,77 @@ function cleanSecret(value?: string): string {
     .trim();
 }
 
+function normalizeServerName(value?: string): string {
+  return (value || '').trim().toLowerCase();
+}
+
+function getDoTokenForServer(serverName: string, config: {
+  doToken1?: string;
+  doToken2?: string;
+  doToken3?: string;
+  doToken4?: string;
+  doTokens?: Array<{
+    id?: string;
+    label?: string;
+    token?: string;
+    enabled?: boolean;
+  }>;
+  serverLinks?: Array<{
+    id?: string;
+    serverName?: string;
+    tokenId?: string;
+    enabled?: boolean;
+  }>;
+}): string {
+  const normalized = normalizeServerName(serverName);
+  const configuredTokens = (Array.isArray(config.doTokens) ? config.doTokens : [])
+    .map((entry, index) => ({
+      id: normalizeServerName(entry.id || `do-token-${index + 1}`) || `do-token-${index + 1}`,
+      label: String(entry.label || `Token ${index + 1}`).trim() || `Token ${index + 1}`,
+      token: cleanSecret(entry.token),
+      enabled: entry.enabled !== false,
+    }))
+    .filter((entry) => entry.token && entry.enabled);
+
+  const legacyTokens = [
+    { id: 'do-token-1', token: cleanSecret(config.doToken1) },
+    { id: 'do-token-2', token: cleanSecret(config.doToken2) },
+    { id: 'do-token-3', token: cleanSecret(config.doToken3) },
+    { id: 'do-token-4', token: cleanSecret(config.doToken4) },
+  ].filter((entry) => entry.token);
+
+  const tokenPool = configuredTokens.length > 0 ? configuredTokens : legacyTokens;
+  const fallbackTokens = tokenPool.map((entry) => entry.token).filter(Boolean);
+
+  const select = (...candidates: Array<string | undefined>) => {
+    for (const candidate of candidates) {
+      const token = cleanSecret(candidate);
+      if (token) return token;
+    }
+    return fallbackTokens[0] || '';
+  };
+
+  const serverLink = Array.isArray(config.serverLinks)
+    ? config.serverLinks.find((entry) => normalizeServerName(entry.serverName) === normalized && entry.enabled !== false)
+    : undefined;
+
+  if (serverLink?.tokenId) {
+    const linked = tokenPool.find((entry) => normalizeServerName(entry.id) === normalizeServerName(serverLink.tokenId));
+    if (linked?.token) return linked.token;
+  }
+
+  const token1 = tokenPool[0]?.token || cleanSecret(config.doToken1);
+  const token2 = tokenPool[1]?.token || cleanSecret(config.doToken2);
+  const token3 = tokenPool[2]?.token || cleanSecret(config.doToken3);
+  const token4 = tokenPool[3]?.token || cleanSecret(config.doToken4);
+
+  if (['jan', 'sg1', 'sg4'].includes(normalized)) return select(token1, token3, token2, token4);
+  if (['sg2', 'sg3'].includes(normalized)) return select(token2, token4, token1, token3);
+  if (normalized === 'backup') return select(token3, token4, token2, token1);
+
+  return select(token4, token3, token2, token1);
+}
+
 function looksLikeGlobalApiKey(value: string): boolean {
   return /^[a-f0-9]{32,64}$/i.test(value);
 }
@@ -284,7 +355,7 @@ function sftpDownload(host: string, remotePath: string, localPath: string): Prom
 // Step 2: Backup Function
 export async function actionBackupServer(serverName: string) {
   const config = await getRotateConfig();
-  const doToken = ['jan', 'sg1', 'sg4'].includes(serverName) ? config.doToken1 : config.doToken2;
+  const doToken = getDoTokenForServer(serverName, config);
   
   // 1. Get current IP from DO
   const res = await fetch(`${DO_API}/droplets`, {
@@ -358,7 +429,7 @@ tar -tzf "$backup" | grep -qx 'etc/x-ui/x-ui.db'
 // Step 3: Recreate VPS
 export async function actionRecreateServer(serverName: string) {
   const config = await getRotateConfig();
-  const doToken = ['jan', 'sg1', 'sg4'].includes(serverName) ? config.doToken1 : config.doToken2;
+  const doToken = getDoTokenForServer(serverName, config);
   const region = serverName === 'sg4' ? 'nyc1' : 'sgp1';
   
   // Custom Cloud-Init to force specific root password as requested
@@ -411,7 +482,7 @@ ssh_pwauth: True
 // Step 4: Update DNS
 export async function actionUpdateDNS(serverName: string) {
   const config = await getRotateConfig();
-  const doToken = ['jan', 'sg1', 'sg4'].includes(serverName) ? config.doToken1 : config.doToken2;
+  const doToken = getDoTokenForServer(serverName, config);
   const DOMAIN = `${serverName}.burmesedigital.store`;
 
   // Get New IP
@@ -675,7 +746,7 @@ function sftpUpload(host: string, localPath: string, remotePath: string): Promis
 // Step 5: Install & Restore
 export async function actionInstall3xUI(serverName: string, progress?: ProgressReporter) {
   const config = await getRotateConfig();
-  const doToken = ['jan', 'sg1', 'sg4'].includes(serverName) ? config.doToken1 : config.doToken2;
+  const doToken = getDoTokenForServer(serverName, config);
   const panelTarget = await getPanelTarget(serverName);
 
   // Get New IP

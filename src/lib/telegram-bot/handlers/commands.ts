@@ -204,8 +204,8 @@ export async function handleHelp(chatId: number, telegramId: number, messageId?:
   const lang = (user?.language as 'en' | 'my') || 'my';
 
   const text = lang === 'en'
-    ? `📖 <b>How to use</b>\n\n🔑 <b>Buy VPN Key:</b>\n1️⃣ Click "🛒 Buy VPN"\n2️⃣ Select Server\n3️⃣ Select Protocol\n4️⃣ Select Devices\n5️⃣ Select Plan\n6️⃣ Transfer money & Send Screenshot\n7️⃣ Get your Key\n\n🎁 <b>Free Test Key:</b>\n• Join our channel to get 3GB / 72 hours free test\n\n🔄 <b>Exchange Protocol:</b>\n• Change current key to another protocol\n\n📞 <b>Help:</b>\n• Contact @BurmeseDigitalStore`
-    : `📖 <b>အသုံးပြုနည်း</b>\n\n🔑 <b>VPN Key ဝယ်နည်း:</b>\n1️⃣ "🛒 VPN ဝယ်မည်" ကိုနှိပ်ပါ\n2️⃣ Server ရွေးပါ\n3️⃣ Protocol ရွေးပါ\n4️⃣ Device အရေအတွက် ရွေးပါ\n5️⃣ Plan ရွေးပါ\n6️⃣ ငွေလွှဲပြီး Screenshot ပို့ပါ\n7️⃣ Key ရရှိပါမည်\n\n🎁 <b>Free Test Key:</b>\n• Channel join ပြီးရင် 3GB / 72 နာရီ free test ရနိုင်ပါတယ်\n\n🔄 <b>Protocol ပြောင်းခြင်း:</b>\n• လက်ရှိ key ကို တခြား protocol ပြောင်းနိုင်ပါတယ်\n\n📞 <b>အကူအညီ:</b>\n• @BurmeseDigitalStore ကို ဆက်သွယ်ပါ`;
+    ? `📖 <b>How to use</b>\n\n🔑 <b>Buy VPN Key:</b>\n1️⃣ Click "🛒 Buy VPN"\n2️⃣ Select Server\n3️⃣ Select Protocol\n4️⃣ Select Devices\n5️⃣ Select Plan\n6️⃣ Transfer money & Send Screenshot\n7️⃣ Get your Key\n\n🎁 <b>Free Test Key:</b>\n• Join our channel to get 3GB / 72 hours free test\n\n📞 <b>Help:</b>\n• Contact @BurmeseDigitalStore`
+    : `📖 <b>အသုံးပြုနည်း</b>\n\n🔑 <b>VPN Key ဝယ်နည်း:</b>\n1️⃣ "🛒 VPN ဝယ်မည်" ကိုနှိပ်ပါ\n2️⃣ Server ရွေးပါ\n3️⃣ Protocol ရွေးပါ\n4️⃣ Device အရေအတွက် ရွေးပါ\n5️⃣ Plan ရွေးပါ\n6️⃣ ငွေလွှဲပြီး Screenshot ပို့ပါ\n7️⃣ Key ရရှိပါမည်\n\n🎁 <b>Free Test Key:</b>\n• Channel join ပြီးရင် 3GB / 72 နာရီ free test ရနိုင်ပါတယ်\n\n📞 <b>အကူအညီ:</b>\n• @BurmeseDigitalStore ကို ဆက်သွယ်ပါ`;
 
   if (messageId) {
     await editMessageText(chatId, messageId, text, { replyMarkup: mainMenuKeyboard(lang) });

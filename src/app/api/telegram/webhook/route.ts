@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Order from '@/models/Order';
-import { answerCallbackQuery, editTelegramMessage } from '@/lib/telegram';
+import { answerCallbackQuery, editTelegramCaption, editTelegramMessage } from '@/lib/telegram';
 import { webhookLimiter } from '@/lib/rateLimit';
 import { createLogger } from '@/lib/logger';
 import { approveOrder, rejectOrder } from '@/lib/order-actions';
@@ -67,7 +67,7 @@ async function handleWebOrderCallback(callbackQuery: any) {
   const callbackData: string = callbackQuery.data || '';
   const callbackQueryId: string = callbackQuery.id;
   const messageId: number = callbackQuery.message?.message_id;
-  const originalText: string = callbackQuery.message?.text || '';
+  const originalText: string = callbackQuery.message?.caption || callbackQuery.message?.text || '';
   const telegramUser = callbackQuery.from?.first_name || 'Admin';
 
   // Parse callback data
@@ -87,18 +87,22 @@ async function handleWebOrderCallback(callbackQuery: any) {
   }
 
   // Check if already processed
-  if (order.status === 'completed' || order.status === 'rejected') {
-    await answerCallbackQuery(callbackQueryId, `⚠️ Order already ${order.status}`);
-    if (messageId) {
-      await editTelegramMessage(messageId, originalText + `\n\n⚠️ Already ${order.status}`);
+    if (order.status === 'completed' || order.status === 'rejected') {
+      await answerCallbackQuery(callbackQueryId, `⚠️ Order already ${order.status}`);
+      if (messageId) {
+        const updatedText = `${originalText}\n\n⚠️ Already ${order.status}`;
+        const edited = await editTelegramCaption(messageId, updatedText);
+        if (!edited) {
+          await editTelegramMessage(messageId, updatedText);
+        }
+      }
+      return NextResponse.json({ ok: true });
     }
-    return NextResponse.json({ ok: true });
-  }
 
-  if (action === 'approve_order') {
-    const result = await approveOrder(orderId, {
-      adminId: 'telegram',
-      adminName: telegramUser,
+    if (action === 'approve_order') {
+      const result = await approveOrder(orderId, {
+        adminId: 'telegram',
+        adminName: telegramUser,
       source: 'noti-bot',
     });
 
@@ -109,11 +113,11 @@ async function handleWebOrderCallback(callbackQuery: any) {
 
     // Update Telegram message
     if (messageId) {
-      const updatedText = originalText.replace('⏳ Awaiting approval...', '').trim();
-      await editTelegramMessage(
-        messageId,
-        updatedText + `\n\n✅ <b>APPROVED</b> by ${telegramUser}`
-      );
+      const updatedText = `${originalText.replace('⏳ Awaiting approval...', '').trim()}\n\n✅ <b>APPROVED</b> by ${telegramUser}`;
+      const edited = await editTelegramCaption(messageId, updatedText);
+      if (!edited) {
+        await editTelegramMessage(messageId, updatedText);
+      }
     }
 
     await answerCallbackQuery(callbackQueryId, `✅ Order ${order.orderNumber} approved!`);
@@ -134,11 +138,11 @@ async function handleWebOrderCallback(callbackQuery: any) {
 
     // Update Telegram message
     if (messageId) {
-      const updatedText = originalText.replace('⏳ Awaiting approval...', '').trim();
-      await editTelegramMessage(
-        messageId,
-        updatedText + `\n\n❌ <b>REJECTED</b> by ${telegramUser}`
-      );
+      const updatedText = `${originalText.replace('⏳ Awaiting approval...', '').trim()}\n\n❌ <b>REJECTED</b> by ${telegramUser}`;
+      const edited = await editTelegramCaption(messageId, updatedText);
+      if (!edited) {
+        await editTelegramMessage(messageId, updatedText);
+      }
     }
 
     await answerCallbackQuery(callbackQueryId, `❌ Order ${order.orderNumber} rejected`);

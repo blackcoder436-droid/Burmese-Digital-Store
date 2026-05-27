@@ -99,16 +99,7 @@ export async function GET(
     const order = await Order.findOne({ multiSubToken: token }).lean();
     if (!order) return new NextResponse('Invalid or expired subscription token', { status: 404 });
 
-    if (order.vpnProvisionStatus !== 'provisioned' || !order.vpnKeys || order.vpnKeys.length === 0) {
-      if (order.vpnKey?.subLink) {
-        const fallbackRes = await fetch(order.vpnKey.subLink, { next: { revalidate: 60 } });
-        if (fallbackRes.ok) {
-           const data = await fallbackRes.text();
-           return new NextResponse(data, {
-            headers: { 'Content-Type': 'text/plain', 'Cache-Control': 's-maxage=60' }
-           });
-        }
-      }
+    if (order.vpnProvisionStatus !== 'provisioned' || !order.vpnKeys || order.vpnKeys.length < 2) {
       return new NextResponse('Subscription not active', { status: 403 });
     }
 

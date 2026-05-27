@@ -7,15 +7,17 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { createLogger } from '@/lib/logger';
+import { approveOrder } from '@/lib/order-actions';
 
 const log = createLogger({ route: '/api/vpn/orders' });
-import { extractPaymentInfo } from '@/lib/ocr';
+import { extractPaymentInfo, verifyAmount } from '@/lib/ocr';
 import { getSiteSettings } from '@/models/SiteSettings';
 import { validateCoupon, recordCouponUsage } from '@/models/Coupon';
 import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import User from '@/models/User';
 import { createNotification, notifyAdmins } from '@/models/Notification';
-import { sendOrderWithApproveButtons } from '@/lib/telegram';
+import { buildApproveRejectKeyboard, buildScreenshotCaption, sendPaymentScreenshot, editTelegramCaption, editTelegramMessage } from '@/lib/telegram';
+import { notifyBotUser } from '@/lib/order-actions';
 
 import {
   validateImageUpload,
@@ -27,6 +29,58 @@ import {
 } from '@/lib/security';
 import { isValidServerId, getServer } from '@/lib/vpn-servers';
 import { getPlan, buildPlanId, isValidPlanId } from '@/lib/vpn-plans';
+
+const autoApproveTimers = new Map<string, NodeJS.Timeout>();
+
+function scheduleAutoApprove(orderId: string, delaySeconds: number, ocrMatch: boolean): void {
+  const existing = autoApproveTimers.get(orderId);
+  if (existing) {
+    clearTimeout(existing);
+    autoApproveTimers.delete(orderId);
+  }
+
+  const timer = setTimeout(async () => {
+    autoApproveTimers.delete(orderId);
+    try {
+      await connectDB();
+      const order = await Order.findById(orderId);
+      if (!order || order.status !== 'verifying') {
+        log.info('VPN website auto-approve skipped — order already processed', { orderId, status: order?.status });
+        return;
+      }
+
+      const result = await approveOrder(orderId, {
+        adminId: 'bot-auto',
+        adminName: ocrMatch ? 'Auto-Approve (OCR ✅)' : 'Auto-Approve (Timer)',
+        source: 'auto-approve',
+      });
+
+      if (!result.success) {
+        log.error('VPN website auto-approve failed', { orderId, error: result.error });
+        return;
+      }
+
+      const updated = result.order;
+      if (updated?.telegramMessageId) {
+        const text = `🤖 <b>AUTO-APPROVED</b> (${ocrMatch ? 'OCR match ✅' : 'Timer ⏱'})\n\nOrder ${updated.orderNumber} auto-approved`;
+        const captionOk = await editTelegramCaption(updated.telegramMessageId, text);
+        if (!captionOk) {
+          await editTelegramMessage(updated.telegramMessageId, text);
+        }
+      }
+
+      log.info('VPN website order auto-approved', { orderId, ocrMatch });
+    } catch (error) {
+      log.error('VPN auto-approve timer error', {
+        orderId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, delaySeconds * 1000);
+
+  autoApproveTimers.set(orderId, timer);
+  log.info('VPN website auto-approve scheduled', { orderId, delaySeconds, ocrMatch });
+}
 
 // POST /api/vpn/orders - Create new VPN order with payment screenshot
 export async function POST(request: NextRequest) {
@@ -239,6 +293,42 @@ export async function POST(request: NextRequest) {
       reviewReason: fraudResult.reviewReason,
     });
 
+    try {
+      const caption = buildScreenshotCaption({
+        orderNumber: order.orderNumber,
+        userName: authUser.email,
+        productName: `VPN ${plan.name} - ${server?.name || serverId}`,
+        amount: totalAmount,
+        paymentMethod,
+        transactionId: transactionId || (ocrData?.transactionId ?? undefined),
+      });
+      const tgResult = await sendPaymentScreenshot(
+        screenshotBuffer,
+        filename,
+        caption,
+        buildApproveRejectKeyboard(order._id.toString())
+      );
+      if (tgResult) {
+        order.telegramFileId = tgResult.fileId;
+        order.telegramMessageId = tgResult.messageId;
+        await order.save();
+      }
+    } catch (e) {
+      log.warn('Telegram VPN screenshot upload failed (non-blocking)', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+
+    const ocrMatch = Boolean(
+      ocrEnabled &&
+      ocrData &&
+      verifyAmount(ocrData.amount, totalAmount, 100)
+    );
+    if (ocrMatch) {
+      const delay = siteSettings.autoApproveDelaySeconds || 100;
+      scheduleAutoApprove(order._id.toString(), delay, ocrMatch);
+    }
+
     // Record coupon usage
     if (couponId) {
       try {
@@ -263,28 +353,14 @@ export async function POST(request: NextRequest) {
         message: `VPN order ${order.orderNumber} from ${authUser.email} (${totalAmount.toLocaleString()} MMK).`,
         orderId: order._id,
       });
+
+      if (order.status !== 'completed') {
+        await notifyBotUser(order, order.status === 'verifying' ? 'verifying' : 'pending');
+      }
     } catch (notificationError: unknown) {
       log.warn('VPN order notification creation failed (non-blocking)', {
         error: notificationError instanceof Error ? notificationError.message : String(notificationError),
       });
-    }
-
-    // Send Telegram approve/reject buttons for VPN order
-    try {
-      const serverInfo = (await import('@/lib/vpn-servers')).getServer(serverId);
-      const serverObj = await serverInfo;
-      await sendOrderWithApproveButtons({
-        orderId: order._id.toString(),
-        orderNumber: order.orderNumber,
-        userName: authUser.email,
-        productName: `VPN ${plan.name} — ${serverObj?.name || serverId}`,
-        amount: totalAmount,
-        paymentMethod,
-        orderType: 'vpn',
-        transactionId: transactionId || (ocrData?.transactionId ?? undefined),
-      });
-    } catch (e) {
-      log.warn('Telegram approve buttons failed (non-blocking)', { error: e instanceof Error ? e.message : String(e) });
     }
 
     return NextResponse.json(

@@ -1,8 +1,26 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
+export interface IRotateDoToken {
+  id: string;
+  label: string;
+  token: string;
+  enabled?: boolean;
+}
+
+export interface IRotateServerLink {
+  id: string;
+  serverName: string;
+  tokenId: string;
+  enabled?: boolean;
+}
+
 export interface IRotateConfigDocument extends Document {
   doToken1: string; // Token for Account 1 (jan, sg1, sg4)
   doToken2: string; // Token for Account 2 (sg2, sg3, backup)
+  doToken3?: string; // Optional Token for Account 3
+  doToken4?: string; // Optional Token for Account 4
+  doTokens?: IRotateDoToken[];
+  serverLinks?: IRotateServerLink[];
   cfToken: string;  // Cloudflare API Token
   cfEmail: string;  // Cloudflare Email (e.g. blackcoder436@gmail.com)
   xuiUsername: string; // e.g. Blackcoder
@@ -19,6 +37,30 @@ const RotateConfigSchema: Schema = new Schema(
   {
     doToken1: { type: String, default: '' },
     doToken2: { type: String, default: '' },
+    doToken3: { type: String, default: '' },
+    doToken4: { type: String, default: '' },
+    doTokens: {
+      type: [
+        {
+          id: { type: String, default: '' },
+          label: { type: String, default: '' },
+          token: { type: String, default: '' },
+          enabled: { type: Boolean, default: true },
+        },
+      ],
+      default: [],
+    },
+    serverLinks: {
+      type: [
+        {
+          id: { type: String, default: '' },
+          serverName: { type: String, default: '' },
+          tokenId: { type: String, default: '' },
+          enabled: { type: Boolean, default: true },
+        },
+      ],
+      default: [],
+    },
     cfToken: { type: String, default: '' },
     cfEmail: { type: String, default: 'blackcoder436@gmail.com' },
     xuiUsername: { type: String, default: 'Blackcoder' },

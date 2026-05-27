@@ -6,6 +6,7 @@ import Order from '@/models/Order';
 import { isValidObjectId } from 'mongoose';
 import { getVpnClientStats } from '@/lib/xui';
 import { createLogger } from '@/lib/logger';
+import { getCustomerVpnSubLink } from '@/lib/order-sanitize';
 
 const log = createLogger({ route: '/api/vpn/status/[orderId]' });
 
@@ -45,7 +46,7 @@ export async function GET(
       _id: orderId,
       user: user.userId,
       orderType: 'vpn',
-    }).select('vpnPlan vpnKey vpnProvisionStatus status createdAt');
+    }).select('vpnPlan vpnKey vpnProvisionStatus status createdAt multiSubToken');
 
     if (!order) {
       return NextResponse.json(
@@ -59,14 +60,14 @@ export async function GET(
       status: order.status,
       vpnProvisionStatus: order.vpnProvisionStatus || 'pending',
       vpnPlan: order.vpnPlan,
+      multiSubToken: order.multiSubToken,
       createdAt: order.createdAt,
     };
 
     // If provisioned, include key details + live traffic stats
     if (order.vpnProvisionStatus === 'provisioned' && order.vpnKey) {
       result.vpnKey = {
-        subLink: order.vpnKey.subLink,
-        configLink: order.vpnKey.configLink,
+        subLink: getCustomerVpnSubLink(order.multiSubToken, order.vpnKey.subLink),
         protocol: order.vpnKey.protocol,
         expiryTime: order.vpnKey.expiryTime,
         provisionedAt: order.vpnKey.provisionedAt,

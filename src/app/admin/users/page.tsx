@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
+  Gift,
+  ChevronLeft,
+  ChevronRight,
   Search,
   Shield,
   ShieldOff,
@@ -13,8 +17,6 @@ import {
   ShoppingBag,
   DollarSign,
   Calendar,
-  Mail,
-  User,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useLanguage } from '@/lib/language';
@@ -31,8 +33,27 @@ interface UserData {
   createdAt: string;
 }
 
+interface FreeTestUser {
+  _id: string;
+  name: string;
+  email: string;
+  telegramId?: number;
+  telegramUsername?: string;
+  freeVpnTestUsedAt: string;
+  createdAt: string;
+}
+
+interface FreeTestPagination {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+}
+
 export default function AdminUsersPage() {
   const { t } = useLanguage();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -40,16 +61,43 @@ export default function AdminUsersPage() {
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [freeUsers, setFreeUsers] = useState<FreeTestUser[]>([]);
+  const [freeLoading, setFreeLoading] = useState(false);
+  const [freeSearch, setFreeSearch] = useState('');
+  const [freePagination, setFreePagination] = useState<FreeTestPagination>({ page: 1, limit: 20, total: 0, pages: 1 });
+  const activeView = searchParams.get('view') === 'free-test' ? 'free-test' : 'users';
 
   useEffect(() => {
+    if (activeView !== 'users') return;
     fetchUsers();
-  }, [roleFilter]);
+  }, [roleFilter, activeView]);
 
   // Debounced search
   useEffect(() => {
+    if (activeView !== 'users') return;
     const timer = setTimeout(() => fetchUsers(), 400);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, activeView]);
+
+  useEffect(() => {
+    if (activeView !== 'free-test') return;
+    fetchFreeTestUsers(1, freeSearch);
+  }, [activeView]);
+
+  useEffect(() => {
+    if (activeView !== 'free-test') return;
+    const timer = setTimeout(() => fetchFreeTestUsers(1, freeSearch), 400);
+    return () => clearTimeout(timer);
+  }, [freeSearch, activeView]);
+
+  function switchView(nextView: 'users' | 'free-test') {
+    setSelectedUser(null);
+    if (nextView === 'free-test') {
+      router.replace('/admin/users?view=free-test');
+    } else {
+      router.replace('/admin/users');
+    }
+  }
 
   async function fetchUsers(page = 1) {
     setLoading(true);
@@ -68,6 +116,31 @@ export default function AdminUsersPage() {
       toast.error(t('admin.usersPage.failedFetchUsers'));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchFreeTestUsers(page = 1, searchValue = freeSearch) {
+    setFreeLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(freePagination.limit),
+      });
+      if (searchValue.trim()) params.set('search', searchValue.trim());
+
+      const res = await fetch(`/api/admin/free-test-users?${params}`);
+      const data = await res.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch free test users');
+      }
+
+      setFreeUsers(data.data.users || []);
+      setFreePagination(data.data.pagination || { page: 1, limit: 20, total: 0, pages: 1 });
+    } catch {
+      toast.error('Failed to load free test users');
+    } finally {
+      setFreeLoading(false);
     }
   }
 
@@ -133,43 +206,165 @@ export default function AdminUsersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="heading-lg">{t('admin.usersPage.title')}</h1>
         <p className="text-sm text-gray-500">
-          {t('admin.usersPage.totalPrefix')} <span className="text-purple-400 font-bold">{pagination.total}</span> {t('admin.usersPage.totalSuffix')}
+          {activeView === 'users' ? (
+            <>
+              {t('admin.usersPage.totalPrefix')} <span className="text-purple-400 font-bold">{pagination.total}</span> {t('admin.usersPage.totalSuffix')}
+            </>
+          ) : (
+            <>
+              Free test records: <span className="text-purple-400 font-bold">{freePagination.total}</span>
+            </>
+          )}
         </p>
       </div>
 
-      {/* Search & Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('admin.usersPage.searchPlaceholder')}
-            className="input-field pl-10 !bg-[#12122a]"
-          />
-        </div>
-        <div className="flex gap-2">
-          {[
-            { value: '', label: t('shop.page.all') },
-            { value: 'user', label: t('admin.users') },
-            { value: 'admin', label: t('admin.usersPage.admins') },
-          ].map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setRoleFilter(f.value)}
-              className={`px-4 py-2 text-sm rounded-xl font-medium transition-all ${
-                roleFilter === f.value
-                  ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-glow-sm'
-                  : 'bg-[#12122a] text-gray-400 hover:text-white border border-purple-500/[0.15] hover:border-purple-500/50'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => switchView('users')}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            activeView === 'users'
+              ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-glow-sm'
+              : 'bg-[#12122a] text-gray-400 hover:text-white border border-purple-500/[0.15] hover:border-purple-500/50'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Users
+        </button>
+        <button
+          onClick={() => switchView('free-test')}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            activeView === 'free-test'
+              ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-glow-sm'
+              : 'bg-[#12122a] text-gray-400 hover:text-white border border-purple-500/[0.15] hover:border-purple-500/50'
+          }`}
+        >
+          <Gift className="w-4 h-4" />
+          Free Test Users
+        </button>
       </div>
 
+      {activeView === 'users' ? (
+        <>
+          {/* Search & Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t('admin.usersPage.searchPlaceholder')}
+                className="input-field pl-10 !bg-[#12122a]"
+              />
+            </div>
+            <div className="flex gap-2">
+              {[
+                { value: '', label: t('shop.page.all') },
+                { value: 'user', label: t('admin.users') },
+                { value: 'admin', label: t('admin.usersPage.admins') },
+              ].map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setRoleFilter(f.value)}
+                  className={`px-4 py-2 text-sm rounded-xl font-medium transition-all ${
+                    roleFilter === f.value
+                      ? 'bg-gradient-to-r from-purple-600 to-cyan-500 text-white shadow-glow-sm'
+                      : 'bg-[#12122a] text-gray-400 hover:text-white border border-purple-500/[0.15] hover:border-purple-500/50'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              value={freeSearch}
+              onChange={(e) => setFreeSearch(e.target.value)}
+              placeholder="Search by name, email, Telegram username or Telegram ID"
+              className="input-field pl-10 !bg-[#12122a]"
+            />
+          </div>
+          <p className="text-sm text-gray-500">
+            Total: <span className="text-purple-400 font-bold">{freePagination.total}</span>
+          </p>
+        </div>
+      )}
+
+      {activeView === 'free-test' ? (
+        <div className="space-y-6">
+          {freeLoading ? (
+            <div className="game-card p-12 text-center">
+              <Loader2 className="w-10 h-10 text-purple-500 animate-spin mx-auto" />
+            </div>
+          ) : freeUsers.length === 0 ? (
+            <div className="game-card p-16 text-center">
+              <Gift className="w-16 h-16 text-dark-600 mx-auto mb-4" />
+              <h3 className="text-xl text-gray-300 font-medium">No free test records found</h3>
+            </div>
+          ) : (
+            <>
+              <div className="game-card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-gray-400 uppercase border-b border-dark-700 bg-dark-800/50">
+                        <th className="p-4 font-semibold">User</th>
+                        <th className="p-4 font-semibold">Email</th>
+                        <th className="p-4 font-semibold">Telegram</th>
+                        <th className="p-4 font-semibold">Free Key Claimed At</th>
+                        <th className="p-4 font-semibold">Joined</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-dark-700">
+                      {freeUsers.map((user) => (
+                        <tr key={user._id} className="text-gray-200 hover:bg-purple-500/5 transition-colors">
+                          <td className="p-4 font-medium">{user.name}</td>
+                          <td className="p-4 text-gray-300">{user.email}</td>
+                          <td className="p-4 text-gray-300">
+                            {user.telegramUsername ? `@${user.telegramUsername}` : '-'}
+                            {user.telegramId ? <span className="text-xs text-gray-500 ml-2">({user.telegramId})</span> : null}
+                          </td>
+                          <td className="p-4 text-cyan-300">{new Date(user.freeVpnTestUsedAt).toLocaleString('en-US', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                          <td className="p-4 text-gray-400">{new Date(user.createdAt).toLocaleString('en-US', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={() => fetchFreeTestUsers(freePagination.page - 1, freeSearch)}
+                  disabled={freePagination.page <= 1 || freeLoading}
+                  className="p-2 rounded-lg border border-purple-500/20 text-gray-300 disabled:opacity-40 hover:bg-purple-500/10"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-sm text-gray-400 px-2">
+                  Page {freePagination.page} / {Math.max(1, freePagination.pages)}
+                </span>
+                <button
+                  onClick={() => fetchFreeTestUsers(freePagination.page + 1, freeSearch)}
+                  disabled={freePagination.page >= freePagination.pages || freeLoading}
+                  className="p-2 rounded-lg border border-purple-500/20 text-gray-300 disabled:opacity-40 hover:bg-purple-500/10"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {activeView === 'users' ? (
+        <>
       {/* User Detail Modal */}
       {selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -420,6 +615,8 @@ export default function AdminUsersPage() {
           )}
         </>
       )}
+        </>
+      ) : null}
     </div>
   );
 }

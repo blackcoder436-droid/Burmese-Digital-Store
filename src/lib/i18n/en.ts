@@ -661,14 +661,14 @@ const en = {
       failedSave: 'Failed to save',
       ocrPaymentVerification: 'OCR Payment Verification',
       ocrEnabledDescription:
-        'OCR is active. Payment screenshots are automatically scanned. Orders with high-confidence matches are auto-completed. Others go to "Verifying" for review.',
+        'OCR is active. Payment screenshots are automatically scanned. High-confidence matches continue through the configured approval flow, while others go to "Verifying" for review.',
       ocrDisabledDescription:
         'OCR is disabled. All orders go to "Pending" status for manual admin review. You must manually check payment screenshots and approve each order.',
       autoVerificationActive: 'Auto-verification active',
       manualReviewMode: 'Manual review mode',
       whenOcrOn: 'When OCR is ON',
       onAutoScanned: 'Screenshots are auto-scanned for payment data',
-      onHighConfidence: 'High-confidence orders complete automatically',
+      onHighConfidence: 'High-confidence orders follow the configured approval flow',
       onLowConfidence: 'Low-confidence orders require manual review',
       onStatusFlow: 'Order status: "Verifying" → "Completed"/"Rejected"',
       whenOcrOff: 'When OCR is OFF',

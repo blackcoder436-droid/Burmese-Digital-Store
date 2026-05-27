@@ -162,7 +162,7 @@ export default function MyKeys({ keys, productName }: MyKeysProps) {
                 <span className="text-xs text-slate-500 block mb-0.5">
                   {t('account.additionalInfo')}
                 </span>
-                <p className="text-sm text-slate-400">{key.additionalInfo}</p>
+                <p className="text-sm text-slate-400 whitespace-pre-wrap break-words">{key.additionalInfo}</p>
               </div>
             )}
           </div>

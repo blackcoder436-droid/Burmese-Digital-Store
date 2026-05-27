@@ -47,6 +47,8 @@ interface Order {
   deliveredKeys: any[];
   vpnPlan?: { serverId: string; planId: string; devices: number; months: number };
   vpnKey?: { clientEmail: string; subLink: string; configLink: string; protocol: string; expiryTime: number };
+  vpnKeys?: Array<{ serverId: string; serverName?: string; subLink: string; configLink?: string; expiryTime: number }>;
+  multiSubToken?: string;
   vpnProvisionStatus?: string;
   adminNote: string;
   createdAt: string;
@@ -86,6 +88,7 @@ export default function AdminOrdersPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [rejectReasonInput, setRejectReasonInput] = useState('');
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [deliveryMessageInput, setDeliveryMessageInput] = useState('');
   const [checklist, setChecklist] = useState({
     amountVerified: false,
     timeVerified: false,
@@ -98,6 +101,11 @@ export default function AdminOrdersPage() {
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkRejectReason, setBulkRejectReason] = useState('');
   const [showBulkRejectDialog, setShowBulkRejectDialog] = useState(false);
+
+  const getAdminMultiSubLink = (order: Order): string | null => {
+    if (!order.multiSubToken) return null;
+    return `/api/vpn/sub/${order.multiSubToken}`;
+  };
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -171,6 +179,14 @@ export default function AdminOrdersPage() {
     fetchOcrStatus();
   }, [filter, showReviewOnly]);
 
+  useEffect(() => {
+    if (selectedOrder) {
+      setDeliveryMessageInput('');
+    } else {
+      setDeliveryMessageInput('');
+    }
+  }, [selectedOrder]);
+
   async function fetchOcrStatus() {
     try {
       const res = await fetch('/api/admin/settings');
@@ -196,13 +212,20 @@ export default function AdminOrdersPage() {
     }
   }
 
-  async function updateOrderStatus(orderId: string, status: string, note?: string, rejectReason?: string, verificationChecklist?: Record<string, boolean>) {
+  async function updateOrderStatus(
+    orderId: string,
+    status: string,
+    note?: string,
+    rejectReason?: string,
+    verificationChecklist?: Record<string, boolean>,
+    deliveryMessage?: string
+  ) {
     setProcessing(orderId);
     try {
       const res = await fetch('/api/admin/orders', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, status, adminNote: note, rejectReason, verificationChecklist }),
+        body: JSON.stringify({ orderId, status, adminNote: note, rejectReason, verificationChecklist, deliveryMessage }),
       });
 
       const data = await res.json();
@@ -212,6 +235,7 @@ export default function AdminOrdersPage() {
         setSelectedOrder(null);
         setShowRejectDialog(false);
         setRejectReasonInput('');
+        setDeliveryMessageInput('');
         setChecklist({ amountVerified: false, timeVerified: false, accountVerified: false, txidVerified: false, payerVerified: false });
       } else {
         toast.error(data.error || t('admin.ordersPage.updateFailed'));
@@ -574,18 +598,24 @@ export default function AdminOrdersPage() {
                         <span className="text-gray-500">Client: </span>
                         <span className="text-white font-mono">{selectedOrder.vpnKey.clientEmail}</span>
                       </div>
+                      {Array.isArray(selectedOrder.vpnKeys) && selectedOrder.vpnKeys.length > 1 && (
+                        <div>
+                          <span className="text-gray-500">Servers: </span>
+                          <span className="text-white">{selectedOrder.vpnKeys.length}</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
-                        <span className="text-gray-500">Config: </span>
-                        <code className="text-purple-400 font-mono text-[10px] truncate max-w-[300px] block">{selectedOrder.vpnKey.configLink}</code>
-                        <button onClick={() => copyText(selectedOrder.vpnKey!.configLink, 'admin-config')} className="shrink-0 p-1 hover:bg-purple-500/10 rounded text-gray-400 hover:text-purple-400">
-                          {copiedField === 'admin-config' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-500">Sub: </span>
-                        <code className="text-cyan-400 font-mono text-[10px] truncate max-w-[300px] block">{selectedOrder.vpnKey.subLink}</code>
-                        <button onClick={() => copyText(selectedOrder.vpnKey!.subLink, 'admin-sub')} className="shrink-0 p-1 hover:bg-cyan-500/10 rounded text-gray-400 hover:text-cyan-400">
-                          {copiedField === 'admin-sub' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span className="text-gray-500">
+                          {getAdminMultiSubLink(selectedOrder) ? 'Multi-Sub: ' : 'Sub: '}
+                        </span>
+                        <code className="text-cyan-400 font-mono text-[10px] truncate max-w-[300px] block">
+                          {getAdminMultiSubLink(selectedOrder) || selectedOrder.vpnKey.subLink}
+                        </code>
+                        <button
+                          onClick={() => copyText(getAdminMultiSubLink(selectedOrder) || selectedOrder.vpnKey!.subLink, `admin-sub-${selectedOrder._id}`)}
+                          className="shrink-0 p-1 hover:bg-cyan-500/10 rounded text-gray-400 hover:text-cyan-400"
+                        >
+                          {copiedField === `admin-sub-${selectedOrder._id}` ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
                       </div>
                       <div>
@@ -625,6 +655,21 @@ export default function AdminOrdersPage() {
               {(selectedOrder.status === 'pending' ||
                 selectedOrder.status === 'verifying') && (
                 <div className="space-y-4 pt-5 border-t border-dark-700">
+                  {selectedOrder.orderType !== 'vpn' && (
+                    <div className="p-4 bg-dark-800 rounded-xl border border-dark-700 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-gray-400">Delivery message</p>
+                        <span className="text-[10px] text-gray-500">Shown to the customer after approval</span>
+                      </div>
+                      <textarea
+                        value={deliveryMessageInput}
+                        onChange={(e) => setDeliveryMessageInput(e.target.value)}
+                        placeholder="Paste account info, credentials, or delivery notes here..."
+                        className="w-full min-h-[96px] px-3 py-2 text-sm bg-dark-900 border border-dark-600 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 resize-y"
+                      />
+                    </div>
+                  )}
+
                   {/* Verification Checklist */}
                   <div className="p-4 bg-dark-800 rounded-xl border border-dark-700">
                     <div className="flex items-center justify-between mb-3 gap-2">
@@ -673,7 +718,14 @@ export default function AdminOrdersPage() {
                           toast.error(t('admin.ordersPage.completeAllChecks'));
                           return;
                         }
-                        updateOrderStatus(selectedOrder._id, 'completed', undefined, undefined, checklist);
+                        updateOrderStatus(
+                          selectedOrder._id,
+                          'completed',
+                          undefined,
+                          undefined,
+                          checklist,
+                          selectedOrder.orderType === 'vpn' ? undefined : deliveryMessageInput.trim()
+                        );
                       }}
                       disabled={processing === selectedOrder._id}
                       className="btn-electric flex-1 flex items-center justify-center space-x-2"

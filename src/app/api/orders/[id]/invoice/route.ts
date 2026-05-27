@@ -5,6 +5,7 @@ import { getAuthUser } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { isValidObjectId } from '@/lib/security';
 import { createLogger } from '@/lib/logger';
+import { getCustomerVpnSubLink } from '@/lib/order-sanitize';
 
 const log = createLogger({ route: '/api/orders/[id]/invoice' });
 
@@ -219,9 +220,10 @@ export async function GET(
       doc.text(`Expires: ${new Date(o.vpnKey.expiryTime).toLocaleDateString('en-US', {
         year: 'numeric', month: 'long', day: 'numeric',
       })}`, 50, y);
-      if (o.vpnKey.subLink) {
+      const vpnSubLink = getCustomerVpnSubLink(o.multiSubToken, o.vpnKey.subLink);
+      if (vpnSubLink) {
         y += 13;
-        doc.text(`Sub Link: ${o.vpnKey.subLink}`, 50, y, { width: 495, lineBreak: true });
+        doc.text(`Sub Link: ${vpnSubLink}`, 50, y, { width: 495, lineBreak: true });
       }
     }
 
