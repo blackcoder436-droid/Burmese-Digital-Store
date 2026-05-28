@@ -136,7 +136,7 @@ export async function approveOrder(
       const hasMultiServerKey = Boolean(
         order.multiSubToken &&
         Array.isArray(order.vpnKeys) &&
-        order.vpnKeys.length >= 2
+        order.vpnKeys.length >= 1
       );
 
       if (order.vpnProvisionStatus === 'provisioned' && order.vpnKey?.clientUUID && hasMultiServerKey) {
@@ -163,10 +163,10 @@ export async function approveOrder(
           return { success: false, error: 'Invalid VPN plan or no enabled servers' };
         }
 
-        if (enabledServers.length < 2) {
+        if (enabledServers.length === 0) {
           return {
             success: false,
-            error: `Multi-server VPN requires at least 2 enabled servers with ${requestedProtocol.toUpperCase()} support.`,
+            error: `Multi-server VPN requires at least 1 enabled server with ${requestedProtocol.toUpperCase()} support.`,
           };
         }
 

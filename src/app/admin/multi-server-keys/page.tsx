@@ -7,9 +7,11 @@ import {
   Eye,
   Loader2,
   Pencil,
+  Plus,
   RefreshCw,
   Search,
   Shield,
+  Sparkles,
   Trash2,
   XCircle,
   X,
@@ -68,6 +70,26 @@ interface SummaryCounts {
   total: number;
 }
 
+type CreateKeyMode = 'test' | 'sell';
+
+interface CreateKeyForm {
+  mode: CreateKeyMode;
+  username: string;
+  protocol: 'trojan' | 'vless' | 'vmess' | 'shadowsocks';
+  devices: number;
+  expiryDays: number;
+  dataLimitGB: number;
+}
+
+const DEFAULT_CREATE_FORM: CreateKeyForm = {
+  mode: 'test',
+  username: '',
+  protocol: 'vless',
+  devices: 1,
+  expiryDays: 3,
+  dataLimitGB: 3,
+};
+
 export default function AdminMultiServerKeysPage() {
   const [keys, setKeys] = useState<MultiServerKeyRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,6 +114,9 @@ export default function AdminMultiServerKeysPage() {
   const [editExpiryDate, setEditExpiryDate] = useState<string>('');
   const [editUnlimitedExpiry, setEditUnlimitedExpiry] = useState<boolean>(false);
   const [editDataLimit, setEditDataLimit] = useState(0);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateKeyForm>(DEFAULT_CREATE_FORM);
 
   useEffect(() => {
     fetchKeys();
@@ -262,6 +287,51 @@ export default function AdminMultiServerKeysPage() {
     setShowEditModal(true);
   }
 
+  function openCreateModal(mode: CreateKeyMode) {
+    setCreateForm(mode === 'test'
+      ? { ...DEFAULT_CREATE_FORM, mode, protocol: 'vless', devices: 1, expiryDays: 3, dataLimitGB: 3 }
+      : { ...DEFAULT_CREATE_FORM, mode, protocol: 'trojan', devices: 2, expiryDays: 30, dataLimitGB: 0 });
+    setShowCreateModal(true);
+  }
+
+  async function handleCreateKey() {
+    const username = createForm.username.trim();
+    if (!username) {
+      window.alert('Key name is required');
+      return;
+    }
+
+    setCreatingKey(true);
+    try {
+      const res = await fetch('/api/admin/vpn-keys/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serverId: 'all',
+          type: createForm.mode,
+          protocol: createForm.protocol,
+          username,
+          devices: createForm.devices,
+          expiryDays: createForm.expiryDays,
+          dataLimitGB: createForm.dataLimitGB,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to create key');
+      }
+
+      setShowCreateModal(false);
+      setCreateForm(DEFAULT_CREATE_FORM);
+      await fetchKeys();
+      window.alert(`Created key for ${data.data?.servers?.length || 0} server(s).`);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to create key');
+    } finally {
+      setCreatingKey(false);
+    }
+  }
+
   async function handleSaveEdit() {
     if (!editingRecord) return;
     
@@ -309,6 +379,22 @@ export default function AdminMultiServerKeysPage() {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            onClick={() => openCreateModal('test')}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20"
+          >
+            <Sparkles className="h-4 w-4" />
+            Free Test Key
+          </button>
+          <button
+            type="button"
+            onClick={() => openCreateModal('sell')}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+          >
+            <Plus className="h-4 w-4" />
+            Sell Key
+          </button>
           <input
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
@@ -730,6 +816,117 @@ export default function AdminMultiServerKeysPage() {
                   </div>
                 </>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Key Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#10101f] p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-cyan-300" />
+                  <h2 className="text-xl font-bold text-white">
+                    {createForm.mode === 'test' ? 'Free Test Key' : 'Sell Key'}
+                  </h2>
+                </div>
+                <p className="mt-1 text-sm text-gray-400">
+                  Creates a key across all enabled servers and stores it in the multi-server key list.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="rounded-xl p-2 text-gray-400 transition hover:bg-white/5 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-300">Key name</label>
+                <input
+                  type="text"
+                  value={createForm.username}
+                  onChange={(e) => setCreateForm((current) => ({ ...current, username: e.target.value }))}
+                  placeholder={createForm.mode === 'test' ? 'Free Test Key' : 'Customer name'}
+                  className="w-full rounded-2xl border border-white/10 bg-[#0b0b19] px-4 py-3 text-sm text-white outline-none transition focus:border-purple-500"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Protocol</label>
+                  <select
+                    value={createForm.protocol}
+                    onChange={(e) => setCreateForm((current) => ({ ...current, protocol: e.target.value as CreateKeyForm['protocol'] }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#0b0b19] px-4 py-3 text-sm text-white outline-none transition focus:border-purple-500"
+                  >
+                    <option value="trojan">Trojan</option>
+                    <option value="vless">VLESS</option>
+                    <option value="vmess">VMess</option>
+                    <option value="shadowsocks">Shadowsocks</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Devices</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={createForm.devices}
+                    onChange={(e) => setCreateForm((current) => ({ ...current, devices: Math.max(1, parseInt(e.target.value) || 1) }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#0b0b19] px-4 py-3 text-sm text-white outline-none transition focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Expiry days</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="3650"
+                    value={createForm.expiryDays}
+                    onChange={(e) => setCreateForm((current) => ({ ...current, expiryDays: Math.max(1, parseInt(e.target.value) || 1) }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#0b0b19] px-4 py-3 text-sm text-white outline-none transition focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">Data limit GB</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={createForm.dataLimitGB}
+                    onChange={(e) => setCreateForm((current) => ({ ...current, dataLimitGB: Math.max(0, parseInt(e.target.value) || 0) }))}
+                    className="w-full rounded-2xl border border-white/10 bg-[#0b0b19] px-4 py-3 text-sm text-white outline-none transition focus:border-purple-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-300 transition hover:bg-white/10 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateKey}
+                disabled={creatingKey}
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {creatingKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                Create key
+              </button>
             </div>
           </div>
         </div>

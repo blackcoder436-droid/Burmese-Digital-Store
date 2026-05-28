@@ -470,13 +470,13 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
       const parts = data.substring(12).split('_');
       const orderId = parts[0];
       const userId = parseInt(parts[1], 10);
-      await handleBotApprove(
+      const result = await handleBotApprove(
         ctx.callbackQueryId!,
         orderId,
         userId,
         ctx.firstName
       );
-      await answerCallback(ctx.callbackQueryId!, '✅ Order approved');
+      await answerCallback(ctx.callbackQueryId!, result.success ? '✅ Order approved' : `❌ ${result.error || 'Approval failed'}`);
 
       // Update the admin message (photo messages need editMessageCaption)
       if (ctx.messageId) {
@@ -505,13 +505,13 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
       const parts = data.substring(11).split('_');
       const orderId = parts[0];
       const userId = parseInt(parts[1], 10);
-      await handleBotReject(
+      const result = await handleBotReject(
         ctx.callbackQueryId!,
         orderId,
         userId,
         ctx.firstName
       );
-      await answerCallback(ctx.callbackQueryId!, '❌ Order rejected');
+      await answerCallback(ctx.callbackQueryId!, result.success ? '❌ Order rejected' : `❌ ${result.error || 'Rejection failed'}`);
 
       // Update the admin message (photo messages need editMessageCaption)
       if (ctx.messageId) {

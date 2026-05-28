@@ -324,9 +324,13 @@ export async function POST(request: NextRequest) {
       ocrData &&
       verifyAmount(ocrData.amount, totalAmount, 100)
     );
-    if (ocrMatch) {
+    if (ocrMatch && siteSettings.autoApproveEnabled !== false) {
       const delay = siteSettings.autoApproveDelaySeconds || 100;
       scheduleAutoApprove(order._id.toString(), delay, ocrMatch);
+    } else if (ocrMatch) {
+      log.info('VPN website auto-approve skipped because it is disabled in settings', {
+        orderId: order._id.toString(),
+      });
     }
 
     // Record coupon usage

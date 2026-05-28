@@ -179,9 +179,13 @@ export async function handlePaymentScreenshot(
 
     // Auto-approve if OCR amount matches — 100 seconds delay
     // If OCR doesn't match, order stays pending/verifying until admin approves
-    if (ocrMatch) {
+    if (ocrMatch && settings.autoApproveEnabled !== false) {
       const delay = settings.autoApproveDelaySeconds || 100;
       scheduleAutoApprove(order._id.toString(), telegramId, delay, ocrMatch);
+    } else if (ocrMatch) {
+      log.info('Bot auto-approve skipped because it is disabled in settings', {
+        orderId: order._id.toString(),
+      });
     } else {
       log.info('Auto-approve skipped (OCR no match) — waiting for admin', {
         orderId: order._id,
@@ -302,7 +306,7 @@ export async function handleBotApprove(
   orderId: string,
   userId: number,
   adminName: string
-): Promise<void> {
+): Promise<{ success: boolean; error?: string }> {
   cancelAutoApprove(orderId);
 
   try {
@@ -314,15 +318,17 @@ export async function handleBotApprove(
 
     if (!result.success) {
       log.warn('Bot approve failed', { orderId, error: result.error });
-      return;
+      return { success: false, error: result.error };
     }
 
     log.info('Bot order approved by admin', { orderId, adminName });
+    return { success: true };
   } catch (error) {
     log.error('Bot approve error', {
       orderId,
       error: error instanceof Error ? error.message : String(error),
     });
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -334,7 +340,7 @@ export async function handleBotReject(
   orderId: string,
   userId: number,
   adminName: string
-): Promise<void> {
+): Promise<{ success: boolean; error?: string }> {
   cancelAutoApprove(orderId);
 
   try {
@@ -347,14 +353,16 @@ export async function handleBotReject(
 
     if (!result.success) {
       log.warn('Bot reject failed', { orderId, error: result.error });
-      return;
+      return { success: false, error: result.error };
     }
 
     log.info('Bot order rejected by admin', { orderId, adminName });
+    return { success: true };
   } catch (error) {
     log.error('Bot reject error', {
       orderId,
       error: error instanceof Error ? error.message : String(error),
     });
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
