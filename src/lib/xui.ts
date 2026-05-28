@@ -49,6 +49,8 @@ interface XuiApiResponse {
   obj?: unknown;
 }
 
+type ProtocolName = 'trojan' | 'vless' | 'vmess' | 'shadowsocks';
+
 export interface CreateClientResult {
   success: true;
   clientEmail: string;
@@ -372,9 +374,45 @@ class XuiSession {
 
   // ---- Find inbound by protocol (only enabled inbounds) ----
   async getInboundByProtocol(protocol = 'trojan'): Promise<XuiInbound | null> {
+    const normalizedProtocol = String(protocol || 'trojan').toLowerCase() as ProtocolName;
+    const configuredPort = this.getConfiguredPortForProtocol(normalizedProtocol);
+    if (!configuredPort) return null;
+    return this.getInboundByProtocolAndPort(normalizedProtocol, configuredPort);
+  }
+
+  private getConfiguredPortForProtocol(protocol: ProtocolName): number | null {
+    const ports = this.server.protocolPorts || {};
+    const legacyTrojanPort = this.server.trojanPort ?? undefined;
+    const configured = protocol === 'trojan'
+      ? (ports.trojan ?? legacyTrojanPort)
+      : ports[protocol];
+
+    if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
+      return configured;
+    }
+
+    return null;
+  }
+
+  private async getInboundByProtocolAndPort(protocol: ProtocolName, port: number): Promise<XuiInbound | null> {
     const inbounds = await this.getInbounds();
-    // Only match enabled inbounds — disabled inbounds won't accept connections
-    return inbounds.find((ib) => ib.protocol === protocol && ib.enable !== false) || null;
+    const matches = inbounds.filter((ib) => {
+      const inboundProtocol = String(ib.protocol || '').toLowerCase();
+      return ib.enable !== false && inboundProtocol === protocol && Number(ib.port) === Number(port);
+    });
+
+    if (matches.length === 0) return null;
+
+    if (matches.length > 1) {
+      log.warn('Multiple enabled inbounds matched configured protocol port; using first match', {
+        server: this.server.id,
+        protocol,
+        port,
+        inboundIds: matches.map((ib) => ib.id),
+      });
+    }
+
+    return matches[0] || null;
   }
 
   // ---- Create client ----
@@ -389,47 +427,47 @@ class XuiSession {
     if (!this.loggedIn && !(await this.login())) return null;
 
     const { username, userId, devices, expiryDays, dataLimitGB = 0, protocol = 'trojan' } = opts;
+    const normalizedProtocol = String(protocol || 'trojan').toLowerCase() as ProtocolName;
 
     try {
-      // Find inbound by protocol (must be enabled on 3xUI)
-      let inbound = await this.getInboundByProtocol(protocol);
-      if (!inbound) {
-        // Log why the requested protocol wasn't found
-        log.warn('Requested protocol inbound not found or disabled, falling back', {
+      const configuredPort = this.getConfiguredPortForProtocol(normalizedProtocol);
+      if (!configuredPort) {
+        log.error('No configured protocol port found for server', {
           server: this.server.id,
-          requestedProtocol: protocol,
+          protocol: normalizedProtocol,
+          protocolPorts: this.server.protocolPorts,
+          trojanPort: this.server.trojanPort ?? null,
         });
-        // Fallback to first *enabled* inbound
-        const inbounds = await this.getInbounds();
-        const enabledInbounds = inbounds.filter((ib) => ib.enable !== false);
-        if (enabledInbounds.length === 0) {
-          log.error('No enabled inbounds found', { server: this.server.id });
-          return null;
-        }
-        inbound = enabledInbounds[0];
+        return null;
+      }
+
+      // Find the exact enabled inbound matching the configured protocol + port.
+      const inbound = await this.getInboundByProtocolAndPort(normalizedProtocol, configuredPort);
+      if (!inbound) {
+        log.error('Configured protocol inbound not found on 3xUI', {
+          server: this.server.id,
+          requestedProtocol: normalizedProtocol,
+          configuredPort,
+        });
+        return null;
       }
 
       const inboundId = inbound.id;
       const inboundProtocol = inbound.protocol;
       const inboundPort = inbound.port;
 
-      // Verify protocol port matches the configured protocolPorts (warn on mismatch)
-      const configuredPort = this.server.protocolPorts?.[inboundProtocol as keyof typeof this.server.protocolPorts];
-      if (configuredPort && configuredPort !== inboundPort) {
-        log.warn('Protocol port mismatch: configured port differs from 3xUI inbound port', {
+      // Final guard: if the panel inbound and configured port differ, refuse to provision.
+      if (configuredPort !== inboundPort) {
+        log.error('Protocol port mismatch: refusing to provision against wrong 3xUI inbound', {
           server: this.server.id,
           protocol: inboundProtocol,
           configuredPort,
           inboundPort,
         });
+        return null;
       }
 
       // Protocol codes
-      const protoCodes: Record<string, string> = {
-        trojan: 'TR', vless: 'VL', vmess: 'VM', shadowsocks: 'SS',
-      };
-      const protoCode = protoCodes[inboundProtocol] || 'VPN';
-
       // Client name format: username - {devices}D
       // Avoid slashes because 3xUI panel might struggle to delete them via URL params
       const deviceLabel = `${devices}D`;
