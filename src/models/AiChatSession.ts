@@ -19,6 +19,9 @@ export interface IAiChatSessionDocument extends Document {
   metadata?: {
     userAgent?: string;
     page?: string;
+    channel?: string;
+    externalId?: string;
+    pageId?: string;
   };
   closedAt?: Date;
   createdAt: Date;
@@ -63,6 +66,9 @@ const AiChatSessionSchema = new Schema<IAiChatSessionDocument>(
     metadata: {
       userAgent: { type: String, maxlength: 500 },
       page: { type: String, maxlength: 200 },
+      channel: { type: String, maxlength: 50 },
+      externalId: { type: String, maxlength: 200 },
+      pageId: { type: String, maxlength: 100 },
     },
     closedAt: { type: Date, default: null },
   },
