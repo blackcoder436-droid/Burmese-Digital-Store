@@ -21,14 +21,16 @@ import {
   type MessengerWebhookPayload,
 } from '@/lib/facebook-messenger';
 import AiChatSession from '@/models/AiChatSession';
+import {
+  forwardExternalAttachmentToTelegram,
+  generateCustomerAgentReply,
+  getPaymentAttachmentReply,
+} from '@/modules/ai-ops/service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const fbLogger = logger.child({ module: 'facebook-messenger-webhook' });
-
-const PAYMENT_ATTACHMENT_REPLY =
-  'ဓာတ်ပုံ/ဖိုင် ရလာပါတယ်။ Payment slip ဖြစ်ရင် admin က manual စစ်ပြီးမှ order ကို approve လုပ်ပေးပါမယ်။ Order/payment အတွက် website မှာ screenshot upload လုပ်ထားရင် ပိုမြန်ပါတယ်။';
 
 const AI_FALLBACK_REPLY =
   'ခဏလောက် technical issue ဖြစ်နေပါတယ်။ Telegram Bot @BurmeseDigitalStore_bot ကနေ ဆက်သွယ်ပေးပါ။ Admin က စစ်ပေးပါမယ်။';
@@ -168,46 +170,45 @@ async function handleMessengerEvent(event: MessengerMessagingEvent, entryPageId?
 
   const rawText = getMessengerEventText(event);
   if (!rawText && hasMessengerAttachment(event)) {
-    await sendReply(pageId, senderId, PAYMENT_ATTACHMENT_REPLY);
+    const reply = await getPaymentAttachmentReply();
+    const attachmentUrl = event.message?.attachments?.[0]?.payload?.url;
+    forwardExternalAttachmentToTelegram({
+      channel: 'facebook',
+      attachmentUrl,
+      sessionId: `facebook:${pageId}:${senderId}`,
+      externalUserId: senderId,
+      caption: [
+        'Facebook Messenger attachment received',
+        `Page: ${pageId}`,
+        `Sender: ${senderId}`,
+        attachmentUrl ? 'Attachment URL included' : 'No attachment URL',
+      ].join('\n'),
+      metadata: {
+        pageId,
+        attachmentType: event.message?.attachments?.[0]?.type,
+        messageId: event.message?.mid,
+      },
+    }).catch((error) => fbLogger.warn('Unable to forward Messenger attachment', { error }));
+    await sendReply(pageId, senderId, reply);
     return;
   }
 
   const message = sanitizeString(rawText || '').slice(0, 2000);
   if (!message) return;
 
-  const session = await getOrCreateFacebookSession(senderId, pageId);
-  session.messages.push({
-    role: 'user',
-    content: message,
-    timestamp: new Date(),
+  const result = await generateCustomerAgentReply({
+    channel: 'facebook',
+    sessionId: `facebook:${pageId}:${senderId}`,
+    message,
+    externalUserId: senderId,
+    page: 'facebook-messenger',
+    metadata: {
+      pageId,
+      messageId: event.message?.mid || event.postback?.mid,
+    },
   });
 
-  let reply = detectPromptInjection(message);
-
-  if (!reply) {
-    const faqMatch = matchFaqReply(message);
-    if (faqMatch && !faqMatch.passthrough) {
-      reply = faqMatch.reply;
-    }
-  }
-
-  if (!reply) {
-    try {
-      reply = await buildAiReply(session);
-    } catch (error) {
-      fbLogger.error('Facebook AI reply failed', { error });
-      reply = AI_FALLBACK_REPLY;
-    }
-  }
-
-  session.messages.push({
-    role: 'assistant',
-    content: reply,
-    timestamp: new Date(),
-  });
-  await session.save();
-
-  await sendReply(pageId, senderId, reply);
+  await sendReply(pageId, senderId, result.reply || AI_FALLBACK_REPLY);
 }
 
 export async function GET(request: NextRequest) {

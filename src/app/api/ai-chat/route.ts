@@ -3,9 +3,8 @@ import connectDB from '@/lib/mongodb';
 import { getAuthUser } from '@/lib/auth';
 import { rateLimit } from '@/lib/rateLimit';
 import { sanitizeString } from '@/lib/security';
-import { callAiApiStream, callAiApi, getCustomerSystemPrompt, matchFaqReply, detectPromptInjection } from '@/lib/ai-chat';
+import { generateCustomerAgentReply } from '@/modules/ai-ops/service';
 import AiChatSession from '@/models/AiChatSession';
-import type { AiMessage } from '@/lib/ai-chat';
 
 function mapAiError(error: unknown): { status: number; message: string } {
   const message = error instanceof Error ? error.message : String(error || 'Unknown error');
@@ -61,7 +60,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const message = sanitizeString(body.message || '').slice(0, 2000);
     const sessionId = sanitizeString(body.sessionId || '').slice(0, 64);
-    const stream = body.stream === true;
     const page = sanitizeString(body.page || '').slice(0, 200);
 
     if (!message) {
@@ -82,169 +80,23 @@ export async function POST(request: NextRequest) {
     const user = await getAuthUser();
     const userId = user?.userId || null;
 
-    await connectDB();
-
-    // Find or create session
-    let session = await AiChatSession.findOne({ sessionId });
-
-    if (!session) {
-      session = new AiChatSession({
-        sessionId,
-        user: userId,
-        context: 'customer',
-        messages: [],
-        metadata: {
-          userAgent: request.headers.get('user-agent')?.slice(0, 500),
-          page,
-        },
-      });
-    }
-
-    // Check message limit
-    if (session.messages.length >= 96) {
-      return NextResponse.json(
-        { success: false, error: 'Chat session limit reached. Please start a new conversation.' },
-        { status: 400 }
-      );
-    }
-
-    // Add user message
-    session.messages.push({
-      role: 'user',
-      content: message,
-      timestamp: new Date(),
+    const result = await generateCustomerAgentReply({
+      channel: 'website',
+      sessionId,
+      message,
+      userId,
+      page,
+      metadata: {
+        userAgent: request.headers.get('user-agent')?.slice(0, 500),
+      },
     });
-
-    // ---- Prompt Injection Protection ----
-    const injectionRefusal = detectPromptInjection(message);
-    if (injectionRefusal) {
-      session.messages.push({
-        role: 'assistant',
-        content: injectionRefusal,
-        timestamp: new Date(),
-      });
-      await session.save();
-      return NextResponse.json({
-        success: true,
-        data: { message: injectionRefusal, sessionId: session.sessionId },
-      });
-    }
-
-    // ---- FAQ Auto-Reply (instant, no AI API call needed) ----
-    const faqMatch = matchFaqReply(message);
-    if (faqMatch && !faqMatch.passthrough) {
-      session.messages.push({
-        role: 'assistant',
-        content: faqMatch.reply,
-        timestamp: new Date(),
-      });
-      await session.save();
-      return NextResponse.json({
-        success: true,
-        data: { message: faqMatch.reply, sessionId: session.sessionId },
-      });
-    }
-
-    // Build conversation for AI
-    const systemPrompt = await getCustomerSystemPrompt();
-    const aiMessages: AiMessage[] = [
-      { role: 'system', content: systemPrompt },
-    ];
-
-    // Include last 20 messages for context (to keep tokens manageable)
-    const recentMessages = session.messages.slice(-20);
-    for (const msg of recentMessages) {
-      if (msg.role === 'user' || msg.role === 'assistant') {
-        aiMessages.push({ role: msg.role, content: msg.content });
-      }
-    }
-
-    if (stream) {
-      // Streaming response
-      try {
-        const aiStream = await callAiApiStream({
-          messages: aiMessages,
-          temperature: 0.7,
-          maxTokens: 1024,
-        });
-
-        // Collect streamed content for saving to DB
-        let fullContent = '';
-        const encoder = new TextEncoder();
-        const decoder = new TextDecoder();
-
-        const transformedStream = new TransformStream({
-          transform(chunk, controller) {
-            const text = decoder.decode(chunk, { stream: true });
-            // Extract content from SSE data
-            const lines = text.split('\n');
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
-                try {
-                  const parsed = JSON.parse(trimmed.slice(6));
-                  if (parsed.content) {
-                    fullContent += parsed.content;
-                  }
-                } catch {
-                  // skip
-                }
-              }
-            }
-            controller.enqueue(chunk);
-          },
-          async flush() {
-            // Save assistant response to DB after stream completes
-            if (fullContent) {
-              try {
-                session.messages.push({
-                  role: 'assistant',
-                  content: fullContent,
-                  timestamp: new Date(),
-                });
-                await session.save();
-              } catch (err) {
-                console.error('[AI Chat] Failed to save streamed response:', err);
-              }
-            }
-          },
-        });
-
-        const readableStream = aiStream.pipeThrough(transformedStream);
-
-        return new Response(readableStream, {
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-          },
-        });
-      } catch (error) {
-        console.error('[AI Chat] Stream error:', error);
-        // Fallback to non-streaming
-      }
-    }
-
-    // Non-streaming response
-    const aiResponse = await callAiApi({
-      messages: aiMessages,
-      temperature: 0.7,
-      maxTokens: 1024,
-    });
-
-    // Save assistant response
-    session.messages.push({
-      role: 'assistant',
-      content: aiResponse,
-      timestamp: new Date(),
-    });
-    await session.save();
 
     return NextResponse.json({
       success: true,
       data: {
-        message: aiResponse,
-        sessionId: session.sessionId,
+        message: result.reply,
+        sessionId: result.sessionId,
+        source: result.source,
       },
     });
   } catch (error) {

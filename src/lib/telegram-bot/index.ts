@@ -8,7 +8,7 @@
 // ==========================================
 
 import { createLogger } from '@/lib/logger';
-import { answerCallback } from './api';
+import { answerCallback, sendMessage } from './api';
 import { getSession, clearSession } from './session';
 import type { TelegramUpdate, BotContext } from './types';
 
@@ -104,6 +104,13 @@ import {
 } from './handlers/admin';
 
 const log = createLogger({ module: 'telegram-bot-router' });
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
 function parseTwoPartCallback(data: string, colonPrefix: string, underscorePrefix: string): {
   first: string;
@@ -245,7 +252,25 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
 
   // Parse command
   const trimmed = ctx.text.trim();
-  if (!trimmed.startsWith('/')) return; // Ignore non-command text
+  if (!trimmed.startsWith('/')) {
+    const { generateCustomerAgentReply } = await import('@/modules/ai-ops/service');
+    const result = await generateCustomerAgentReply({
+      channel: 'telegram',
+      sessionId: `telegram:${ctx.userId}`,
+      message: trimmed,
+      externalUserId: String(ctx.userId),
+      page: 'telegram-bot',
+      metadata: {
+        username: ctx.username,
+        firstName: ctx.firstName,
+      },
+    });
+    await sendMessage(ctx.chatId, escapeHtml(result.reply), {
+      parseMode: 'HTML',
+      disableWebPagePreview: true,
+    });
+    return;
+  }
 
   const parts = trimmed.split(/\s+/);
   const command = parts[0].toLowerCase().split('@')[0]; // handle /command@botname
