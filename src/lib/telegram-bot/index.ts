@@ -8,9 +8,10 @@
 // ==========================================
 
 import { createLogger } from '@/lib/logger';
-import { answerCallback, sendMessage } from './api';
+import { approveOrder, rejectOrder } from '@/lib/order-actions';
+import { answerCallback, editMessageCaption, editMessageText, sendMessage } from './api';
 import { getSession, clearSession } from './session';
-import type { TelegramUpdate, BotContext } from './types';
+import type { TelegramCallbackQuery, TelegramUpdate, BotContext } from './types';
 
 // Command handlers
 import {
@@ -112,6 +113,18 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
+function toTelegramPlainText(markdown: string): string {
+  return markdown
+    .replace(/\r\n/g, '\n')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1: $2')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function parseTwoPartCallback(data: string, colonPrefix: string, underscorePrefix: string): {
   first: string;
   second: string;
@@ -169,6 +182,75 @@ function parseThreePartCallback(
   }
 
   return null;
+}
+
+async function updateOrderActionMessage(
+  ctx: BotContext,
+  callback: TelegramCallbackQuery,
+  statusLine: string
+): Promise<void> {
+  if (!ctx.messageId) return;
+
+  const originalText = callback.message?.caption || callback.message?.text || '';
+  const nextText = `${originalText.trim()}\n\n${statusLine}`.trim();
+  const hasCaption = Boolean(callback.message?.caption || callback.message?.photo?.length);
+  const edited = hasCaption
+    ? await editMessageCaption(ctx.chatId, ctx.messageId, nextText)
+    : await editMessageText(ctx.chatId, ctx.messageId, nextText);
+
+  if (!edited) {
+    log.warn('Unable to update Telegram order action message', {
+      chatId: ctx.chatId,
+      messageId: ctx.messageId,
+    });
+  }
+}
+
+async function handleWebOrderActionCallback(
+  ctx: BotContext,
+  callback: TelegramCallbackQuery,
+  action: 'approve_order' | 'reject_order',
+  orderId: string
+): Promise<void> {
+  if (!ctx.isAdmin && !isApproveChannel(ctx.chatId)) {
+    await answerCallback(ctx.callbackQueryId!, 'Admin only');
+    return;
+  }
+
+  const adminName = ctx.firstName || 'Telegram Admin';
+
+  if (action === 'approve_order') {
+    const result = await approveOrder(orderId, {
+      adminId: String(ctx.userId),
+      adminName,
+      source: 'noti-bot',
+    });
+
+    if (!result.success) {
+      await answerCallback(ctx.callbackQueryId!, result.error || 'Approval failed');
+      return;
+    }
+
+    const status = result.error === 'Order already completed' ? 'Already completed' : 'APPROVED';
+    await updateOrderActionMessage(ctx, callback, `<b>${status}</b> by ${escapeHtml(adminName)}`);
+    await answerCallback(ctx.callbackQueryId!, status);
+    return;
+  }
+
+  const result = await rejectOrder(orderId, {
+    adminId: String(ctx.userId),
+    adminName,
+    source: 'noti-bot',
+    rejectReason: `Rejected via Telegram by ${adminName}`,
+  });
+
+  if (!result.success) {
+    await answerCallback(ctx.callbackQueryId!, result.error || 'Rejection failed');
+    return;
+  }
+
+  await updateOrderActionMessage(ctx, callback, `<b>REJECTED</b> by ${escapeHtml(adminName)}`);
+  await answerCallback(ctx.callbackQueryId!, 'Rejected');
 }
 
 /**
@@ -265,7 +347,7 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
         firstName: ctx.firstName,
       },
     });
-    await sendMessage(ctx.chatId, escapeHtml(result.reply), {
+    await sendMessage(ctx.chatId, escapeHtml(toTelegramPlainText(result.reply)), {
       parseMode: 'HTML',
       disableWebPagePreview: true,
     });
@@ -663,10 +745,14 @@ async function handleCallbackQuery(update: TelegramUpdate): Promise<void> {
         await handleAdminKeyDuration(ctx.chatId, keyType, serverId, protocol, devices, expiryDays, ctx.messageId);
       }
     }
-    // ---- Existing web order approve/reject (backward compatible) ----
+    // ---- Existing web order approve/reject (unified webhook) ----
     else if (data.startsWith('approve_order:') || data.startsWith('reject_order:')) {
-      // These are handled by the original webhook handler
-      // Let them pass through without answering
+      const [action, orderId] = data.split(':') as ['approve_order' | 'reject_order', string];
+      if (!orderId) {
+        await answerCallback(ctx.callbackQueryId!, 'Invalid order action');
+        return;
+      }
+      await handleWebOrderActionCallback(ctx, callback, action, orderId);
       return;
     }
     // ---- Unknown ----

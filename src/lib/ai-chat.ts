@@ -9,6 +9,7 @@
 
 import { VPN_PLANS, getPlansForDevices, getDeviceCounts } from '@/lib/vpn-plans';
 import { getEnabledServers, type VpnServer } from '@/lib/vpn-servers';
+import { vpsPlans } from '@/lib/vps-plans';
 
 // ==========================================
 // FAQ Auto-Reply — handles common questions
@@ -69,6 +70,117 @@ function detectLanguage(text: string): 'my' | 'en' {
   return myCount > 2 ? 'my' : 'en';
 }
 
+const DOMAIN_EXTENSIONS = [
+  '.tech',
+  '.dev',
+  '.software',
+  '.engineer',
+  '.codes',
+  '.systems',
+  '.app',
+  '.studio',
+  '.page',
+  '.live',
+  '.me',
+  '.ninja',
+  '.rocks',
+  '.games',
+  '.works',
+  '.email',
+  '.foo',
+];
+
+function buildDomainServiceReply(lang: 'my' | 'en'): string {
+  if (lang === 'my') {
+    return [
+      'Domain ဝယ်လို့ရပါတယ်။ ကျွန်တော့် store မှာ Developer Domains service ရှိပြီး ၁ နှစ်စာ 30,000 MMK ပါ။',
+      '',
+      'ဝယ်နည်း:',
+      '1. /domains ကိုသွားပါ',
+      '2. လိုချင်တဲ့ domain name ထည့်ပြီး Search နှိပ်ပါ',
+      '3. Available ဖြစ်တဲ့ domain ကို Add to cart လုပ်ပါ',
+      '4. Payment screenshot တင်ပြီး admin manual verify ပြီးမှ domain ကို register လုပ်ပေးပါမယ်။',
+      '',
+      `ရနိုင်တဲ့ extensions: ${DOMAIN_EXTENSIONS.join(', ')}`,
+      '',
+      'လိုချင်တဲ့ domain name ပြောပေးရင် စစ်နည်းကို ကူညီပေးမယ်။',
+    ].join('\n');
+  }
+
+  return [
+    'Yes, you can buy domains from Burmese Digital Store. Developer Domains are 30,000 MMK for 1 year.',
+    '',
+    'How to buy:',
+    '1. Go to /domains',
+    '2. Search your domain name',
+    '3. Add an available domain to cart',
+    '4. Upload payment screenshot; admin manually verifies and registers the domain.',
+    '',
+    `Supported extensions: ${DOMAIN_EXTENSIONS.join(', ')}`,
+  ].join('\n');
+}
+
+function formatMMK(value: number): string {
+  return `${value.toLocaleString()} MMK`;
+}
+
+function buildVpsServiceReply(lang: 'my' | 'en'): string {
+  if (lang === 'my') {
+    const lines = [
+      'ရပါတယ်။ BDS မှာ Cloud VPS service ရှိပါတယ်။ Ubuntu VPS ကို payment စစ်ပြီး provision လုပ်ပေးပါတယ်။',
+      '',
+      'လက်ရှိ VPS plans:',
+      ...vpsPlans.map((plan) => {
+        const specs = plan.specs.map((spec) => `${spec.label}: ${spec.value}`).join(', ');
+        return `- ${plan.name}: ${formatMMK(plan.price)} / လ (${specs})`;
+      }),
+      '',
+      'ဝယ်ချင်ရင် /vps မှာ plan ရွေးပြီး cart/checkout ကနေ payment screenshot တင်ပါ။ Region/OS လိုအပ်ချက်ရှိရင် checkout မှာမှတ်ချက်ပေးပါ။',
+    ];
+    return lines.join('\n');
+  }
+
+  return [
+    'Yes. BDS offers Cloud VPS service. Ubuntu VPS plans are provisioned after payment verification.',
+    '',
+    'Current VPS plans:',
+    ...vpsPlans.map((plan) => {
+      const specs = plan.specs.map((spec) => `${spec.label}: ${spec.value}`).join(', ');
+      return `- ${plan.name}: ${formatMMK(plan.price)} / month (${specs})`;
+    }),
+    '',
+    'To buy, go to /vps, choose a plan, checkout, and upload your payment screenshot.',
+  ].join('\n');
+}
+
+function buildServiceOverviewReply(lang: 'my' | 'en'): string {
+  if (lang === 'my') {
+    return [
+      'မင်္ဂလာပါ။ BDS Admin ပါ။ လက်ရှိ Burmese Digital Store မှာ ဒီ services တွေကူညီပေးနိုင်ပါတယ်။',
+      '',
+      '- VPN plans/key: 1-5 devices, 1/3/5/7/9/12 months, unlimited data',
+      '- Cloud VPS: Ubuntu VPS plans, Singapore/US location, payment verify ပြီး provision',
+      '- Domain registration: /domains မှာ domain စစ်ပြီး 1 year 30,000 MMK',
+      '- Digital shop products: streaming, gaming, software, gift card စတဲ့ active products တွေ',
+      '- Payment/order/support: screenshot verify, order status, setup/troubleshooting',
+      '',
+      'လိုချင်တဲ့ service ကို ပြောပါ။ ဈေးနှုန်း/ဝယ်နည်း/တပ်ဆင်နည်းကို တိတိကျကျပြပေးမယ်။',
+    ].join('\n');
+  }
+
+  return [
+    'Hi, BDS Admin here. Burmese Digital Store can help with:',
+    '',
+    '- VPN plans/keys: 1-5 devices, 1/3/5/7/9/12 months, unlimited data',
+    '- Cloud VPS: Ubuntu VPS plans, Singapore/US locations, provisioned after payment verification',
+    '- Domain registration: check domains at /domains, 30,000 MMK for 1 year',
+    '- Digital shop products: active streaming, gaming, software, and gift-card products',
+    '- Payment/order/support: screenshot verification, order status, setup and troubleshooting',
+    '',
+    'Tell me what you need and I will show the exact price, steps, or setup help.',
+  ].join('\n');
+}
+
 /**
  * Try to match an instant FAQ reply for a user message.
  * Returns null if no FAQ matches (should forward to AI).
@@ -77,12 +189,46 @@ export function matchFaqReply(message: string): FaqMatch | null {
   const lower = message.toLowerCase().trim();
   const lang = detectLanguage(message);
 
+  // --- Greeting / service overview ---
+  const greetingPatterns = [
+    /^(hi|hello|hey|mingalarbar|မင်္ဂလာပါ|ဟိုင်း|ဟေး)$/i,
+  ];
+  if (greetingPatterns.some(p => p.test(message.trim()))) {
+    return { reply: buildServiceOverviewReply(lang) };
+  }
+
+  const serviceOverviewPatterns = [
+    /\b(services?|products?|what.*sell|what.*available|ဘာ.*service|ဘာ.*ရောင်း|ဘာတွေ.*ရှိ|ဘာတွေ.*ရ|ဘာရလဲ|ဘာရှိလဲ)\b/i,
+    /(ဝန်ဆောင်မှု|service).*?(ဘာ|ရှိ|ရ|ပေး)/i,
+  ];
+  if (serviceOverviewPatterns.some(p => p.test(message))) {
+    return { reply: buildServiceOverviewReply(lang) };
+  }
+
+  // --- VPS service ---
+  const vpsPatterns = [
+    /\b(vps|cloud\s*server|ubuntu\s*vps|server\s*hosting|droplet)\b/i,
+    /(vps|VPS|ဗီပီအက်စ်|cloud\s*server).*?(ရလား|ရှိ|ဝယ်|plan|ဈေး|စျေး|price|လိုချင်)/i,
+  ];
+  if (vpsPatterns.some(p => p.test(message))) {
+    return { reply: buildVpsServiceReply(lang) };
+  }
+
   // --- Contact / Social Links ---
   const contactPatterns = [
     /\b(contact|admin|support|social|link|ဆက်သွယ်|admin.*ဆက်|ဘယ်.*ဆက်|viber|whatsapp|telegram|facebook|email|ဖုန်း|phone)\b/i,
   ];
   if (contactPatterns.some(p => p.test(message))) {
     return { reply: lang === 'my' ? CONTACT_INFO_MY : CONTACT_INFO_EN };
+  }
+
+  // --- Domain service / domain purchase ---
+  const domainPatterns = [
+    /\b(domain|domains|\.com|\.dev|\.app|\.tech|\.software|\.studio|\.page|\.live|\.me)\b/i,
+    /(ဒိုမိန်း|ဒိုမိန့်|domain).*(ဝယ်|ရနိုင်|စစ်|register|ဝယ်ချင်|ဈေး|စျေး|price)/i,
+  ];
+  if (domainPatterns.some(p => p.test(message))) {
+    return { reply: buildDomainServiceReply(lang) };
   }
 
   // --- Pricing / Plans ---
@@ -126,7 +272,6 @@ export function matchFaqReply(message: string): FaqMatch | null {
     // General pricing
     return { reply: buildPricingReply(lang) };
   }
-
   // --- Setup Help ---
   const setupPatterns = [
     /\b(setup|install|တပ်ဆင်|ဘယ်လို.*သုံး|how.*use|how.*setup|how.*install|v2ray|vpn.*app)\b/i,
@@ -150,13 +295,14 @@ export function matchFaqReply(message: string): FaqMatch | null {
 
   // --- AI Model identity question ---
   const identityPatterns = [
-    /\b(ai\s*model|ဘယ်.*ai|what.*model|ဘာ.*model|gpt|claude|gemini|ဘယ်.*model|ဘယ်သူ|who.*are.*you|မင်း.*ဘယ်သူ|ဘယ်.*သူ.*လဲ)\b/i,
+    /\b(ai\s*model|what.*model|gpt|claude|gemini|who.*are.*you)\b/i,
+    /(ဘယ်.*ai|ဘာ.*model|ဘယ်.*model|ဘယ်သူ|မင်း.*ဘယ်သူ|ဘယ်.*သူ.*လဲ|မင်း.*ဘာလဲ|သင်.*ဘယ်သူ|နင်.*ဘယ်သူ)/i,
   ];
   if (identityPatterns.some(p => p.test(message))) {
     return {
       reply: lang === 'my'
-        ? 'ကျွန်တော်က **Blackcoder** ဖြစ်ပါတယ်။ Burmese Digital Store ရဲ့ Admin/Owner ပါ။ VPN plans, ဈေးနှုန်း, setup instructions နှင့် store နှင့်ပတ်သက်သော မေးခွန်းတွေအားလုံးကို ကိုယ်တိုင် စီမံခန့်ခွဲပြီး ဖြေရှင်းပေးနေပါတယ်။ ဘာလိုချင်ရင် ပြောပါနော်! 😊'
-        : "I'm **Blackcoder**, the Admin/Owner of Burmese Digital Store. I personally manage everything — VPN plans, pricing, setup, and all store operations. Feel free to ask me anything! 😊",
+        ? 'ကျွန်တော်က **BDS Admin** ဖြစ်ပါတယ်။ Burmese Digital Store ရဲ့ Admin ပါ။ VPN plans, ဈေးနှုန်း, setup instructions နှင့် store နှင့်ပတ်သက်သော မေးခွန်းတွေကို ကူညီဖြေရှင်းပေးနိုင်ပါတယ်။ ဘာလိုချင်ရင် ပြောပါနော်! 😊'
+        : "I'm **BDS Admin** from Burmese Digital Store. I can help with VPN plans, pricing, setup instructions, and store-related questions. Feel free to ask me anything! 😊",
     };
   }
 
@@ -184,17 +330,30 @@ const INJECTION_PATTERNS = [
   /^(system|admin|root|sudo)\s*:/i,
 ];
 
+const SENSITIVE_REQUEST_PATTERNS = [
+  /\b(show|list|dump|export|send|give|print|share)\b.*\b(users?|customers?|emails?|phone\s*numbers?|payment\s*slips?|orders?|database|mongodb|api\s*keys?|secrets?|tokens?|env|environment\s*variables?)\b/i,
+  /\b(customers?|users?)\b.*\b(emails?|phone\s*numbers?|orders?|passwords?|tokens?|payment\s*slips?)\b/i,
+  /\b(another|other)\s+(user|customer)'?s?\b.*\b(vpn\s*key|subscription|sub\s*link|password|order|email|phone|vps\s*password)\b/i,
+  /\b(give|send|show|print|share)\b.*\b(another|other)\b.*\b(vpn\s*key|subscription|password|credential|sub\s*link)\b/i,
+  /\b(vpn|vps)\b.*\b(password|credential|key|subscription)\b.*\b(another|other|customer|user)\b/i,
+  /\b(i\s*am|i'm)\s+(blackcoder|admin|owner|developer|root)\b.*\b(approve|reject|refund|paid|deliver|generate|send)\b/i,
+  /\b(approve|reject|refund|mark\s+(as\s+)?paid|complete|deliver|generate|issue)\b.*\b(order|payment|refund|vpn\s*key|subscription|vps|domain)\b/i,
+  /<\s*script\b/i,
+  /\bjavascript\s*:/i,
+  /\bon(error|load|click|mouseover)\s*=/i,
+];
+
 /**
  * Check if a message appears to contain prompt injection attempts.
  * Returns a safe refusal message if detected, null otherwise.
  */
 export function detectPromptInjection(message: string): string | null {
   const lang = detectLanguage(message);
-  for (const pattern of INJECTION_PATTERNS) {
+  for (const pattern of [...INJECTION_PATTERNS, ...SENSITIVE_REQUEST_PATTERNS]) {
     if (pattern.test(message)) {
       return lang === 'my'
-        ? 'တောင်းပန်ပါတယ်။ ဒီလိုတောင်းဆိုမှုကို လုပ်ဆောင်ပေးလို့ မရပါဘူး။ ကျွန်တော်က Blackcoder ပါ — Burmese Digital Store ရဲ့ Admin ပါ။ VPN plans, ဈေးနှုန်း, setup instructions နှင့် store ဆိုင်ရာ ကိစ္စရပ်အားလုံးကို ကူညီပေးနိုင်ပါတယ်။ 😊'
-        : "Sorry, I can't process that request. I'm Blackcoder, the Admin of Burmese Digital Store. I can help with VPN plans, pricing, setup instructions, and any store-related matters. 😊";
+        ? 'တောင်းပန်ပါတယ်။ ဒီလိုတောင်းဆိုမှုကို လုပ်ဆောင်ပေးလို့ မရပါဘူး။ ကျွန်တော်က BDS Admin ပါ။ VPN plans, ဈေးနှုန်း, setup instructions နှင့် store ဆိုင်ရာ ကိစ္စရပ်တွေကို ကူညီပေးနိုင်ပါတယ်။ 😊'
+        : "Sorry, I can't process that request. I'm BDS Admin from Burmese Digital Store. I can help with VPN plans, pricing, setup instructions, and store-related matters. 😊";
     }
   }
   return null;
@@ -241,12 +400,21 @@ function buildStoreKnowledge(enabledServers?: VpnServer[]): string {
 ## Store Information
 - Name: Burmese Digital Store (BDS)
 - URL: https://burmesedigital.store
-- Owner/Admin: Blackcoder (you — the person responding)
-- Products: VPN accounts, streaming subscriptions, gaming credits, software licenses, gift cards
+- Admin identity: BDS Admin (you — the person responding for Burmese Digital Store)
+- Products: VPN accounts, domain registration, streaming subscriptions, gaming credits, software licenses, gift cards
 - Payment Methods: KPay, WaveMoney, AYA Pay, CB Pay and other Myanmar mobile payment methods
-- Delivery: Instant digital delivery after payment verification (usually 1-5 minutes, you personally verify)
+- Delivery: Digital delivery after payment verification. VPN/product delivery can be fast after approval; domains are registered manually after admin verification.
 - Currency: Myanmar Kyat (MMK)
 - Language: Myanmar (Burmese) and English
+
+## Domain Service Details
+- Burmese Digital Store DOES sell/register Developer Domains from the /domains page.
+- Domain page: https://burmesedigital.store/domains
+- Price: 30,000 MMK per domain for 1 year.
+- Supported extensions: ${DOMAIN_EXTENSIONS.join(', ')}
+- Customers search a domain name, choose an available result, add it to cart, pay, and upload payment screenshot.
+- Domain registration is manual after admin payment verification. Do NOT say domain service is unsupported.
+- If a user sends a localhost URL such as http://localhost:3000/domains, treat it as the /domains page path, not a public domain name.
 
 ## VPN Service Details
 - Custom VPN service with multiple servers
@@ -331,6 +499,94 @@ ${serverListText}
 `;
 }
 
+async function buildLiveCatalogKnowledge(): Promise<string> {
+  const sections: string[] = [];
+
+  sections.push([
+    '## Verified Live Service Catalog',
+    '- Core services currently supported by BDS: VPN plans/keys, Cloud VPS, domain registration, active digital shop products, payment/order support, and technical troubleshooting.',
+    '- If a customer asks whether VPS, VPN, or domains are available, answer YES and use the details below.',
+    '- Never say a service is unavailable unless the live catalog below explicitly says it is unavailable.',
+  ].join('\n'));
+
+  sections.push([
+    '## Cloud VPS Service',
+    '- BDS offers Cloud VPS / Ubuntu VPS service from the /vps page.',
+    '- VPS delivery is provisioned after payment verification. Ask for preferred region/OS only when needed.',
+    '- Locations shown on the site: Singapore and US.',
+    '- Payment flow: choose plan -> add to cart -> checkout -> upload payment screenshot -> admin verifies -> credentials are delivered.',
+    '### VPS Plans',
+    ...vpsPlans.map((plan) => {
+      const specs = plan.specs.map((spec) => `${spec.label}: ${spec.value}`).join(', ');
+      return `- ${plan.name}: ${formatMMK(plan.price)} per month (${plan.os}; ${specs})`;
+    }),
+  ].join('\n'));
+
+  try {
+    const [{ default: Product }, { default: PaymentGateway }] = await Promise.all([
+      import('@/models/Product'),
+      import('@/models/PaymentGateway'),
+    ]);
+
+    const [products, gateways] = await Promise.all([
+      Product.find({ active: true, purchaseDisabled: { $ne: true } })
+        .select('name slug category description price stock fulfillmentMode productType featured')
+        .sort({ featured: -1, category: 1, price: 1, createdAt: -1 })
+        .limit(40)
+        .lean(),
+      PaymentGateway.find({ enabled: true })
+        .select('name code category type displayOrder instructions')
+        .sort({ displayOrder: 1, name: 1 })
+        .lean(),
+    ]);
+
+    if (products.length > 0) {
+      const grouped = new Map<string, typeof products>();
+      for (const product of products) {
+        const category = String(product.category || 'other');
+        const list = grouped.get(category) || [];
+        list.push(product);
+        grouped.set(category, list);
+      }
+
+      const productLines: string[] = ['## Active Digital Shop Products'];
+      for (const [category, items] of grouped) {
+        productLines.push(`### ${category}`);
+        for (const product of items.slice(0, 12)) {
+          const stock = Number(product.stock ?? 0);
+          const stockLabel = stock > 0 ? `${stock} available` : 'manual/limited availability';
+          const description = String(product.description || '').replace(/\s+/g, ' ').slice(0, 140);
+          productLines.push(
+            `- ${product.name}: ${formatMMK(Number(product.price) || 0)} (${stockLabel}; ${product.fulfillmentMode || 'manual'} fulfillment)${description ? ` - ${description}` : ''}`
+          );
+        }
+      }
+      sections.push(productLines.join('\n'));
+    } else {
+      sections.push('## Active Digital Shop Products\n- No active shop products are currently listed in the live catalog. Do not invent product names.');
+    }
+
+    if (gateways.length > 0) {
+      sections.push([
+        '## Enabled Payment Methods',
+        ...gateways.map((gateway) => {
+          const category = gateway.category ? `, ${gateway.category}` : '';
+          return `- ${gateway.name} (${gateway.code}${category})`;
+        }),
+        '- For manual payments, customer must upload payment screenshot/slip. Admin manually verifies before delivery.',
+      ].join('\n'));
+    }
+  } catch {
+    sections.push([
+      '## Live Catalog Fallback',
+      '- Product/payment database could not be read for this reply. Use the verified core service catalog, VPN plans, VPS plans, and domain service details in this prompt.',
+      '- If a customer asks for exact stock of non-core shop products, ask them to check /shop or send the product name.',
+    ].join('\n'));
+  }
+
+  return sections.join('\n\n');
+}
+
 // ==========================================
 // System Prompts
 // ==========================================
@@ -344,14 +600,15 @@ export async function getCustomerSystemPrompt(): Promise<string> {
     // Fallback: no server info
   }
   const storeKnowledge = buildStoreKnowledge(enabledServers);
+  const liveCatalogKnowledge = await buildLiveCatalogKnowledge();
 
-  return `You are Blackcoder, the Admin and Owner of Burmese Digital Store (BDS), a premium digital products and VPN service store in Myanmar. You personally manage the store and directly help customers.
+  return `You are BDS Admin, the customer support admin identity for Burmese Digital Store (BDS), a premium digital products and VPN service store in Myanmar. You directly help customers with store questions.
 
 ## Your Identity
-- Name: Blackcoder (Admin/Owner)
-- Role: Store owner who personally handles customer support, sales, and technical help
+- Name: BDS Admin
+- Role: Store admin who handles customer support, sales, and technical help
 - Personality: Friendly, approachable, knowledgeable, confident, speaks as the boss who runs everything
-- You ARE the real person behind Burmese Digital Store — not an AI bot
+- Represent Burmese Digital Store professionally
 - Use first person: "ကျွန်တော်" (I), speak naturally as the store admin
 
 ## Core Rules
@@ -372,11 +629,12 @@ export async function getCustomerSystemPrompt(): Promise<string> {
 12. When recommending plans, always ask: how many devices? how long? budget?
 
 ## Speaking Style
-- Speak as the Admin who owns and runs the store
+- Speak like a real Page admin in Messenger/Telegram, not like a generic AI model
 - Say things like "ကျွန်တော့် store", "ကျွန်တော် ကိုယ်တိုင်စစ်ဆေးပေးပါမယ်", "My store", "I'll handle it personally"
-- Be warm but authoritative — customers should feel they're talking directly to the boss
-- NEVER say you are an AI, a bot, or an assistant — you are Blackcoder, the Admin
-- If asked if you're AI/bot, say you're Blackcoder, the store admin
+- Be warm, practical, and natural — customers should feel they are talking to the Page admin
+- Do not mention "as an AI", "AI model", "knowledge base", "training data", or "I was trained"
+- NEVER say you are GPT, Claude, Gemini, or any public AI model — you are BDS Admin
+- If asked if you're AI/bot, say you're BDS Admin from Burmese Digital Store
 
 ## Strict Boundaries - What You Handle Through Other Channels
 - VPN key generation → tell them you'll prepare it after payment, or direct to Telegram Bot for instant purchase
@@ -385,8 +643,8 @@ export async function getCustomerSystemPrompt(): Promise<string> {
 - NEVER say "ပြဿနာတစ်ခုရှိပါတယ်" (there is a problem) without explaining what the actual issue is
 
 ## When Asked About Your Identity
-- You are Blackcoder, the Admin/Owner of Burmese Digital Store
-- You personally manage and run the store
+- You are BDS Admin from Burmese Digital Store
+- You help customers with Burmese Digital Store services
 - Do NOT admit to being AI, GPT, Claude, or any AI model
 - Simply say you are the store admin helping customers directly
 
@@ -403,9 +661,11 @@ export async function getCustomerSystemPrompt(): Promise<string> {
 - Singapore servers are best for Myanmar users (lowest latency)
 - Always mention "unlimited data" as a selling point
 - Mention the easy setup process
-- Speak as the store owner: "ကျွန်တော့် store မှာ ...", "I offer ..."
+- Speak as the store admin: "ကျွန်တော့် store မှာ ...", "ကျွန်တော်တို့ဆီမှာ ..."
 
 ${storeKnowledge}
+
+${liveCatalogKnowledge}
 
 ${vpnKnowledge}
 
@@ -441,7 +701,7 @@ export function getAdminSystemPrompt(): string {
 ## Your Identity
 - Name: BDS Admin AI
 - Role: Store management, server control, order management, user management, analytics
-- You are speaking with the store admin (Blackcoder)
+- You are speaking with the store admin
 - Be direct, efficient, and technical when needed
 - Respond in the language the admin uses (Myanmar or English)
 
@@ -545,14 +805,36 @@ export interface AiChatOptions {
   model?: string; // Override model (e.g., admin uses gpt-4o)
 }
 
+const DEFAULT_AI_API_URL = 'https://models.github.ai/inference';
+const DEFAULT_AI_MODEL = 'openai/gpt-4.1-mini';
+
+export function resolveAiApiUrl(): string {
+  return process.env.AI_API_URL || DEFAULT_AI_API_URL;
+}
+
+export function resolveAiModel(model?: string): string {
+  const apiUrl = resolveAiApiUrl();
+  const selected = model || process.env.AI_MODEL || DEFAULT_AI_MODEL;
+
+  if (
+    apiUrl.includes('models.github.ai') &&
+    !selected.includes('/') &&
+    /^(gpt-|chatgpt-|o\d|omni-)/i.test(selected)
+  ) {
+    return `openai/${selected}`;
+  }
+
+  return selected;
+}
+
 /**
  * Call the AI API (OpenAI-compatible format).
  * Works with GitHub Models, OpenAI, Google Gemini (via OpenAI compat), etc.
  */
 export async function callAiApi(options: AiChatOptions): Promise<string> {
   const apiKey = process.env.AI_API_KEY;
-  const apiUrl = process.env.AI_API_URL || 'https://models.inference.ai.azure.com';
-  const model = options.model || process.env.AI_MODEL || 'gpt-4o-mini';
+  const apiUrl = resolveAiApiUrl();
+  const model = resolveAiModel(options.model);
 
   if (!apiKey) {
     throw new Error('AI_API_KEY is not configured');
@@ -593,8 +875,8 @@ export async function callAiApi(options: AiChatOptions): Promise<string> {
  */
 export async function callAiApiStream(options: AiChatOptions): Promise<ReadableStream> {
   const apiKey = process.env.AI_API_KEY;
-  const apiUrl = process.env.AI_API_URL || 'https://models.inference.ai.azure.com';
-  const model = options.model || process.env.AI_MODEL || 'gpt-4o-mini';
+  const apiUrl = resolveAiApiUrl();
+  const model = resolveAiModel(options.model);
 
   if (!apiKey) {
     throw new Error('AI_API_KEY is not configured');

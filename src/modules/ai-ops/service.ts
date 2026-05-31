@@ -5,6 +5,7 @@ import {
   detectPromptInjection,
   getCustomerSystemPrompt,
   matchFaqReply,
+  resolveAiModel,
   type AiMessage,
 } from '@/lib/ai-chat';
 import AiChatSession from '@/models/AiChatSession';
@@ -42,10 +43,8 @@ export interface GenerateCustomerReplyResult {
   usedKnowledgeCount: number;
 }
 
-const DEFAULT_MODEL = 'gpt-4o-mini';
-
 function getAiModel(): string {
-  return process.env.AI_MODEL || DEFAULT_MODEL;
+  return resolveAiModel();
 }
 
 function preview(value: string, max = 900): string {

@@ -3,13 +3,6 @@ import connectDB from '@/lib/mongodb';
 import logger from '@/lib/logger';
 import { sanitizeString } from '@/lib/security';
 import {
-  callAiApi,
-  detectPromptInjection,
-  getCustomerSystemPrompt,
-  matchFaqReply,
-  type AiMessage,
-} from '@/lib/ai-chat';
-import {
   DEFAULT_FACEBOOK_GRAPH_VERSION,
   getMessengerEventText,
   hasMessengerAttachment,
@@ -20,7 +13,6 @@ import {
   type MessengerMessagingEvent,
   type MessengerWebhookPayload,
 } from '@/lib/facebook-messenger';
-import AiChatSession from '@/models/AiChatSession';
 import {
   forwardExternalAttachmentToTelegram,
   generateCustomerAgentReply,
@@ -34,6 +26,18 @@ const fbLogger = logger.child({ module: 'facebook-messenger-webhook' });
 
 const AI_FALLBACK_REPLY =
   'ခဏလောက် technical issue ဖြစ်နေပါတယ်။ Telegram Bot @BurmeseDigitalStore_bot ကနေ ဆက်သွယ်ပေးပါ။ Admin က စစ်ပေးပါမယ်။';
+
+function toMessengerPlainText(markdown: string): string {
+  return markdown
+    .replace(/\r\n/g, '\n')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1: $2')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 function isMessengerEnabled(): boolean {
   return process.env.FACEBOOK_MESSENGER_ENABLED === 'true';
@@ -49,63 +53,6 @@ function getConfiguredPageId(entryPageId?: string): string {
   return process.env.FACEBOOK_PAGE_ID || entryPageId || '';
 }
 
-function buildChannelSystemPrompt(basePrompt: string): string {
-  return `${basePrompt}
-
-## Facebook Messenger Channel Rules
-- You are replying inside Burmese Digital Store's Facebook Page Messenger inbox.
-- Keep replies short enough for Messenger: usually 1-5 short lines.
-- Do not approve payments, orders, refunds, or VPN key delivery from chat alone.
-- If a customer sends a payment slip, say admin will manually verify it.
-- Never ask for passwords, OTP codes, or private payment account logins.
-- If the question is unclear, ask one short follow-up question.`;
-}
-
-async function getOrCreateFacebookSession(senderId: string, pageId: string) {
-  await connectDB();
-
-  const sessionId = `facebook:${pageId}:${senderId}`;
-  let session = await AiChatSession.findOne({ sessionId });
-
-  if (!session) {
-    session = new AiChatSession({
-      sessionId,
-      context: 'customer',
-      messages: [],
-      metadata: {
-        userAgent: 'facebook-messenger',
-        page: 'facebook-messenger',
-        channel: 'facebook',
-        externalId: senderId,
-        pageId,
-      },
-    });
-  }
-
-  if (session.messages.length >= 96) {
-    session.messages = session.messages.slice(-40);
-  }
-
-  return session;
-}
-
-async function buildAiReply(session: Awaited<ReturnType<typeof getOrCreateFacebookSession>>): Promise<string> {
-  const systemPrompt = buildChannelSystemPrompt(await getCustomerSystemPrompt());
-  const aiMessages: AiMessage[] = [{ role: 'system', content: systemPrompt }];
-
-  for (const msg of session.messages.slice(-20)) {
-    if (msg.role === 'user' || msg.role === 'assistant') {
-      aiMessages.push({ role: msg.role, content: msg.content });
-    }
-  }
-
-  return callAiApi({
-    messages: aiMessages,
-    temperature: 0.55,
-    maxTokens: 700,
-  });
-}
-
 async function sendReply(pageId: string, senderId: string, text: string): Promise<void> {
   const pageAccessToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
   if (!pageAccessToken) {
@@ -113,7 +60,7 @@ async function sendReply(pageId: string, senderId: string, text: string): Promis
   }
 
   const graphVersion = process.env.FACEBOOK_GRAPH_API_VERSION || DEFAULT_FACEBOOK_GRAPH_VERSION;
-  const parts = splitMessengerText(text);
+  const parts = splitMessengerText(toMessengerPlainText(text));
 
   for (const part of parts) {
     await sendMessengerText({

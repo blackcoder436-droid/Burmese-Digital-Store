@@ -92,7 +92,7 @@ function renderInline(text: string): React.ReactNode {
 
   while (remaining.length > 0) {
     // Bold: **text** or __text__
-    const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*/s);
+    const boldMatch = remaining.match(/^([\s\S]*?)\*\*([\s\S]+?)\*\*/);
     // Link: [text](url)
     const linkMatch = remaining.match(/^(.*?)\[([^\]]+)\]\(([^)]+)\)/);
     // Code: `text`
@@ -505,7 +505,7 @@ export default function AiChatWidget() {
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-white">
-                  {tr('Blackcoder (Admin)', 'Blackcoder (Admin)')}
+                  {tr('BDS Admin', 'BDS Admin')}
                 </h3>
                 <p className="text-[10px] text-green-400">
                   {isStreaming ? tr('Typing...', 'ရေးနေပါသည်...') : tr('Online', 'အွန်လိုင်းရှိနေသည်')}
@@ -549,8 +549,8 @@ export default function AiChatWidget() {
                   <div className="bg-white/5 border border-white/10 rounded-2xl rounded-tl-md px-3.5 py-2.5 max-w-[85%]">
                     <p className="text-sm text-white/90 leading-relaxed">
                       {tr(
-                        "Hi! 👋 I'm Blackcoder, the Admin of Burmese Digital Store. I personally manage everything here — VPN plans, pricing, setup, and more. How can I help you today?",
-                        'မင်္ဂလာပါ! 👋 ကျွန်တော်က Blackcoder ပါ — Burmese Digital Store ရဲ့ Admin ပါ။ VPN အစီအစဉ်တွေ၊ ဈေးနှုန်းတွေ၊ တပ်ဆင်နည်းတွေ အကုန်လုံးကို ကိုယ်တိုင် စီမံခန့်ခွဲပေးနေပါတယ်။ ဘာလိုချင်ရင် ပြောပါနော်!'
+                        "Hi! 👋 I'm BDS Admin from Burmese Digital Store. I can help with VPN plans, pricing, setup, and store questions. How can I help you today?",
+                        'မင်္ဂလာပါ! 👋 ကျွန်တော်က BDS Admin ပါ။ VPN အစီအစဉ်တွေ၊ ဈေးနှုန်းတွေ၊ တပ်ဆင်နည်းတွေ နဲ့ store ဆိုင်ရာ မေးခွန်းတွေကို ကူညီပေးနိုင်ပါတယ်။ ဘာလိုချင်ရင် ပြောပါနော်!'
                       )}
                     </p>
                   </div>
