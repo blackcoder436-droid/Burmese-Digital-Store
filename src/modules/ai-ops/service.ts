@@ -204,14 +204,14 @@ function matchVpnPurchaseReply(params: {
   if (planRequest.devices && planRequest.months && (currentPurchaseIntent || recentPurchaseIntent)) {
     const plan = getPlan(buildPlanId(planRequest.devices, planRequest.months));
     if (plan) {
-      return `${plan.devices} device ${plan.months} လ ဆို ${plan.price.toLocaleString()} MMK ပါဗျ။ ဒီကနေ ဆက်လုပ်လို့ရပါတယ်။ Payment method ဘာနဲ့ပေးမလဲ - KPay, Wave, AYA, CB Pay?`;
+      return `ရပါတယ်ဗျ၊ ${plan.devices} device ${plan.months} လ plan က ${plan.price.toLocaleString()} MMK ပါ။ /vpn မှာ plan ရွေးပြီး payment screenshot တင်ပေးပါ။ ကျွန်တော် စစ်ဆေးပြီး VPN key ပေးပါမယ်။ Singapore server နဲ့ VLESS protocol တွေက သုံးရတာ ပိုအဆင်ပြေပါတယ်ဗျ။`;
     }
   }
 
   if (directChatPurchase && recentPlanRequest.devices && recentPlanRequest.months) {
     const plan = getPlan(buildPlanId(recentPlanRequest.devices, recentPlanRequest.months));
     if (plan) {
-      return `ရပါတယ်ဗျ၊ ဒီကနေ ဆက်လုပ်လို့ရပါတယ်။ ${plan.devices} device ${plan.months} လ ${plan.price.toLocaleString()} MMK အတွက် payment method ဘာနဲ့ပေးမလဲ?`;
+      return `ရပါတယ်ဗျ၊ ${plan.devices} device ${plan.months} လ plan က ${plan.price.toLocaleString()} MMK ပါ။ /vpn မှာ plan ရွေးပြီး payment screenshot တင်ပေးပါ။ ကျွန်တော် စစ်ဆေးပြီး VPN key ပေးပါမယ်။ Singapore server နဲ့ VLESS protocol တွေက သုံးရတာ ပိုအဆင်ပြေပါတယ်ဗျ။`;
     }
   }
 
