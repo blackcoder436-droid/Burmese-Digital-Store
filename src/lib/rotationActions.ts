@@ -19,10 +19,15 @@ type JsonObject = Record<string, any>;
 type HeaderMap = Record<string, string>;
 type ProgressReporter = (message: string) => void | Promise<void>;
 type PanelProtocol = 'https' | 'http';
+type BackupDatabaseKind = 'sqlite' | 'postgres';
 type BackupCandidate = {
   kind: 'archive' | 'sqlite';
   localPath: string;
   remotePath: string;
+};
+type ValidatedBackup = BackupCandidate & {
+  databaseKind: BackupDatabaseKind;
+  inboundCount: number;
 };
 
 export async function sleep(ms: number) {
@@ -789,14 +794,38 @@ print(f"INBOUND_COUNT:{len(data['obj'])}")
   return Number(match[1]);
 }
 
-async function getRemoteBackupInboundCount(host: string, backup: BackupCandidate): Promise<number> {
-  const prepareDb = backup.kind === 'archive'
+async function inspectRemoteBackup(host: string, backup: BackupCandidate): Promise<{ databaseKind: BackupDatabaseKind; inboundCount: number }> {
+  const archivePrepare = backup.kind === 'archive'
     ? `
 workdir=$(mktemp -d)
 cleanup() { rm -rf "$workdir"; }
 trap cleanup EXIT
 mkdir -p "$workdir"
-tar -tzf ${shellQuote(backup.remotePath)} | grep -qx 'etc/x-ui/x-ui.db'
+tar -tzf ${shellQuote(backup.remotePath)} > "$workdir/list.txt"
+if grep -qx 'x-ui-postgres.dump' "$workdir/list.txt"; then
+  tar -xzf ${shellQuote(backup.remotePath)} -C "$workdir" x-ui-postgres.dump
+  [ -s "$workdir/x-ui-postgres.dump" ] || { echo "BACKUP_DB_MISSING"; exit 1; }
+  if ! command -v pg_restore >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    export NEEDRESTART_MODE=a
+    apt-get update -qq
+    apt-get install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
+  fi
+  pg_restore --data-only --table=inbounds --file=- "$workdir/x-ui-postgres.dump" 2>/dev/null | python3 -c 'import sys
+count = 0
+in_copy = False
+for line in sys.stdin:
+    if line.startswith("COPY ") and "inbounds" in line:
+        in_copy = True
+        continue
+    if in_copy:
+        if line.strip() == "\\\\.":
+            break
+        count += 1
+print(f"BACKUP_KIND:postgres\\nINBOUND_COUNT:{count}")'
+  exit 0
+fi
+grep -qx 'etc/x-ui/x-ui.db' "$workdir/list.txt"
 tar -xzf ${shellQuote(backup.remotePath)} -C "$workdir" etc/x-ui/x-ui.db
 tar -xzf ${shellQuote(backup.remotePath)} -C "$workdir" etc/x-ui/x-ui.db-wal 2>/dev/null || true
 tar -xzf ${shellQuote(backup.remotePath)} -C "$workdir" etc/x-ui/x-ui.db-shm 2>/dev/null || true
@@ -805,10 +834,9 @@ db="$workdir/etc/x-ui/x-ui.db"
     : `
 db=${shellQuote(backup.remotePath)}
 `;
-
   const command = `
 set -e
-${prepareDb}
+${archivePrepare}
 [ -s "$db" ] || { echo "BACKUP_DB_MISSING"; exit 1; }
 python3 - "$db" <<'PY'
 import sqlite3
@@ -825,15 +853,16 @@ try:
         sys.exit(0)
 
     count = conn.execute("select count(*) from inbounds").fetchone()[0]
-    print(f"INBOUND_COUNT:{count}")
+    print(f"BACKUP_KIND:sqlite\\nINBOUND_COUNT:{count}")
     sys.exit(0)
 finally:
     conn.close()
 PY
 `;
   const output = await execSsh(host, command, 30000);
+  const kindMatch = output.match(/BACKUP_KIND:(sqlite|postgres)/);
   const match = output.match(/INBOUND_COUNT:(\d+)/);
-  if (!match) {
+  if (!kindMatch || !match) {
     throw new Error(`Could not verify backup database. Output: ${output.slice(0, 300) || '(empty)'}`);
   }
 
@@ -842,7 +871,7 @@ PY
     throw new Error('Backup database contains 0 inbounds.');
   }
 
-  return count;
+  return { databaseKind: kindMatch[1] as BackupDatabaseKind, inboundCount: count };
 }
 
 // SFTP Upload helper
@@ -885,7 +914,7 @@ export async function actionInstall3xUI(serverName: string, progress?: ProgressR
 set -e
 export DEBIAN_FRONTEND=noninteractive
 curl -fsSL https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh -o /tmp/3x-ui-install.sh
-printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.0.2
+printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.2.5
 `;
     const installCmd = `timeout 12m bash -lc ${shellQuote(installScript)}`;
 
@@ -918,7 +947,7 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.0.2
   const backupCandidates = getBackupCandidates(backupsDir, serverName);
 
   if (backupCandidates.length > 0) {
-    let selectedBackup: (BackupCandidate & { inboundCount: number }) | null = null;
+    let selectedBackup: ValidatedBackup | null = null;
     const validationErrors: string[] = [];
 
     for (const candidate of backupCandidates) {
@@ -927,9 +956,9 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.0.2
       await sftpUpload(newIp, candidate.localPath, candidate.remotePath);
 
       try {
-        const inboundCount = await getRemoteBackupInboundCount(newIp, candidate);
-        selectedBackup = { ...candidate, inboundCount };
-        await reportProgress(progress, `Backup ${fileName} contains ${inboundCount} inbound(s).`);
+        const backupDetails = await inspectRemoteBackup(newIp, candidate);
+        selectedBackup = { ...candidate, ...backupDetails };
+        await reportProgress(progress, `Backup ${fileName} is ${backupDetails.databaseKind} and contains ${backupDetails.inboundCount} inbound(s).`);
         break;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -945,9 +974,62 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.0.2
     await reportProgress(progress, 'Stopping 3x-ui before database and certificate restore...');
     await execSsh(newIp, 'systemctl stop x-ui || true');
 
-    // Restore either the new tar archive (DB + optional certs) or the legacy .db file.
+    // Restore the active DB backend from the selected backup.
     await reportProgress(progress, 'Restoring x-ui database and SSL certificate files...');
-    const extractCmd = selectedBackup.kind === 'archive'
+    const postgresDbName = `xui_${serverName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
+    const extractCmd = selectedBackup.databaseKind === 'postgres'
+      ? `
+set -e
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+backup=${shellQuote(selectedBackup.remotePath)}
+db_name=${shellQuote(postgresDbName)}
+db_user=${shellQuote(postgresDbName)}
+pass_file="/root/.${postgresDbName}_pg_password"
+workdir=$(mktemp -d)
+cleanup() { rm -rf "$workdir"; }
+trap cleanup EXIT
+tar -tzf "$backup" | grep -qx 'x-ui-postgres.dump'
+tar -xzf "$backup" -C "$workdir" x-ui-postgres.dump
+tar -xzf "$backup" -C "$workdir" x-ui-default.env 2>/dev/null || true
+tar -xzf "$backup" -C / root/cert 2>/dev/null || true
+tar -xzf "$backup" -C / root/.acme.sh 2>/dev/null || true
+[ -s "$workdir/x-ui-postgres.dump" ] || { echo "Restored PostgreSQL dump is missing or empty"; exit 1; }
+apt-get update -qq
+apt-get install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
+systemctl enable --now postgresql >/dev/null
+if [ -s "$pass_file" ]; then
+  db_pass=$(cat "$pass_file")
+else
+  db_pass=$(openssl rand -hex 24)
+  umask 077
+  printf '%s' "$db_pass" > "$pass_file"
+fi
+if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$db_user'" | grep -q 1; then
+  runuser -u postgres -- psql -v ON_ERROR_STOP=1 -c "CREATE ROLE $db_user LOGIN PASSWORD '$db_pass';" >/dev/null
+else
+  runuser -u postgres -- psql -v ON_ERROR_STOP=1 -c "ALTER ROLE $db_user WITH LOGIN PASSWORD '$db_pass';" >/dev/null
+fi
+if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname='$db_name'" | grep -q 1; then
+  runuser -u postgres -- createdb -O "$db_user" "$db_name"
+fi
+runuser -u postgres -- psql -v ON_ERROR_STOP=1 -d "$db_name" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION $db_user;" >/dev/null
+PGPASSWORD="$db_pass" pg_restore -h 127.0.0.1 -U "$db_user" -d "$db_name" --no-owner --no-privileges "$workdir/x-ui-postgres.dump"
+dsn="postgres://$db_user:$db_pass@127.0.0.1:5432/$db_name?sslmode=disable"
+if [ -f "$workdir/x-ui-default.env" ]; then
+  grep -v -E '^(XUI_DB_TYPE|XUI_DB_DSN)=' "$workdir/x-ui-default.env" > /etc/default/x-ui || true
+else
+  : > /etc/default/x-ui
+fi
+{
+  echo 'XUI_DB_TYPE=postgres'
+  echo "XUI_DB_DSN=$dsn"
+} >> /etc/default/x-ui
+chmod 600 /etc/default/x-ui
+rm -f "$backup"
+PGPASSWORD="$db_pass" psql -h 127.0.0.1 -U "$db_user" -d "$db_name" -tAc "select 'RESTORED_PG_INBOUNDS=' || count(*) from inbounds;"
+`
+      : selectedBackup.kind === 'archive'
       ? `
 set -e
 backup=${shellQuote(selectedBackup.remotePath)}
@@ -985,7 +1067,7 @@ chmod 600 /etc/x-ui/x-ui.db
       '-listenIP', '0.0.0.0',
       '-resetTwoFactor', resetTwoFactor,
     ].join(' ');
-    await execSsh(newIp, `[ -x /usr/local/x-ui/x-ui ] || { echo "x-ui binary not found"; exit 1; }; ${settingCmd}`);
+    await execSsh(newIp, `[ -x /usr/local/x-ui/x-ui ] || { echo "x-ui binary not found"; exit 1; }; if [ -f /etc/default/x-ui ]; then set -a; . /etc/default/x-ui; set +a; fi; ${settingCmd}`);
 
     await reportProgress(progress, `Looking for restored SSL files for ${panelTarget.domain}...`);
     const sslCmd = `
