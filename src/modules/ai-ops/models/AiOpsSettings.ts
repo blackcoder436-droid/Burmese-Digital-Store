@@ -29,7 +29,7 @@ const DEFAULT_PAYMENT_ATTACHMENT_REPLY =
   'ဓာတ်ပုံ/ဖိုင် ရလာပါတယ်။ Payment slip ဖြစ်ရင် admin က manual စစ်ပြီးမှ order ကို approve လုပ်ပေးပါမယ်။ Order/payment အတွက် website မှာ screenshot upload လုပ်ထားရင် ပိုမြန်ပါတယ်။';
 
 const DEFAULT_ESCALATION_REPLY =
-  'ဒီကိစ္စကို admin ကိုယ်တိုင်စစ်ပေးပါမယ်။ Order number/အသုံးပြုတဲ့ account info လေးပို့ပေးပါ။';
+  'ဒီကိစ္စကို admin စစ်ပေးပါမယ်။ Order number/အသုံးပြုတဲ့ account info လေးပို့ပေးပါ။';
 
 const AiOpsSettingsSchema = new Schema<IAiOpsSettingsDocument>(
   {

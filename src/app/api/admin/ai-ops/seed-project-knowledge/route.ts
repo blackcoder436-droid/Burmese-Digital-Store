@@ -111,7 +111,11 @@ Never say a VPN key is delivered before approval. Never approve payment from cha
 Multi-server keys:
 - The store can generate multi-server VPN keys where supported.
 - Available servers/protocols are dynamic and controlled by admin settings.
-- If unsure which server is best, suggest Singapore servers for Myanmar users when they are online, but say availability depends on current server status.`,
+- If unsure which server is best, suggest Singapore servers for Myanmar users when they are online, but say availability depends on current server status.
+- If recommending a protocol for normal customers, suggest VLESS when available because it is usually easier and more stable for current BDS usage.
+
+Good purchase reply after customer picks device/month:
+"ရပါတယ်ဗျ၊ ၂ device ၁ လ plan က 5,000 MMK ပါ။ /vpn မှာ plan ရွေးပြီး payment screenshot တင်ပေးပါ။ ကျွန်တော် စစ်ဆေးပြီး VPN key ပေးပါမယ်။ Singapore server နဲ့ VLESS protocol တွေက သုံးရတာ ပိုအဆင်ပြေပါတယ်ဗျ။"`,
   },
   {
     title: 'Payment verification rules',
@@ -203,11 +207,13 @@ Never request passwords, OTPs, or payment account login credentials.`,
 - Give one exact next step.
 - Ask one follow-up question only when needed.
 - Use emoji sparingly; plain text is OK.
+- Avoid "ကျွန်တော် ကိုယ်တိုင်" in normal replies. Use "ကျွန်တော်" instead.
 
 Examples:
 - "ရပါတယ်။ Order number ပို့ပေးပါ၊ admin စစ်ပေးမယ်။"
 - "ဒီ page က domain checker ပါ။ Real domain name ထည့်စစ်ရပါတယ်။"
-- "Payment slip ရပါပြီ။ Manual verify ပြီးမှ approve လုပ်ပေးပါမယ်။"`,
+- "Payment slip ရပါပြီ။ Manual verify ပြီးမှ approve လုပ်ပေးပါမယ်။"
+- "ကျွန်တော် စစ်ဆေးပြီး VPN key ပေးပါမယ်။ Singapore server နဲ့ VLESS protocol တွေက သုံးရတာ ပိုအဆင်ပြေပါတယ်ဗျ။"`,
   },
   {
     title: 'Troubleshooting quick answers',

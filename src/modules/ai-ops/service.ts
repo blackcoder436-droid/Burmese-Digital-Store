@@ -61,6 +61,18 @@ function preview(value: string, max = 900): string {
   return normalized.length > max ? `${normalized.slice(0, max - 3)}...` : normalized;
 }
 
+function normalizeAdminReply(reply: string): string {
+  return reply
+    .replace(/ကျွန်တော်\s+ကိုယ်တိုင်စစ်ဆေး/g, 'ကျွန်တော် စစ်ဆေး')
+    .replace(/ကျွန်တော်\s+ကိုယ်တိုင်\s+စစ်ဆေး/g, 'ကျွန်တော် စစ်ဆေး')
+    .replace(/admin\s+ကိုယ်တိုင်စစ်/gi, 'admin စစ်')
+    .replace(/Admin\s+ကိုယ်တိုင်စစ်/g, 'Admin စစ်')
+    .replace(/I'll personally verify/gi, "I'll verify")
+    .replace(/I will personally verify/gi, "I'll verify")
+    .replace(/handle it personally/gi, 'check it')
+    .trim();
+}
+
 function matchFirstTurnTroubleshootingReply(message: string): string | null {
   const text = message.toLowerCase();
   const hasVpnContext =
@@ -629,6 +641,8 @@ export async function generateCustomerAgentReply(
       });
       source = 'ai';
     }
+
+    reply = normalizeAdminReply(reply);
 
     session.messages.push({
       role: 'assistant',
