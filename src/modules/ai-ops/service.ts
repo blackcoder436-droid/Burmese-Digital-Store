@@ -175,7 +175,7 @@ function normalizeDigits(value: string): string {
 
 function parseVpnPlanRequest(message: string): { devices?: number; months?: number } {
   const text = normalizeDigits(message.toLowerCase());
-  const deviceMatch = text.match(/([1-5])\s*(?:device|devices|dev|\u101c\u102f\u1036\u1038|\u1001\u102f)/i);
+  const deviceMatch = text.match(/([1-5])\s*(?:device|devices|dev|d|\u101c\u102f\u1036\u1038|\u1001\u102f)/i);
   const monthMatch = text.match(/(1|3|5|7|9|12)\s*(?:month|months|mo|\u101c)/i);
 
   return {
