@@ -174,14 +174,18 @@ function matchKnownTroubleshootingReply(params: {
   const assistantContext = params.recentAssistantContext || '';
   const priorProxyAdvice =
     /Proxies ကိုနှိပ်|ping စစ်|အစိမ်းရောင် number|server list/i.test(assistantContext);
+  const mentionsProxy = /prox(?:y|ies)/i.test(text);
   const asksProxyLocation =
-    /prox(?:y|ies)/i.test(text) &&
+    mentionsProxy &&
     /(ဆိုတာ|ဘယ်|where|which|မတွေ့|မမြင်|နေရာ|ဟာ|ဘာ)/i.test(text);
   const locatingAfterAdvice =
     priorProxyAdvice &&
     /(အဲ့လို|အဲလို|ဒီလို|ဒါ|ပုံ|မတူ|ဘယ်နေရာ|ဘယ်ဟာ|မတွေ့|မမြင်|where|which)/i.test(text);
 
-  if (hasHiddify && (asksProxyLocation || locatingAfterAdvice || (hasAttachment && priorProxyAdvice))) {
+  if (
+    hasHiddify &&
+    (asksProxyLocation || locatingAfterAdvice || (mentionsProxy && priorProxyAdvice) || (hasAttachment && priorProxyAdvice))
+  ) {
     return 'ပုံထဲက Hiddify မှာ Proxies ဆိုတဲ့စာလုံးမဟုတ်ဘဲ အောက်ဆုံး server name/key ပြထားတဲ့ card လေးပါဗျ။ အဲ့ card/ညာဘက်မြှားကိုနှိပ်ရင် server list ပွင့်မယ်၊ အဲဒီထဲက ms နည်းဆုံးကိုရွေးပါ။';
   }
 
