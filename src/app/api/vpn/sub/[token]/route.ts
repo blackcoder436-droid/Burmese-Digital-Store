@@ -6,6 +6,121 @@ import { rateLimit } from '@/lib/rateLimit';
 export const dynamic = 'force-dynamic';
 
 const subLimiter = rateLimit({ windowMs: 60000, maxRequests: 30, prefix: 'sub' });
+const CONFIG_URI_RE = /^(?:vless|vmess|trojan|ss|hysteria|hysteria2|hy2|tuic):\/\//i;
+
+function extractConfigLines(body: string): string[] {
+  if (!body || !body.trim()) return [];
+
+  try {
+    const decoded = Buffer.from(body.trim(), 'base64').toString('utf-8');
+    const decodedLines = decoded.split('\n').map((line) => line.trim()).filter(Boolean);
+    const configLines = decodedLines.filter((line) => CONFIG_URI_RE.test(line));
+    if (configLines.length > 0) return configLines;
+  } catch {
+    // Fallback to plain text below.
+  }
+
+  return body
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => CONFIG_URI_RE.test(line));
+}
+
+async function fetchSubscriptionConfigs(subLink: string): Promise<string[]> {
+  if (!subLink) return [];
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(subLink, { signal: controller.signal, next: { revalidate: 60 } });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      console.warn('[api/vpn/sub] subLink fetch non-ok', { subLink, status: res.status });
+      return [];
+    }
+
+    return extractConfigLines(await res.text());
+  } catch (err) {
+    console.warn('[api/vpn/sub] failed to fetch subLink', { subLink, err: String(err) });
+    return [];
+  }
+}
+
+function uniqueConfigLines(configs: string[]): string[] {
+  return Array.from(new Set(configs.map((line) => line.trim()).filter(Boolean)));
+}
+
+function endpointKeyFromConfig(config: string): string | null {
+  try {
+    const value = config.trim();
+    if (/^vmess:\/\//i.test(value)) {
+      const parsed = JSON.parse(Buffer.from(value.slice('vmess://'.length), 'base64').toString('utf-8'));
+      const host = String(parsed.add || '').toLowerCase();
+      const port = parsed.port ? String(parsed.port) : '';
+      return host ? `${host}:${port}` : null;
+    }
+
+    if (/^(?:vless|trojan|ss|hysteria|hysteria2|hy2|tuic):\/\//i.test(value)) {
+      const parsed = new URL(value);
+      return parsed.hostname ? `${parsed.hostname.toLowerCase()}:${parsed.port}` : null;
+    }
+  } catch {
+    // Ignore malformed saved links.
+  }
+
+  return null;
+}
+
+function endpointKeyFromSubLink(subLink: string): string | null {
+  try {
+    const parsed = new URL(subLink);
+    return parsed.hostname ? parsed.hostname.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function appendSavedFallbackConfigs(
+  configs: string[],
+  serverConfigLinks: unknown,
+  liveEndpointKeys: Set<string>,
+  liveHostKeys: Set<string>
+) {
+  if (!Array.isArray(serverConfigLinks)) return;
+
+  for (const cfg of serverConfigLinks) {
+    const value = String(cfg || '').trim();
+    if (!value) continue;
+
+    if (CONFIG_URI_RE.test(value)) {
+      const endpointKey = endpointKeyFromConfig(value);
+      const hostKey = endpointKey?.split(':')[0] || null;
+      if (
+        endpointKey &&
+        !liveEndpointKeys.has(endpointKey) &&
+        (!hostKey || !liveHostKeys.has(hostKey))
+      ) {
+        configs.push(value);
+        liveEndpointKeys.add(endpointKey);
+        if (hostKey) liveHostKeys.add(hostKey);
+      }
+      continue;
+    }
+
+    if (value.includes('/sub/')) {
+      const fallbackLines = await fetchSubscriptionConfigs(value);
+      for (const line of fallbackLines) {
+        const endpointKey = endpointKeyFromConfig(line);
+        const hostKey = endpointKey?.split(':')[0] || null;
+        if (endpointKey && !liveEndpointKeys.has(endpointKey)) {
+          configs.push(line);
+          liveEndpointKeys.add(endpointKey);
+          if (hostKey) liveHostKeys.add(hostKey);
+        }
+      }
+    }
+  }
+}
 
 export async function GET(
   req: NextRequest,
@@ -42,54 +157,37 @@ export async function GET(
       }
 
       const configs: string[] = [];
+      const liveEndpointKeys = new Set<string>();
+      const liveHostKeys = new Set<string>();
 
-      // If direct config URIs were saved when provisioning (e.g. trojan://, vless://), prefer them
-      if (Array.isArray(adminKey.serverConfigLinks) && adminKey.serverConfigLinks.length > 0) {
-        for (const cfg of adminKey.serverConfigLinks) {
-          if (cfg && String(cfg).trim()) configs.push(String(cfg).trim());
+      // Prefer live 3x-ui subscription endpoints so rotated servers return current
+      // ports, TLS/Reality params, and only clients that still exist on the panel.
+      const subLinksToFetch: string[] = Array.isArray(adminKey.serverSubLinks) ? adminKey.serverSubLinks : [];
+      const liveResults = await Promise.all(subLinksToFetch.map((subLink) => fetchSubscriptionConfigs(String(subLink))));
+      for (const lines of liveResults) {
+        for (const line of lines) {
+          configs.push(line);
+          const endpointKey = endpointKeyFromConfig(line);
+          const hostKey = endpointKey?.split(':')[0] || null;
+          if (endpointKey) liveEndpointKeys.add(endpointKey);
+          if (hostKey) liveHostKeys.add(hostKey);
         }
-      } else {
-        const subLinksToFetch: string[] = adminKey.serverSubLinks || [];
-        // Fetch in parallel (fallback when we only stored subscription endpoints)
-        const fetchPromises = subLinksToFetch.map(async (subLink) => {
-            if (!subLink) return [];
-            try {
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 8000);
-              const res = await fetch(subLink, { signal: controller.signal, next: { revalidate: 300 } });
-              clearTimeout(timeoutId);
-              if (res.ok) {
-                const body = await res.text();
-                if (!body || !body.trim()) return [];
-                // Try to decode as base64 first (3x-UI returns base64 encoded subscription)
-                try {
-                  const decoded = Buffer.from(body.trim(), 'base64').toString('utf-8');
-                  const lines = decoded.split('\n').map((l) => l.trim()).filter(Boolean);
-                  if (lines.length > 0) return lines;
-                } catch (decodeErr) {
-                  // ignore and try fallback
-                }
-
-                // Fallback: treat response as plain text list of configs
-                const rawLines = body.split('\n').map((l) => l.trim()).filter(Boolean);
-                if (rawLines.length > 0) return rawLines;
-              } else {
-                console.warn('[api/vpn/sub] subLink fetch non-ok', { subLink, status: res.status });
-              }
-            } catch(err) {
-              console.warn('[api/vpn/sub] failed to fetch subLink', { subLink, err: String(err) });
-            }
-            return [];
-        });
-        const results = await Promise.all(fetchPromises);
-        for (const lines of results) {
-            configs.push(...lines);
+      }
+      for (let index = 0; index < subLinksToFetch.length; index++) {
+        const hostKey = endpointKeyFromSubLink(String(subLinksToFetch[index]));
+        if (hostKey && liveResults[index]?.length) {
+          liveHostKeys.add(hostKey);
         }
       }
 
+      // Add saved direct configs only for hosts/ports that live subscriptions did
+      // not return. This keeps old inbound links working while avoiding duplicate
+      // or stale Jan entries after a rotate.
+      await appendSavedFallbackConfigs(configs, adminKey.serverConfigLinks, liveEndpointKeys, liveHostKeys);
+
       if (configs.length === 0) return new NextResponse('No active server configs found array.', { status: 503 });
 
-      const finalBase64 = Buffer.from(configs.join('\n')).toString('base64');
+      const finalBase64 = Buffer.from(uniqueConfigLines(configs).join('\n')).toString('base64');
       return new NextResponse(finalBase64, {
         headers: { 'Content-Type': 'text/plain', 'Cache-Control': 's-maxage=60' }
       });
@@ -122,15 +220,7 @@ export async function GET(
         clearTimeout(timeoutId);
 
         if (res.ok) {
-          const body = await res.text();
-          if (!body || !body.trim()) return [];
-          try {
-            const decoded = Buffer.from(body.trim(), 'base64').toString('utf-8');
-            const lines = decoded.split('\n').map((l: string) => l.trim()).filter(Boolean);
-            if (lines.length > 0) return lines;
-          } catch (_) {}
-          const rawLines = body.split('\n').map((l: string) => l.trim()).filter(Boolean);
-          if (rawLines.length > 0) return rawLines;
+          return extractConfigLines(await res.text());
         } else {
           console.warn('[api/vpn/sub] order subLink fetch non-ok', { subLink: key.subLink, status: res.status });
         }
@@ -149,7 +239,7 @@ export async function GET(
        return new NextResponse('No server configurations available right now. Please try again later.', { status: 503 });
     }
 
-    const finalBase64 = Buffer.from(configs.join('\n')).toString('base64');
+    const finalBase64 = Buffer.from(uniqueConfigLines(configs).join('\n')).toString('base64');
     return new NextResponse(finalBase64, {
       headers: { 'Content-Type': 'text/plain', 'Cache-Control': 's-maxage=60' }
     });

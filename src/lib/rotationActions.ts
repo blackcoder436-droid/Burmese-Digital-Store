@@ -584,6 +584,101 @@ async function isXuiInstalled(host: string): Promise<boolean> {
   }
 }
 
+async function installFail2BanIpLimit(host: string, progress?: ProgressReporter) {
+  await reportProgress(progress, 'Installing Fail2Ban and configuring 3x-ui IP Limit jail...');
+  const script = `
+set -e
+export DEBIAN_FRONTEND=noninteractive
+
+if command -v apt-get >/dev/null 2>&1; then
+  apt-get update
+  apt-get install -y fail2ban nftables iptables python3-pip
+  python3 -m pip install pyasynchat --break-system-packages >/dev/null 2>&1 || true
+elif command -v dnf >/dev/null 2>&1; then
+  dnf -y install fail2ban nftables iptables
+elif command -v yum >/dev/null 2>&1; then
+  yum -y install epel-release || true
+  yum -y install fail2ban nftables iptables
+elif command -v apk >/dev/null 2>&1; then
+  apk add fail2ban nftables iptables
+else
+  echo "Unsupported OS: cannot install fail2ban automatically"
+  exit 1
+fi
+
+mkdir -p /var/log/x-ui /etc/fail2ban/jail.d /etc/fail2ban/filter.d /etc/fail2ban/action.d
+touch /var/log/x-ui/3xipl.log /var/log/x-ui/3xipl-banned.log
+
+if [ -f /etc/fail2ban/fail2ban.conf ]; then
+  sed -i 's/#allowipv6 = auto/allowipv6 = auto/g' /etc/fail2ban/fail2ban.conf || true
+fi
+
+for file in /etc/fail2ban/jail.conf /etc/fail2ban/jail.local; do
+  if [ -f "$file" ]; then
+    sed -i '/^\\[3x-ipl\\]/,/^$/d' "$file" || true
+  fi
+done
+
+cat > /etc/fail2ban/jail.d/3x-ipl.conf <<'EOF'
+[3x-ipl]
+enabled=true
+backend=auto
+filter=3x-ipl
+action=3x-ipl
+logpath=/var/log/x-ui/3xipl.log
+maxretry=1
+findtime=32
+bantime=30m
+EOF
+
+cat > /etc/fail2ban/filter.d/3x-ipl.conf <<'EOF'
+[Definition]
+datepattern = ^%%Y/%%m/%%d %%H:%%M:%%S
+failregex   = \\[LIMIT_IP\\]\\s*Email\\s*=\\s*<F-USER>.+</F-USER>\\s*\\|\\|\\s*Disconnecting OLD IP\\s*=\\s*<ADDR>\\s*\\|\\|\\s*Timestamp\\s*=\\s*\\d+
+ignoreregex =
+EOF
+
+cat > /etc/fail2ban/action.d/3x-ipl.conf <<'EOF'
+[INCLUDES]
+before = iptables-allports.conf
+
+[Definition]
+actionstart = <iptables> -N f2b-<name>
+              <iptables> -A f2b-<name> -j <returntype>
+              <iptables> -I <chain> -p <protocol> -j f2b-<name>
+
+actionstop = <iptables> -D <chain> -p <protocol> -j f2b-<name>
+             <actionflush>
+             <iptables> -X f2b-<name>
+
+actioncheck = <iptables> -n -L <chain> | grep -q 'f2b-<name>[ \\t]'
+
+actionban = <iptables> -I f2b-<name> 1 -s <ip> -j <blocktype>
+            echo "$(date +"%%Y/%%m/%%d %%H:%%M:%%S")   BAN   [Email] = <F-USER> [IP] = <ip> banned for <bantime> seconds." >> /var/log/x-ui/3xipl-banned.log
+
+actionunban = <iptables> -D f2b-<name> -s <ip> -j <blocktype>
+              echo "$(date +"%%Y/%%m/%%d %%H:%%M:%%S")   UNBAN   [Email] = <F-USER> [IP] = <ip> unbanned." >> /var/log/x-ui/3xipl-banned.log
+
+[Init]
+name = default
+protocol = tcp
+chain = INPUT
+EOF
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl enable fail2ban
+  systemctl restart fail2ban
+else
+  service fail2ban restart
+fi
+
+sleep 2
+fail2ban-client status 3x-ipl
+`;
+  await execSsh(host, `timeout 8m bash -lc ${shellQuote(script)}`, 9 * 60 * 1000);
+  await reportProgress(progress, 'Fail2Ban IP Limit jail is active.');
+}
+
 async function restartPanelAndXray(host: string, progress?: ProgressReporter) {
   await reportProgress(progress, 'Restarting 3x-ui panel (CLI option 13)...');
   await execSsh(
@@ -791,6 +886,8 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.0.2
   }
 
   if (!installed) throw new Error("Failed to connect via SSH and install 3x-ui. VPS might still be booting.");
+
+  await installFail2BanIpLimit(newIp, progress);
 
   // Restore DB and SSL Certificates
   const backupsDir = path.join(process.cwd(), 'backups');
