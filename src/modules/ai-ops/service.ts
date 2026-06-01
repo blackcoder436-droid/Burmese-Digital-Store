@@ -147,12 +147,22 @@ function buildRetrievalMessage(params: {
     .slice(0, 6500);
 }
 
+function isPurchaseOrPaymentIntent(message: string): boolean {
+  return (
+    /\b(buy|purchase|order|checkout|pay|payment|plan|price|renew)\b/i.test(message) ||
+    /(ဝယ်|၀ယ်|ယူမယ်|ယူချင်|လိုချင်|မှာမယ်|မှာချင်|ဈေး|စျေး|ဘယ်လောက်|ငွေချေ|ပေးချေ|payment|slip|order|plan)/i.test(message)
+  );
+}
+
 function matchKnownTroubleshootingReply(params: {
   message: string;
   recentUserContext?: string;
   recentAssistantContext?: string;
   attachment?: GenerateCustomerReplyInput['supportAttachment'];
 }): string | null {
+  const currentText = params.message.toLowerCase();
+  if (isPurchaseOrPaymentIntent(currentText)) return null;
+
   const text = [
     params.recentUserContext,
     params.message,
@@ -174,13 +184,13 @@ function matchKnownTroubleshootingReply(params: {
   const assistantContext = params.recentAssistantContext || '';
   const priorProxyAdvice =
     /Proxies ကိုနှိပ်|ping စစ်|အစိမ်းရောင် number|server list/i.test(assistantContext);
-  const mentionsProxy = /prox(?:y|ies)/i.test(text);
+  const mentionsProxy = /prox(?:y|ies)/i.test(currentText);
   const asksProxyLocation =
     mentionsProxy &&
-    /(ဆိုတာ|ဘယ်|where|which|မတွေ့|မမြင်|နေရာ|ဟာ|ဘာ)/i.test(text);
+    /(ဆိုတာ|ဘယ်|where|which|မတွေ့|မမြင်|နေရာ|ဟာ|ဘာ)/i.test(currentText);
   const locatingAfterAdvice =
     priorProxyAdvice &&
-    /(အဲ့လို|အဲလို|ဒီလို|ဒါ|ပုံ|မတူ|ဘယ်နေရာ|ဘယ်ဟာ|မတွေ့|မမြင်|where|which)/i.test(text);
+    /(အဲ့လို|အဲလို|ဒီလို|ဒါ|ပုံ|မတူ|ဘယ်နေရာ|ဘယ်ဟာ|မတွေ့|မမြင်|where|which)/i.test(currentText);
 
   if (
     hasHiddify &&
