@@ -184,6 +184,10 @@ function matchVpnPurchaseReply(params: {
   const currentPurchaseIntent = isPurchaseOrPaymentIntent(currentText);
   const recentPurchaseIntent = hasRecentPurchaseIntent(params.recentUserContext);
   const planRequest = parseVpnPlanRequest(params.message);
+  const recentPlanRequest = parseVpnPlanRequest(params.recentUserContext || '');
+  const directChatPurchase =
+    /(ဒီမှာ|ဒီကနေ|chat|messenger|telegram).*(ဝယ်|၀ယ်|ရလား|မရ|အတူတူ)/i.test(currentText) ||
+    /(?:\u1012\u102e\u1019\u103e\u102c|\u1012\u102e\u1000\u1014\u1031).*(?:\u101d\u101a\u103a|\u1040\u101a\u103a|\u101b\u101c\u102c\u1038|\u1019\u101b|\u1021\u1010\u1030\u1010\u1030)/i.test(currentText);
 
   if (planRequest.devices && planRequest.months && (currentPurchaseIntent || recentPurchaseIntent)) {
     const plan = getPlan(buildPlanId(planRequest.devices, planRequest.months));
@@ -192,9 +196,16 @@ function matchVpnPurchaseReply(params: {
     }
   }
 
+  if (directChatPurchase && recentPlanRequest.devices && recentPlanRequest.months) {
+    const plan = getPlan(buildPlanId(recentPlanRequest.devices, recentPlanRequest.months));
+    if (plan) {
+      return `ရပါတယ်ဗျ၊ ဒီကနေ ဆက်လုပ်လို့ရပါတယ်။ ${plan.devices} device ${plan.months} လ ${plan.price.toLocaleString()} MMK အတွက် payment method ဘာနဲ့ပေးမလဲ?`;
+    }
+  }
+
   if (!currentPurchaseIntent) return null;
 
-  if (/(ဒီမှာ|ဒီကနေ|chat|messenger|telegram).*(ဝယ်|၀ယ်|ရလား|မရ|အတူတူ)/i.test(currentText)) {
+  if (directChatPurchase) {
     return 'ရပါတယ်ဗျ၊ ဒီကနေ ဆက်လုပ်လို့ရပါတယ်။ Device ဘယ်နှစ်လုံးနဲ့ ဘယ်နှစ်လ သုံးချင်တာလဲ ပြောပါ၊ ကျသင့်ငွေပြောပေးမယ်။';
   }
 
