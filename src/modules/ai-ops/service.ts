@@ -155,7 +155,11 @@ function matchKnownTroubleshootingReply(params: {
   const hasAttachment = Boolean(params.attachment);
 
   if (hasHiddify && (hasTimeout || hasAttachment)) {
-    return 'Screenshot တွေ့ပါတယ်ဗျ။ Hiddify မှာ Timeout ဖြစ်နေတာဆို Proxies ကိုနှိပ်ပြီး ping စစ်ပါဗျ။ အစိမ်းရောင် number အနည်းဆုံး server ကိုရွေးပြီး ပြန်ချိတ်ကြည့်ပါ။';
+    if (hasAttachment) {
+      return 'Screenshot တွေ့ပါတယ်ဗျ။ Hiddify မှာ Timeout ဖြစ်နေတာဆို Proxies ကိုနှိပ်ပြီး ping စစ်ပါဗျ။ အစိမ်းရောင် number အနည်းဆုံး server ကိုရွေးပြီး ပြန်ချိတ်ကြည့်ပါ။';
+    }
+
+    return 'Hiddify မှာ Timeout ပြနေတာဆို Proxies ကိုနှိပ်ပြီး ping စစ်ပါဗျ။ အစိမ်းရောင် number အနည်းဆုံး server ကိုရွေးပြီး ပြန်ချိတ်ကြည့်ပါ။';
   }
 
   if (hasTimeout && /server|ဆာဗာ|line|လိုင်း/i.test(text)) {
