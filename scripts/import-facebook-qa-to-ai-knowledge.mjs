@@ -131,13 +131,13 @@ async function main() {
   for (const row of rows) {
     const id = fingerprint(row.customer, row.pageReply);
     const content = [
-      'Real Facebook Page support example. Use this only for BDS Admin tone and conversation style, not as private customer data.',
-      'Do not treat old history as current facts about price, product availability, app compatibility, server status, keys, refunds, or policies. Current AI Ops/catalog rules override old chat history.',
+      'Real Facebook Page support example. Use this for BDS Admin tone and solved-case troubleshooting guidance when the same app/error/problem matches.',
+      'Do not copy private customer data or old secrets. Do not treat old history as current facts about price, product availability, server status, keys, refunds, or policies. Current AI Ops/catalog rules override old chat history.',
       '',
       `Customer asked: ${row.customer}`,
       `Page admin replied: ${row.pageReply}`,
       '',
-      'When answering a similar question, copy the human style: short, personal, one-customer-at-a-time, and ask the next useful question. Do not mention this history item.',
+      'When answering a similar issue, copy the human style and the next-step direction: short, personal, one-customer-at-a-time. Do not mention this history item.',
     ].join('\n');
 
     const result = await collection.updateOne(

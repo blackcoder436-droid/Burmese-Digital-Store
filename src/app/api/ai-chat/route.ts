@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { getAuthUser } from '@/lib/auth';
 import { rateLimit } from '@/lib/rateLimit';
-import { sanitizeString, verifyMagicBytes } from '@/lib/security';
+import { sanitizeString } from '@/lib/security';
+import {
+  extractSupportScreenshotText,
+  MAX_SUPPORT_IMAGE_BYTES,
+  SUPPORT_IMAGE_TYPES,
+  validateSupportScreenshot,
+} from '@/lib/support-screenshot';
 import { generateCustomerAgentReply } from '@/modules/ai-ops/service';
 import AiChatSession from '@/models/AiChatSession';
 
@@ -38,8 +44,6 @@ function mapAiError(error: unknown): { status: number; message: string } {
 
 // Rate limit: 20 messages per minute per IP
 const chatLimiter = rateLimit({ windowMs: 60000, maxRequests: 20, prefix: 'ai-chat' });
-const MAX_SUPPORT_IMAGE_BYTES = 4 * 1024 * 1024;
-const SUPPORT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 interface ParsedChatRequest {
   message: string;
@@ -50,6 +54,7 @@ interface ParsedChatRequest {
     fileName?: string;
     mimeType?: string;
     sizeBytes?: number;
+    textHint?: string;
     source: 'website';
   };
 }
@@ -88,15 +93,22 @@ async function parseChatRequest(request: NextRequest): Promise<ParsedChatRequest
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    if (!verifyMagicBytes(buffer, mimeType)) {
-      throw new Response('Screenshot file type could not be verified.', { status: 400 });
+    try {
+      validateSupportScreenshot(buffer, mimeType);
+    } catch (error) {
+      throw new Response(
+        error instanceof Error ? error.message : 'Invalid screenshot.',
+        { status: 400 }
+      );
     }
 
+    const textHint = await extractSupportScreenshotText(buffer, mimeType);
     attachment = {
       type: 'support-image',
       fileName: safeFileName(file.name || 'screenshot'),
       mimeType,
       sizeBytes: file.size,
+      textHint,
       source: 'website',
     };
   } else if (file !== null) {
@@ -165,6 +177,7 @@ export async function POST(request: NextRequest) {
               mimeType: attachment.mimeType,
               sizeBytes: attachment.sizeBytes,
               fileName: attachment.fileName,
+              hasTextHint: Boolean(attachment.textHint),
             }
           : undefined,
       },

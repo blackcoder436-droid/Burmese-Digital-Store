@@ -36,6 +36,7 @@ export interface GenerateCustomerReplyInput {
     fileName?: string;
     mimeType?: string;
     sizeBytes?: number;
+    textHint?: string;
     source?: 'website' | 'telegram' | 'facebook';
   };
   maxTokens?: number;
@@ -88,11 +89,80 @@ function buildModelCustomerMessage(
     `Attachment type: ${attachment.mimeType || 'image'}`,
     attachment.fileName ? `Attachment name: ${attachment.fileName}` : '',
     typeof attachment.sizeBytes === 'number' ? `Attachment size: ${attachment.sizeBytes} bytes` : '',
+    attachment.textHint ? `Extracted screenshot text (redacted): ${attachment.textHint}` : '',
     'This is NOT an order/payment screenshot unless the customer is explicitly in a payment/order flow.',
-    'You cannot inspect the image pixels directly from this text context. Acknowledge the screenshot naturally, use recent conversation context, and ask only the next useful question or give one next step.',
+    attachment.textHint
+      ? 'Use the extracted screenshot text as a hint, not as proof of payment or identity.'
+      : 'You cannot inspect the image pixels directly from this text context. Acknowledge the screenshot naturally, use recent conversation context, and ask only the next useful question or give one next step.',
   ].filter(Boolean);
 
   return `${message}\n\n[Support attachment context]\n${details.join('\n')}`;
+}
+
+function buildRecentUserContext(
+  messages: Array<{ role: string; content: string }>,
+  maxItems = 6
+): string {
+  return messages
+    .filter((msg) => msg.role === 'user')
+    .slice(-maxItems)
+    .map((msg) => msg.content)
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 4000);
+}
+
+function buildRetrievalMessage(params: {
+  message: string;
+  modelMessage: string;
+  recentUserContext?: string;
+  attachment?: GenerateCustomerReplyInput['supportAttachment'];
+}): string {
+  return [
+    params.recentUserContext ? `Recent customer context:\n${params.recentUserContext}` : '',
+    params.attachment?.textHint
+      ? `Screenshot OCR/context hint:\n${params.attachment.textHint}`
+      : '',
+    `Current customer message:\n${params.modelMessage || params.message}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+    .slice(0, 6500);
+}
+
+function matchKnownTroubleshootingReply(params: {
+  message: string;
+  recentUserContext?: string;
+  attachment?: GenerateCustomerReplyInput['supportAttachment'];
+}): string | null {
+  const text = [
+    params.recentUserContext,
+    params.message,
+    params.attachment?.textHint,
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase();
+
+  const hasVpnContext =
+    /vpn|hiddify|happ|v2ray|v2box|streisand|outline|shadowrocket|key|server|vmess|vless|trojan|proxy|proxies/i.test(text) ||
+    /(ဗီပီအန်|လိုင်း|ခ်ိတ်|ချိတ်|ကီး|ဆာဗာ)/i.test(text);
+
+  if (!hasVpnContext) return null;
+
+  const hasHiddify = /hiddify/i.test(text);
+  const hasTimeout = /timeout|time out|connecting|connection timed out|timed out/i.test(text);
+  const hasAttachment = Boolean(params.attachment);
+
+  if (hasHiddify && (hasTimeout || hasAttachment)) {
+    return 'Screenshot တွေ့ပါတယ်ဗျ။ Hiddify မှာ Timeout ဖြစ်နေတာဆို Proxies ကိုနှိပ်ပြီး ping စစ်ပါဗျ။ အစိမ်းရောင် number အနည်းဆုံး server ကိုရွေးပြီး ပြန်ချိတ်ကြည့်ပါ။';
+  }
+
+  if (hasTimeout && /server|ဆာဗာ|line|လိုင်း/i.test(text)) {
+    return 'Timeout ဖြစ်နေတာဆို server တစ်ခုချင်း ping စစ်ပြီး အနည်းဆုံး ms ပြတဲ့ server ကိုရွေးချိတ်ကြည့်ပါဗျ။ မရသေးရင် ကျွန်တော် server ဘက်ကို စစ်ပေးပါမယ်။';
+  }
+
+  return null;
 }
 
 function escapeRegex(value: string): string {
@@ -359,6 +429,7 @@ export async function generateCustomerAgentReply(
     }
 
     const hasPriorAssistantReply = session.messages.some((msg) => msg.role === 'assistant');
+    const recentUserContext = buildRecentUserContext(session.messages);
 
     if (session.messages.length >= 96) {
       session.messages = session.messages.slice(-40);
@@ -376,7 +447,18 @@ export async function generateCustomerAgentReply(
 
     if (reply) {
       source = 'fixed';
-    } else {
+    }
+
+    if (!reply) {
+      reply = matchKnownTroubleshootingReply({
+        message,
+        recentUserContext,
+        attachment: input.supportAttachment,
+      });
+      if (reply) source = 'fixed';
+    }
+
+    if (!reply) {
       if (!hasPriorAssistantReply) {
         reply = matchFirstTurnTroubleshootingReply(message);
         if (reply) source = 'fixed';
@@ -392,9 +474,15 @@ export async function generateCustomerAgentReply(
     }
 
     if (!reply) {
+      const retrievalMessage = buildRetrievalMessage({
+        message,
+        modelMessage,
+        recentUserContext,
+        attachment: input.supportAttachment,
+      });
       const { prompt, knowledgeCount } = await buildUnifiedCustomerSystemPrompt({
         channel: input.channel,
-        message: modelMessage,
+        message: retrievalMessage,
       });
       usedKnowledgeCount = knowledgeCount;
 

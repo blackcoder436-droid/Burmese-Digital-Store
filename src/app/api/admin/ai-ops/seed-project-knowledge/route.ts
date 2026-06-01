@@ -222,6 +222,40 @@ Examples:
 - Payment pending: ask for order number and payment screenshot if not uploaded.
 - Website link with localhost: explain it is a local/dev URL and use the path to identify the feature.`,
   },
+  {
+    title: 'VPN Hiddify timeout solved-case flow',
+    category: 'troubleshooting',
+    tags: ['troubleshooting', 'vpn', 'hiddify', 'timeout', 'connection', 'ping'],
+    channels: ['all'],
+    priority: 100,
+    content: `Use this when the customer says Hiddify is connecting but shows Timeout, or sends a support screenshot after discussing Hiddify/Timeout.
+
+Reply like BDS Admin, not a generic checklist. Do not restart by asking for device/app again if the customer already said Hiddify.
+
+Best first support reply:
+"Screenshot တွေ့ပါတယ်ဗျ။ Hiddify မှာ Timeout ဖြစ်နေတာဆို Proxies ကိုနှိပ်ပြီး ping စစ်ပါဗျ။ အစိမ်းရောင် number အနည်းဆုံး server ကိုရွေးပြီး ပြန်ချိတ်ကြည့်ပါ။"
+
+If still not OK after that:
+- Ask them to try HApp once.
+- If HApp also fails, say you will check/change the server for them.
+- If multi-server key was not changed yet, tell them to change to multi-server key and retry.
+
+Keep each reply to 1-2 short chat lines. One next step at a time.`,
+  },
+  {
+    title: 'Facebook history usage rule',
+    category: 'policy',
+    tags: ['facebook-history', 'style', 'solved-case', 'support'],
+    channels: ['all'],
+    priority: 100,
+    content: `Real Facebook Page chat history can be used in two ways:
+- Conversation style: short, personal, page-admin voice, one customer at a time.
+- Solved-case guidance: when customer issue, app name, and error match an old support example, reuse the same troubleshooting direction.
+
+Do not copy private customer data, old VPN links, tokens, phone numbers, or payment references. Do not treat old history as current price, stock, server status, refund, or policy truth. Current AI Ops rules and live catalog override old history.
+
+For support screenshots, use recent chat context and any extracted screenshot text before replying. Do not answer like a generic AI checklist.`,
+  },
 ];
 
 const PROJECT_COMMANDS: SeedCommandItem[] = [

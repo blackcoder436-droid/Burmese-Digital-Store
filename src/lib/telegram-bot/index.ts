@@ -9,9 +9,10 @@
 
 import { createLogger } from '@/lib/logger';
 import { approveOrder, rejectOrder } from '@/lib/order-actions';
-import { answerCallback, editMessageCaption, editMessageText, sendMessage } from './api';
+import { extractSupportScreenshotText, MAX_SUPPORT_IMAGE_BYTES } from '@/lib/support-screenshot';
+import { answerCallback, downloadFile, editMessageCaption, editMessageText, sendMessage } from './api';
 import { getSession, clearSession } from './session';
-import type { TelegramCallbackQuery, TelegramUpdate, BotContext } from './types';
+import type { TelegramCallbackQuery, TelegramUpdate, BotContext, TelegramPhotoSize } from './types';
 
 // Command handlers
 import {
@@ -125,9 +126,25 @@ function toTelegramPlainText(markdown: string): string {
     .trim();
 }
 
-async function handleSupportScreenshot(ctx: BotContext, caption?: string): Promise<void> {
+function pickSupportPhoto(photos?: TelegramPhotoSize[]): TelegramPhotoSize | undefined {
+  if (!photos?.length) return undefined;
+
+  const sorted = [...photos].sort((a, b) => (b.width * b.height) - (a.width * a.height));
+  return sorted.find((photo) => !photo.file_size || photo.file_size <= MAX_SUPPORT_IMAGE_BYTES) || sorted[0];
+}
+
+async function handleSupportScreenshot(
+  ctx: BotContext,
+  photos?: TelegramPhotoSize[],
+  caption?: string
+): Promise<void> {
   const { generateCustomerAgentReply } = await import('@/modules/ai-ops/service');
   const supportMessage = caption?.trim() || 'Screenshot ပို့ထားပါတယ်။';
+  const photo = pickSupportPhoto(photos);
+  const fileBuffer = photo ? await downloadFile(photo.file_id) : null;
+  const textHint = fileBuffer
+    ? await extractSupportScreenshotText(fileBuffer, 'image/jpeg')
+    : undefined;
 
   const result = await generateCustomerAgentReply({
     channel: 'telegram',
@@ -140,11 +157,15 @@ async function handleSupportScreenshot(ctx: BotContext, caption?: string): Promi
       firstName: ctx.firstName,
       hasPhoto: true,
       caption: caption || undefined,
+      supportOcrText: Boolean(textHint),
       supportScreenshot: true,
     },
     supportAttachment: {
       type: 'support-image',
       source: 'telegram',
+      mimeType: 'image/jpeg',
+      sizeBytes: fileBuffer?.length || photo?.file_size,
+      textHint,
     },
     maxTokens: 220,
   });
@@ -345,7 +366,7 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
         ctx.username
       );
     } else {
-      await handleSupportScreenshot(ctx, message.caption);
+      await handleSupportScreenshot(ctx, ctx.photo, message.caption);
     }
     return;
   }
