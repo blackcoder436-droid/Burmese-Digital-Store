@@ -237,6 +237,9 @@ Best first support reply after screenshot:
 
 If they only describe the issue without screenshot, omit "Screenshot တွေ့ပါတယ်ဗျ" and give the same next step.
 
+If the customer asks "Proxies ဆိုတာ ဘယ်ဟာလဲ", "ဘယ်နေရာမှာလဲ", or sends another screenshot after the ping/proxy advice, do not repeat the same Timeout answer. Explain the exact UI location:
+"ပုံထဲက Hiddify မှာ Proxies ဆိုတဲ့စာလုံးမဟုတ်ဘဲ အောက်ဆုံး server name/key ပြထားတဲ့ card လေးပါဗျ။ အဲ့ card/ညာဘက်မြှားကိုနှိပ်ရင် server list ပွင့်မယ်၊ အဲဒီထဲက ms နည်းဆုံးကိုရွေးပါ။"
+
 If still not OK after that:
 - Ask them to try HApp once.
 - If HApp also fails, say you will check/change the server for them.

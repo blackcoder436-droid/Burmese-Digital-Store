@@ -112,14 +112,31 @@ function buildRecentUserContext(
     .slice(0, 4000);
 }
 
+function buildRecentAssistantContext(
+  messages: Array<{ role: string; content: string }>,
+  maxItems = 4
+): string {
+  return messages
+    .filter((msg) => msg.role === 'assistant')
+    .slice(-maxItems)
+    .map((msg) => msg.content)
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 2500);
+}
+
 function buildRetrievalMessage(params: {
   message: string;
   modelMessage: string;
   recentUserContext?: string;
+  recentAssistantContext?: string;
   attachment?: GenerateCustomerReplyInput['supportAttachment'];
 }): string {
   return [
     params.recentUserContext ? `Recent customer context:\n${params.recentUserContext}` : '',
+    params.recentAssistantContext
+      ? `Recent assistant guidance already given:\n${params.recentAssistantContext}`
+      : '',
     params.attachment?.textHint
       ? `Screenshot OCR/context hint:\n${params.attachment.textHint}`
       : '',
@@ -133,6 +150,7 @@ function buildRetrievalMessage(params: {
 function matchKnownTroubleshootingReply(params: {
   message: string;
   recentUserContext?: string;
+  recentAssistantContext?: string;
   attachment?: GenerateCustomerReplyInput['supportAttachment'];
 }): string | null {
   const text = [
@@ -153,6 +171,19 @@ function matchKnownTroubleshootingReply(params: {
   const hasHiddify = /hiddify/i.test(text);
   const hasTimeout = /timeout|time out|connecting|connection timed out|timed out/i.test(text);
   const hasAttachment = Boolean(params.attachment);
+  const assistantContext = params.recentAssistantContext || '';
+  const priorProxyAdvice =
+    /Proxies ကိုနှိပ်|ping စစ်|အစိမ်းရောင် number|server list/i.test(assistantContext);
+  const asksProxyLocation =
+    /prox(?:y|ies)/i.test(text) &&
+    /(ဆိုတာ|ဘယ်|where|which|မတွေ့|မမြင်|နေရာ|ဟာ|ဘာ)/i.test(text);
+  const locatingAfterAdvice =
+    priorProxyAdvice &&
+    /(အဲ့လို|အဲလို|ဒီလို|ဒါ|ပုံ|မတူ|ဘယ်နေရာ|ဘယ်ဟာ|မတွေ့|မမြင်|where|which)/i.test(text);
+
+  if (hasHiddify && (asksProxyLocation || locatingAfterAdvice || (hasAttachment && priorProxyAdvice))) {
+    return 'ပုံထဲက Hiddify မှာ Proxies ဆိုတဲ့စာလုံးမဟုတ်ဘဲ အောက်ဆုံး server name/key ပြထားတဲ့ card လေးပါဗျ။ အဲ့ card/ညာဘက်မြှားကိုနှိပ်ရင် server list ပွင့်မယ်၊ အဲဒီထဲက ms နည်းဆုံးကိုရွေးပါ။';
+  }
 
   if (hasHiddify && (hasTimeout || hasAttachment)) {
     if (hasAttachment) {
@@ -434,6 +465,7 @@ export async function generateCustomerAgentReply(
 
     const hasPriorAssistantReply = session.messages.some((msg) => msg.role === 'assistant');
     const recentUserContext = buildRecentUserContext(session.messages);
+    const recentAssistantContext = buildRecentAssistantContext(session.messages);
 
     if (session.messages.length >= 96) {
       session.messages = session.messages.slice(-40);
@@ -457,6 +489,7 @@ export async function generateCustomerAgentReply(
       reply = matchKnownTroubleshootingReply({
         message,
         recentUserContext,
+        recentAssistantContext,
         attachment: input.supportAttachment,
       });
       if (reply) source = 'fixed';
@@ -482,6 +515,7 @@ export async function generateCustomerAgentReply(
         message,
         modelMessage,
         recentUserContext,
+        recentAssistantContext,
         attachment: input.supportAttachment,
       });
       const { prompt, knowledgeCount } = await buildUnifiedCustomerSystemPrompt({
