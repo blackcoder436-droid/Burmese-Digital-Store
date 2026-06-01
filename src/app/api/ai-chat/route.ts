@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { getAuthUser } from '@/lib/auth';
 import { rateLimit } from '@/lib/rateLimit';
-import { sanitizeString } from '@/lib/security';
+import { sanitizeString, verifyMagicBytes } from '@/lib/security';
 import { generateCustomerAgentReply } from '@/modules/ai-ops/service';
 import AiChatSession from '@/models/AiChatSession';
 
@@ -38,6 +38,79 @@ function mapAiError(error: unknown): { status: number; message: string } {
 
 // Rate limit: 20 messages per minute per IP
 const chatLimiter = rateLimit({ windowMs: 60000, maxRequests: 20, prefix: 'ai-chat' });
+const MAX_SUPPORT_IMAGE_BYTES = 4 * 1024 * 1024;
+const SUPPORT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+interface ParsedChatRequest {
+  message: string;
+  sessionId: string;
+  page: string;
+  attachment?: {
+    type: 'support-image';
+    fileName?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+    source: 'website';
+  };
+}
+
+function safeFileName(name: string): string {
+  return sanitizeString(name)
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 120);
+}
+
+async function parseChatRequest(request: NextRequest): Promise<ParsedChatRequest> {
+  const contentType = request.headers.get('content-type') || '';
+
+  if (!contentType.toLowerCase().includes('multipart/form-data')) {
+    const body = await request.json();
+    return {
+      message: sanitizeString(body.message || '').slice(0, 2000),
+      sessionId: sanitizeString(body.sessionId || '').slice(0, 64),
+      page: sanitizeString(body.page || '').slice(0, 200),
+    };
+  }
+
+  const form = await request.formData();
+  const file = form.get('attachment');
+  let attachment: ParsedChatRequest['attachment'];
+
+  if (file instanceof File) {
+    const mimeType = String(file.type || '').toLowerCase();
+    if (!SUPPORT_IMAGE_TYPES.has(mimeType)) {
+      throw new Response('Only JPG, PNG, or WEBP screenshots are allowed.', { status: 400 });
+    }
+
+    if (file.size <= 0 || file.size > MAX_SUPPORT_IMAGE_BYTES) {
+      throw new Response('Screenshot must be 4MB or smaller.', { status: 400 });
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    if (!verifyMagicBytes(buffer, mimeType)) {
+      throw new Response('Screenshot file type could not be verified.', { status: 400 });
+    }
+
+    attachment = {
+      type: 'support-image',
+      fileName: safeFileName(file.name || 'screenshot'),
+      mimeType,
+      sizeBytes: file.size,
+      source: 'website',
+    };
+  } else if (file !== null) {
+    throw new Response('Invalid attachment.', { status: 400 });
+  }
+
+  const rawMessage = String(form.get('message') || '');
+  return {
+    message: sanitizeString(rawMessage || (attachment ? 'Screenshot ပို့ထားပါတယ်။' : '')).slice(0, 2000),
+    sessionId: sanitizeString(String(form.get('sessionId') || '')).slice(0, 64),
+    page: sanitizeString(String(form.get('page') || '')).slice(0, 200),
+    attachment,
+  };
+}
 
 // ==========================================
 // POST /api/ai-chat — Customer AI Chat
@@ -57,10 +130,7 @@ export async function POST(request: NextRequest) {
   if (limited) return limited;
 
   try {
-    const body = await request.json();
-    const message = sanitizeString(body.message || '').slice(0, 2000);
-    const sessionId = sanitizeString(body.sessionId || '').slice(0, 64);
-    const page = sanitizeString(body.page || '').slice(0, 200);
+    const { message, sessionId, page, attachment } = await parseChatRequest(request);
 
     if (!message) {
       return NextResponse.json(
@@ -86,8 +156,17 @@ export async function POST(request: NextRequest) {
       message,
       userId,
       page,
+      supportAttachment: attachment,
       metadata: {
         userAgent: request.headers.get('user-agent')?.slice(0, 500),
+        supportAttachment: attachment
+          ? {
+              type: attachment.type,
+              mimeType: attachment.mimeType,
+              sizeBytes: attachment.sizeBytes,
+              fileName: attachment.fileName,
+            }
+          : undefined,
       },
     });
 
@@ -100,6 +179,14 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof Response) {
+      const errorText = await error.text().catch(() => 'Invalid chat request.');
+      return NextResponse.json(
+        { success: false, error: errorText || 'Invalid chat request.' },
+        { status: error.status || 400 }
+      );
+    }
+
     console.error('[AI Chat] Error:', error);
     const mapped = mapAiError(error);
     return NextResponse.json(

@@ -31,6 +31,13 @@ export interface GenerateCustomerReplyInput {
   externalUserId?: string;
   page?: string;
   metadata?: Record<string, unknown>;
+  supportAttachment?: {
+    type: 'support-image';
+    fileName?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+    source?: 'website' | 'telegram' | 'facebook';
+  };
   maxTokens?: number;
 }
 
@@ -50,6 +57,42 @@ function getAiModel(): string {
 function preview(value: string, max = 900): string {
   const normalized = value.replace(/\s+/g, ' ').trim();
   return normalized.length > max ? `${normalized.slice(0, max - 3)}...` : normalized;
+}
+
+function matchFirstTurnTroubleshootingReply(message: string): string | null {
+  const text = message.toLowerCase();
+  const hasVpnContext =
+    /vpn|key|outline|hiddify|happ|v2ray|v2box|shadowrocket|streisand|server/i.test(text) ||
+    /(ကီး|ဗီပီအန်|လိုင်း|ချိတ်|ထည့်|ထည့္)/.test(text);
+  if (!hasVpnContext) return null;
+
+  const hasProblem =
+    /(သုံးမရ|သံုးမရ|ချိတ်မရ|ခ်ိတ္မရ|ထည့်မရ|ထည့္မရ|မဝင်|မ၀င်|invalid|error|fail|failed|down|လိုင်းကျ|လိုင္းက်|မရဘူး|အဆင်မပြေ|အဆင္မေျပ)/i.test(text);
+  if (!hasProblem) return null;
+
+  if (/(key|ကီး|ထည့်|ထည့္|invalid|outline|hiddify|happ)/i.test(text)) {
+    return 'ဟုတ်ကဲ့ဗျ၊ စစ်ပေးပါမယ်နော်။ ဘယ် app ထဲမှာ key ထည့်နေတာလဲဗျ? Error screenshot လေးပို့ပေးပါ။';
+  }
+
+  return 'ဟုတ်ကဲ့ဗျ၊ စစ်ပေးပါမယ်နော်။ ဘယ် app နဲ့ချိတ်နေတာလဲဗျ? Error/screenshot ရှိရင်ပို့ပေးပါ။';
+}
+
+function buildModelCustomerMessage(
+  message: string,
+  attachment?: GenerateCustomerReplyInput['supportAttachment']
+): string {
+  if (!attachment) return message;
+
+  const details = [
+    'Customer attached a support screenshot/photo.',
+    `Attachment type: ${attachment.mimeType || 'image'}`,
+    attachment.fileName ? `Attachment name: ${attachment.fileName}` : '',
+    typeof attachment.sizeBytes === 'number' ? `Attachment size: ${attachment.sizeBytes} bytes` : '',
+    'This is NOT an order/payment screenshot unless the customer is explicitly in a payment/order flow.',
+    'You cannot inspect the image pixels directly from this text context. Acknowledge the screenshot naturally, use recent conversation context, and ask only the next useful question or give one next step.',
+  ].filter(Boolean);
+
+  return `${message}\n\n[Support attachment context]\n${details.join('\n')}`;
 }
 
 function escapeRegex(value: string): string {
@@ -273,6 +316,7 @@ export async function generateCustomerAgentReply(
   const startedAt = Date.now();
   const model = getAiModel();
   const message = sanitizeString(input.message || '').slice(0, 2000);
+  const modelMessage = buildModelCustomerMessage(message, input.supportAttachment);
   const settings = await getAiOpsSettings();
 
   await logAiBotEvent({
@@ -314,6 +358,8 @@ export async function generateCustomerAgentReply(
       });
     }
 
+    const hasPriorAssistantReply = session.messages.some((msg) => msg.role === 'assistant');
+
     if (session.messages.length >= 96) {
       session.messages = session.messages.slice(-40);
     }
@@ -331,6 +377,13 @@ export async function generateCustomerAgentReply(
     if (reply) {
       source = 'fixed';
     } else {
+      if (!hasPriorAssistantReply) {
+        reply = matchFirstTurnTroubleshootingReply(message);
+        if (reply) source = 'fixed';
+      }
+    }
+
+    if (!reply) {
       const faqMatch = matchFaqReply(message);
       if (faqMatch && !faqMatch.passthrough) {
         reply = faqMatch.reply;
@@ -341,14 +394,20 @@ export async function generateCustomerAgentReply(
     if (!reply) {
       const { prompt, knowledgeCount } = await buildUnifiedCustomerSystemPrompt({
         channel: input.channel,
-        message,
+        message: modelMessage,
       });
       usedKnowledgeCount = knowledgeCount;
 
       const aiMessages: AiMessage[] = [{ role: 'system', content: prompt }];
-      for (const msg of session.messages.slice(-20)) {
+      const recentMessages = session.messages.slice(-20);
+      for (const [index, msg] of recentMessages.entries()) {
         if (msg.role === 'user' || msg.role === 'assistant') {
-          aiMessages.push({ role: msg.role, content: msg.content });
+          const isLatestUserMessage =
+            index === recentMessages.length - 1 && msg.role === 'user' && msg.content === message;
+          aiMessages.push({
+            role: msg.role,
+            content: isLatestUserMessage ? modelMessage : msg.content,
+          });
         }
       }
 

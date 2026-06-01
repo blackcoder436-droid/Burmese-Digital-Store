@@ -16,6 +16,8 @@ const LIMIT = Number(process.env.FACEBOOK_HISTORY_LIMIT || 100);
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const PHONE_RE = /(?:\+?95|\+?1)?[\s.-]?(?:\d[\s.-]?){7,14}\d/g;
 const TX_RE = /\b(?:txid|transaction|trx|ref|reference|order)\s*[:#-]?\s*[a-z0-9_-]{5,}\b/gi;
+const VPN_URI_RE = /\b(?:ss|ssr|vmess|vless|trojan|hysteria2?|tuic):\/\/[^\s"'<>]+/gi;
+const SECRET_URL_PARAM_RE = /([?&](?:access_token|token|key|secret)=)[^&\s"'<>]+/gi;
 
 function requireEnv(name, value) {
   if (!value) {
@@ -25,6 +27,8 @@ function requireEnv(name, value) {
 
 function redact(value = '') {
   return String(value)
+    .replace(VPN_URI_RE, '[vpn-link]')
+    .replace(SECRET_URL_PARAM_RE, '$1[redacted]')
     .replace(EMAIL_RE, '[email]')
     .replace(PHONE_RE, '[phone]')
     .replace(TX_RE, '[reference]');

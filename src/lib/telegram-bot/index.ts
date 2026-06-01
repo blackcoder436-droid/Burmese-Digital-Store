@@ -125,6 +125,36 @@ function toTelegramPlainText(markdown: string): string {
     .trim();
 }
 
+async function handleSupportScreenshot(ctx: BotContext, caption?: string): Promise<void> {
+  const { generateCustomerAgentReply } = await import('@/modules/ai-ops/service');
+  const supportMessage = caption?.trim() || 'Screenshot ပို့ထားပါတယ်။';
+
+  const result = await generateCustomerAgentReply({
+    channel: 'telegram',
+    sessionId: `telegram:${ctx.userId}`,
+    message: supportMessage,
+    externalUserId: String(ctx.userId),
+    page: 'telegram-bot',
+    metadata: {
+      username: ctx.username,
+      firstName: ctx.firstName,
+      hasPhoto: true,
+      caption: caption || undefined,
+      supportScreenshot: true,
+    },
+    supportAttachment: {
+      type: 'support-image',
+      source: 'telegram',
+    },
+    maxTokens: 220,
+  });
+
+  await sendMessage(ctx.chatId, escapeHtml(toTelegramPlainText(result.reply)), {
+    parseMode: 'HTML',
+    disableWebPagePreview: true,
+  });
+}
+
 function parseTwoPartCallback(data: string, colonPrefix: string, underscorePrefix: string): {
   first: string;
   second: string;
@@ -302,15 +332,21 @@ async function handleMessage(update: TelegramUpdate): Promise<void> {
   // Only handle private messages
   if (message.chat.type !== 'private') return;
 
-  // Handle photo messages (payment screenshots)
+  // Handle photo messages. Only route to payment flow when the user is
+  // actively waiting to upload a payment screenshot for an order.
   if (ctx.photo && ctx.photo.length > 0) {
-    await handlePaymentScreenshot(
-      ctx.chatId,
-      ctx.userId,
-      ctx.photo,
-      ctx.firstName,
-      ctx.username
-    );
+    const session = getSession(ctx.userId);
+    if (session?.waitingScreenshot && session.orderId) {
+      await handlePaymentScreenshot(
+        ctx.chatId,
+        ctx.userId,
+        ctx.photo,
+        ctx.firstName,
+        ctx.username
+      );
+    } else {
+      await handleSupportScreenshot(ctx, message.caption);
+    }
     return;
   }
 

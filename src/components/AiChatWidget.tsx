@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { MessageCircle, X, Send, Loader2, Bot, User, Trash2, Minimize2 } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, useMemo, type ChangeEvent } from 'react';
+import { MessageCircle, X, Send, Loader2, Bot, User, Trash2, Minimize2, Paperclip, Image as ImageIcon } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 
 // ==========================================
@@ -14,6 +14,9 @@ interface ChatMessage {
   content: string;
   timestamp: Date;
 }
+
+const MAX_SUPPORT_IMAGE_BYTES = 4 * 1024 * 1024;
+const SUPPORT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 function generateSessionId(): string {
   return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -174,14 +177,19 @@ export default function AiChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Check if AI chat is enabled
-  const isEnabled = process.env.NEXT_PUBLIC_AI_CHAT_ENABLED === 'true';
+  // Keep the widget visible unless it is explicitly disabled at build time.
+  // The API still enforces AI_CHAT_ENABLED at runtime, so this avoids hiding
+  // the bubble because a public env var was missing during the frontend build.
+  const isDisabled = process.env.NEXT_PUBLIC_AI_CHAT_ENABLED === 'false';
 
   // Initialize session
   useEffect(() => {
@@ -234,18 +242,56 @@ export default function AiChatWidget() {
     }
   };
 
+  const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    setFileError('');
+
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+
+    if (!SUPPORT_IMAGE_TYPES.has(file.type)) {
+      setSelectedFile(null);
+      setFileError(tr('Only JPG, PNG, or WEBP screenshots are allowed.', 'JPG, PNG, WEBP screenshot ပဲ ပို့လို့ရပါတယ်။'));
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > MAX_SUPPORT_IMAGE_BYTES) {
+      setSelectedFile(null);
+      setFileError(tr('Screenshot must be 4MB or smaller.', 'Screenshot က 4MB ထက်မကြီးရပါ။'));
+      event.target.value = '';
+      return;
+    }
+
+    setSelectedFile(file);
+  }, [tr]);
+
+  const clearSelectedFile = useCallback(() => {
+    setSelectedFile(null);
+    setFileError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, []);
+
   const sendMessage = useCallback(async () => {
     const trimmed = input.trim();
-    if (!trimmed || isLoading || !sessionId) return;
+    const fileToSend = selectedFile;
+    if ((!trimmed && !fileToSend) || isLoading || !sessionId) return;
+    const outgoingText = trimmed || tr('Screenshot sent.', 'Screenshot ပို့ထားပါတယ်။');
+    const visibleText = fileToSend
+      ? `${outgoingText}\n📎 ${fileToSend.name}`
+      : outgoingText;
 
     const userMessage: ChatMessage = {
       role: 'user',
-      content: trimmed,
+      content: visibleText,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
+    clearSelectedFile();
     setIsLoading(true);
     setIsStreaming(true);
 
@@ -258,16 +304,29 @@ export default function AiChatWidget() {
     setMessages((prev) => [...prev, assistantMessage]);
 
     try {
-      const res = await fetch('/api/ai-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: trimmed,
-          sessionId,
-          stream: true,
-          page: window.location.pathname,
-        }),
-      });
+      let res: Response;
+      if (fileToSend) {
+        const formData = new FormData();
+        formData.set('message', outgoingText);
+        formData.set('sessionId', sessionId);
+        formData.set('page', window.location.pathname);
+        formData.set('attachment', fileToSend);
+        res = await fetch('/api/ai-chat', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        res = await fetch('/api/ai-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: outgoingText,
+            sessionId,
+            stream: true,
+            page: window.location.pathname,
+          }),
+        });
+      }
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
@@ -350,7 +409,7 @@ export default function AiChatWidget() {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [input, isLoading, sessionId, tr]);
+  }, [clearSelectedFile, input, isLoading, selectedFile, sessionId, tr]);
 
   const sendQuickReply = useCallback(async (msg: string) => {
     if (isLoading || !sessionId) return;
@@ -459,6 +518,7 @@ export default function AiChatWidget() {
 
   const clearChat = () => {
     setMessages([]);
+    clearSelectedFile();
     const newId = generateSessionId();
     sessionStorage.setItem('ai-chat-session', newId);
     setSessionId(newId);
@@ -470,8 +530,8 @@ export default function AiChatWidget() {
     { label: tr('Setup Help', 'တပ်ဆင်ခြင်း'), message: tr('How to setup VPN on my phone?', 'ဖုန်းမှာ VPN ဘယ်လိုတပ်ဆင်ရမလဲ?') },
   ];
 
-  // Return null if AI chat is disabled (after all hooks)
-  if (!isEnabled) return null;
+  // Return null only if AI chat is explicitly disabled (after all hooks)
+  if (isDisabled) return null;
 
   return (
     <>
@@ -623,7 +683,48 @@ export default function AiChatWidget() {
 
           {/* Input Area */}
           <div className="px-3 py-3 border-t border-purple-500/15 bg-[#0a0a1a]/50">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleFileChange}
+              disabled={isLoading}
+            />
+            {(selectedFile || fileError) && (
+              <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-xs">
+                {selectedFile ? (
+                  <div className="flex min-w-0 items-center gap-2 text-white/75">
+                    <ImageIcon className="h-4 w-4 flex-shrink-0 text-purple-300" />
+                    <span className="truncate">{selectedFile.name}</span>
+                    <span className="flex-shrink-0 text-white/35">
+                      {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-red-300">{fileError}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={clearSelectedFile}
+                  className="rounded-md p-1 text-white/45 transition-colors hover:bg-white/10 hover:text-white/80"
+                  aria-label={tr('Remove attachment', 'ဖိုင်ဖယ်ရန်')}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             <div className="flex items-end gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                className="p-2.5 bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed text-white/70 rounded-xl transition-colors flex-shrink-0"
+                title={tr('Attach screenshot', 'Screenshot ပူးတွဲရန်')}
+                aria-label={tr('Attach screenshot', 'Screenshot ပူးတွဲရန်')}
+              >
+                <Paperclip className="w-4.5 h-4.5" />
+              </button>
               <textarea
                 ref={inputRef}
                 value={input}
@@ -646,7 +747,7 @@ export default function AiChatWidget() {
               />
               <button
                 onClick={sendMessage}
-                disabled={!input.trim() || isLoading}
+                disabled={(!input.trim() && !selectedFile) || isLoading}
                 className="p-2.5 bg-gradient-to-r from-purple-600 to-blue-500 hover:from-purple-500 hover:to-blue-400 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-200 flex-shrink-0"
               >
                 {isLoading ? (

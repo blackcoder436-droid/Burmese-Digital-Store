@@ -13,6 +13,9 @@ const DEFAULT_DIR = 'exports/facebook-page-history';
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const PHONE_RE = /(?:\+?95|\+?1)?[\s.-]?(?:\d[\s.-]?){7,14}\d/g;
 const TX_RE = /\b(?:txid|transaction|trx|ref|reference|order)\s*[:#-]?\s*[a-z0-9_-]{5,}\b/gi;
+const VPN_URI_RE = /\b(?:ss|ssr|vmess|vless|trojan|hysteria2?|tuic):\/\/[^\s"'<>]+/gi;
+const SECRET_URL_PARAM_RE = /([?&](?:access_token|token|key|secret)=)[^&\s"'<>]+/gi;
+const REDACTED_SECRET_RE = /\[(?:vpn-link|redacted)\]/i;
 
 function argValue(name) {
   const prefix = `${name}=`;
@@ -26,6 +29,8 @@ function hasFlag(name) {
 
 function redact(value = '') {
   return String(value)
+    .replace(VPN_URI_RE, '[vpn-link]')
+    .replace(SECRET_URL_PARAM_RE, '$1[redacted]')
     .replace(EMAIL_RE, '[email]')
     .replace(PHONE_RE, '[phone]')
     .replace(TX_RE, '[reference]')
@@ -68,6 +73,7 @@ async function findLatestQaFile(dir) {
     if (!entry.isFile() || !/^qa-candidates-.*\.jsonl$/i.test(entry.name)) continue;
     const fullPath = path.join(dir, entry.name);
     const stat = await fs.stat(fullPath);
+    if (stat.size === 0) continue;
     files.push({ path: fullPath, mtimeMs: stat.mtimeMs });
   }
   files.sort((a, b) => b.mtimeMs - a.mtimeMs);
@@ -85,6 +91,7 @@ async function readQaRows(filePath, limit) {
       const pageReply = redact(item.pageReply || '');
       if (customer.length < 3 || pageReply.length < 3) continue;
       if (customer.length > 1200 || pageReply.length > 2500) continue;
+      if (REDACTED_SECRET_RE.test(customer) || REDACTED_SECRET_RE.test(pageReply)) continue;
       rows.push({ customer, pageReply, createdTime: item.createdTime });
       if (rows.length >= limit) break;
     } catch {
@@ -97,8 +104,8 @@ async function readQaRows(filePath, limit) {
 async function main() {
   const fileArg = argValue('--file');
   const dir = argValue('--dir') || DEFAULT_DIR;
-  const limit = Math.max(1, Math.min(Number(argValue('--limit') || 300), 2000));
-  const priority = Math.max(0, Math.min(Number(argValue('--priority') || 45), 100));
+  const limit = Math.max(1, Math.min(Number(argValue('--limit') || 300), 5000));
+  const priority = Math.max(0, Math.min(Number(argValue('--priority') || 25), 100));
   const dryRun = hasFlag('--dry-run');
   const filePath = fileArg || await findLatestQaFile(dir);
 
@@ -124,12 +131,13 @@ async function main() {
   for (const row of rows) {
     const id = fingerprint(row.customer, row.pageReply);
     const content = [
-      'Real Facebook Page support example. Use as style and policy guidance, not as private customer data.',
+      'Real Facebook Page support example. Use this only for BDS Admin tone and conversation style, not as private customer data.',
+      'Do not treat old history as current facts about price, product availability, app compatibility, server status, keys, refunds, or policies. Current AI Ops/catalog rules override old chat history.',
       '',
       `Customer asked: ${row.customer}`,
       `Page admin replied: ${row.pageReply}`,
       '',
-      'When answering a similar question, reply as BDS Admin in a short, natural, helpful tone. Do not mention this history item.',
+      'When answering a similar question, copy the human style: short, personal, one-customer-at-a-time, and ask the next useful question. Do not mention this history item.',
     ].join('\n');
 
     const result = await collection.updateOne(
