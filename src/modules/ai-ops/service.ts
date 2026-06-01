@@ -8,6 +8,7 @@ import {
   resolveAiModel,
   type AiMessage,
 } from '@/lib/ai-chat';
+import { buildPlanId, getPlan } from '@/lib/vpn-plans';
 import AiChatSession from '@/models/AiChatSession';
 import { sendMessage, sendPhoto } from '@/lib/telegram-bot/api';
 import AiOpsSettings, { type IAiOpsSettingsDocument } from './models/AiOpsSettings';
@@ -152,6 +153,67 @@ function isPurchaseOrPaymentIntent(message: string): boolean {
     /\b(buy|purchase|order|checkout|pay|payment|plan|price|renew)\b/i.test(message) ||
     /(ဝယ်|၀ယ်|ယူမယ်|ယူချင်|လိုချင်|မှာမယ်|မှာချင်|ဈေး|စျေး|ဘယ်လောက်|ငွေချေ|ပေးချေ|payment|slip|order|plan)/i.test(message)
   );
+}
+
+const MYANMAR_DIGITS: Record<string, string> = {
+  '၀': '0',
+  '၁': '1',
+  '၂': '2',
+  '၃': '3',
+  '၄': '4',
+  '၅': '5',
+  '၆': '6',
+  '၇': '7',
+  '၈': '8',
+  '၉': '9',
+};
+
+function normalizeDigits(value: string): string {
+  return value.replace(/[၀-၉]/g, (digit) => MYANMAR_DIGITS[digit] || digit);
+}
+
+function parseVpnPlanRequest(message: string): { devices?: number; months?: number } {
+  const text = normalizeDigits(message.toLowerCase());
+  const deviceMatch = text.match(/([1-5])\s*(?:device|devices|dev|လုံး|ယောက်|ခု)/i);
+  const monthMatch = text.match(/(1|3|5|7|9|12)\s*(?:month|months|mo|လ)/i);
+
+  return {
+    devices: deviceMatch ? Number(deviceMatch[1]) : undefined,
+    months: monthMatch ? Number(monthMatch[1]) : undefined,
+  };
+}
+
+function hasRecentPurchaseIntent(recentUserContext?: string): boolean {
+  return Boolean(recentUserContext && isPurchaseOrPaymentIntent(recentUserContext.toLowerCase()));
+}
+
+function matchVpnPurchaseReply(params: {
+  message: string;
+  recentUserContext?: string;
+}): string | null {
+  const currentText = params.message.toLowerCase();
+  const currentPurchaseIntent = isPurchaseOrPaymentIntent(currentText);
+  const recentPurchaseIntent = hasRecentPurchaseIntent(params.recentUserContext);
+  const planRequest = parseVpnPlanRequest(params.message);
+
+  if (planRequest.devices && planRequest.months && (currentPurchaseIntent || recentPurchaseIntent)) {
+    const plan = getPlan(buildPlanId(planRequest.devices, planRequest.months));
+    if (plan) {
+      return `${plan.devices} device ${plan.months} လ ဆို ${plan.price.toLocaleString()} MMK ပါဗျ။ ဒီကနေ ဆက်လုပ်လို့ရပါတယ်။ Payment method ဘာနဲ့ပေးမလဲ - KPay, Wave, AYA, CB Pay?`;
+    }
+  }
+
+  if (!currentPurchaseIntent) return null;
+
+  if (/(ဒီမှာ|ဒီကနေ|chat|messenger|telegram).*(ဝယ်|၀ယ်|ရလား|မရ|အတူတူ)/i.test(currentText)) {
+    return 'ရပါတယ်ဗျ၊ ဒီကနေ ဆက်လုပ်လို့ရပါတယ်။ Device ဘယ်နှစ်လုံးနဲ့ ဘယ်နှစ်လ သုံးချင်တာလဲ ပြောပါ၊ ကျသင့်ငွေပြောပေးမယ်။';
+  }
+
+  if (/vpn|ဗီပီအန်/i.test(currentText) || currentPurchaseIntent) {
+    return 'ရပါတယ်ဗျ၊ VPN ဝယ်ဖို့ device ဘယ်နှစ်လုံးနဲ့ ဘယ်နှစ်လ သုံးချင်တာလဲ ပြောပါ။ ဥပမာ 2 device, 1 month လိုပို့ပေးပါ။';
+  }
+
+  return null;
 }
 
 function matchKnownTroubleshootingReply(params: {
@@ -497,6 +559,14 @@ export async function generateCustomerAgentReply(
 
     if (reply) {
       source = 'fixed';
+    }
+
+    if (!reply) {
+      reply = matchVpnPurchaseReply({
+        message,
+        recentUserContext,
+      });
+      if (reply) source = 'fixed';
     }
 
     if (!reply) {
