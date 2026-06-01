@@ -375,40 +375,64 @@ export async function actionBackupServer(serverName: string) {
   }
   const localDbPath = path.join(backupsDir, `${serverName}_backup.tar.gz`);
   
-  // Stop x-ui briefly so SQLite checkpoints WAL data before the DB snapshot.
+  // Backup the active database backend. SQLite needs a short stop/checkpoint,
+  // while PostgreSQL must be dumped with pg_dump because x-ui.db is stale there.
   const tarCmd = `
 set -e
 backup=/root/${serverName}_backup.tar.gz
+workdir=$(mktemp -d)
 restart_needed=0
-if systemctl is-active --quiet x-ui; then restart_needed=1; fi
 cleanup() {
+  rm -rf "$workdir"
   if [ "$restart_needed" = "1" ]; then
     systemctl start x-ui >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
-systemctl stop x-ui >/dev/null 2>&1 || true
-sleep 3
-[ -s /etc/x-ui/x-ui.db ] || { echo "x-ui.db is missing or empty"; exit 1; }
-if command -v sqlite3 >/dev/null 2>&1; then
-  sqlite3 /etc/x-ui/x-ui.db 'PRAGMA wal_checkpoint(TRUNCATE);' >/dev/null 2>&1 || true
+db_type=sqlite
+if [ -f /etc/default/x-ui ]; then
+  db_type=$(grep -E '^XUI_DB_TYPE=' /etc/default/x-ui | tail -1 | cut -d= -f2- || true)
 fi
+db_type=\${db_type:-sqlite}
 cd /
 rm -f "$backup"
-tar -czf "$backup" \
-  etc/x-ui/x-ui.db \
-  $([ -f "etc/x-ui/x-ui.db-wal" ] && echo "etc/x-ui/x-ui.db-wal") \
-  $([ -f "etc/x-ui/x-ui.db-shm" ] && echo "etc/x-ui/x-ui.db-shm") \
-  $([ -d "root/cert" ] && echo "root/cert") \
-  $([ -d "root/.acme.sh" ] && echo "root/.acme.sh")
-tar -tzf "$backup" | grep -qx 'etc/x-ui/x-ui.db'
+if [ "$db_type" = "postgres" ]; then
+  [ -f /etc/default/x-ui ] || { echo "PostgreSQL config /etc/default/x-ui is missing"; exit 1; }
+  set -a
+  . /etc/default/x-ui
+  set +a
+  [ -n "\${XUI_DB_DSN:-}" ] || { echo "XUI_DB_DSN is missing for PostgreSQL backup"; exit 1; }
+  command -v pg_dump >/dev/null 2>&1 || { echo "pg_dump is missing on the server"; exit 1; }
+  pg_dump --format=custom --no-owner --no-privileges --dbname="$XUI_DB_DSN" --file="$workdir/x-ui-postgres.dump"
+  cp /etc/default/x-ui "$workdir/x-ui-default.env"
+  tar -czf "$backup" \
+    -C "$workdir" x-ui-postgres.dump x-ui-default.env \
+    $([ -d "root/cert" ] && echo "-C / root/cert") \
+    $([ -d "root/.acme.sh" ] && echo "-C / root/.acme.sh")
+  tar -tzf "$backup" | grep -qx 'x-ui-postgres.dump'
+else
+  if systemctl is-active --quiet x-ui; then restart_needed=1; fi
+  systemctl stop x-ui >/dev/null 2>&1 || true
+  sleep 3
+  [ -s /etc/x-ui/x-ui.db ] || { echo "x-ui.db is missing or empty"; exit 1; }
+  if command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 /etc/x-ui/x-ui.db 'PRAGMA wal_checkpoint(TRUNCATE);' >/dev/null 2>&1 || true
+  fi
+  tar -czf "$backup" \
+    etc/x-ui/x-ui.db \
+    $([ -f "etc/x-ui/x-ui.db-wal" ] && echo "etc/x-ui/x-ui.db-wal") \
+    $([ -f "etc/x-ui/x-ui.db-shm" ] && echo "etc/x-ui/x-ui.db-shm") \
+    $([ -d "root/cert" ] && echo "root/cert") \
+    $([ -d "root/.acme.sh" ] && echo "root/.acme.sh")
+  tar -tzf "$backup" | grep -qx 'etc/x-ui/x-ui.db'
+fi
 `;
   await execSsh(oldIp, tarCmd);
   
   // Verify the file was created
   const checkTar = await execSsh(oldIp, `ls -l /root/${serverName}_backup.tar.gz || echo "NOT_FOUND"`);
   if (checkTar.includes("NOT_FOUND")) {
-    throw new Error("Backup process failed to create the tar.gz file. x-ui.db may be missing on the server.");
+    throw new Error("Backup process failed to create the tar.gz file. The x-ui database may be missing on the server.");
   }
   
   await sftpDownload(oldIp, `/root/${serverName}_backup.tar.gz`, localDbPath);
