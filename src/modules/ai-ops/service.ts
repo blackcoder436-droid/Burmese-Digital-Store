@@ -151,31 +151,20 @@ function buildRetrievalMessage(params: {
 function isPurchaseOrPaymentIntent(message: string): boolean {
   return (
     /\b(buy|purchase|order|checkout|pay|payment|plan|price|renew)\b/i.test(message) ||
-    /(ဝယ်|၀ယ်|ယူမယ်|ယူချင်|လိုချင်|မှာမယ်|မှာချင်|ဈေး|စျေး|ဘယ်လောက်|ငွေချေ|ပေးချေ|payment|slip|order|plan)/i.test(message)
+    /(?:\u101d\u101a\u103a|\u1040\u101a\u103a|\u101a\u1030\u1019\u101a\u103a|\u101a\u1030\u1001\u103b\u1004\u103a|\u101c\u102d\u102f\u1001\u103b\u1004\u103a|\u1019\u103e\u102c\u1019\u101a\u103a|\u1019\u103e\u102c\u1001\u103b\u1004\u103a|\u1008\u1031\u1038|\u1005\u103b\u1031\u1038|\u1018\u101a\u103a\u101c\u1031\u102c\u1000\u103a|\u1004\u103d\u1031\u1001\u103b\u1031|\u1015\u1031\u1038\u1001\u103b\u1031|payment|slip|order|plan)/i.test(message)
   );
 }
 
-const MYANMAR_DIGITS: Record<string, string> = {
-  '၀': '0',
-  '၁': '1',
-  '၂': '2',
-  '၃': '3',
-  '၄': '4',
-  '၅': '5',
-  '၆': '6',
-  '၇': '7',
-  '၈': '8',
-  '၉': '9',
-};
-
 function normalizeDigits(value: string): string {
-  return value.replace(/[၀-၉]/g, (digit) => MYANMAR_DIGITS[digit] || digit);
+  return value.replace(/[\u1040-\u1049]/g, (digit) =>
+    String(digit.charCodeAt(0) - 0x1040)
+  );
 }
 
 function parseVpnPlanRequest(message: string): { devices?: number; months?: number } {
   const text = normalizeDigits(message.toLowerCase());
-  const deviceMatch = text.match(/([1-5])\s*(?:device|devices|dev|လုံး|ယောက်|ခု)/i);
-  const monthMatch = text.match(/(1|3|5|7|9|12)\s*(?:month|months|mo|လ)/i);
+  const deviceMatch = text.match(/([1-5])\s*(?:device|devices|dev|\u101c\u102f\u1036\u1038|\u1001\u102f)/i);
+  const monthMatch = text.match(/(1|3|5|7|9|12)\s*(?:month|months|mo|\u101c)/i);
 
   return {
     devices: deviceMatch ? Number(deviceMatch[1]) : undefined,
