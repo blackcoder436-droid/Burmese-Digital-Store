@@ -9,6 +9,7 @@ type NotificationListener = (data: {
   message: string;
   notificationId: string;
   orderId?: string;
+  link?: string;
 }) => void;
 
 class NotificationEventEmitter {
@@ -44,6 +45,7 @@ class NotificationEventEmitter {
     message: string;
     notificationId: string;
     orderId?: string;
+    link?: string;
   }) {
     const userListeners = this.listeners.get(userId);
     if (userListeners) {
@@ -66,6 +68,7 @@ class NotificationEventEmitter {
     message: string;
     notificationId: string;
     orderId?: string;
+    link?: string;
   }) {
     for (const userId of userIds) {
       this.emit(userId, data);

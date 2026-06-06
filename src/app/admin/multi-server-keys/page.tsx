@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   CheckCircle,
   Copy,
   Eye,
+  ListChecks,
   Loader2,
   Pencil,
   Plus,
@@ -13,6 +15,7 @@ import {
   Shield,
   Sparkles,
   Trash2,
+  Wrench,
   XCircle,
   X,
 } from 'lucide-react';
@@ -63,6 +66,159 @@ interface MultiServerKeyDetailsResponse {
   };
 }
 
+type ReconciliationStatus = 'ok' | 'drift' | 'missing' | 'orphan' | 'unlinked' | 'error';
+
+interface ReconciliationClientSnapshot {
+  email: string;
+  protocol: string;
+  enable: boolean;
+  expiryTime: number;
+  limitIp: number;
+  totalGB: number;
+  up: number;
+  down: number;
+  subId: string;
+  clientId: string;
+  clientPassword: string;
+}
+
+interface ReconciliationIssue {
+  type: string;
+  message: string;
+  expected?: string | number | boolean;
+  actual?: string | number | boolean;
+}
+
+interface ServerReconciliationResult {
+  serverId: string;
+  serverName: string;
+  status: ReconciliationStatus;
+  expectedSubIds: string[];
+  expectedSubLinks: string[];
+  issues: ReconciliationIssue[];
+  linkedClient: ReconciliationClientSnapshot | null;
+  orphanCandidates: ReconciliationClientSnapshot[];
+}
+
+interface ReconciliationReport {
+  generatedAt: string;
+  expected: {
+    expiryTime: number;
+    devices: number;
+    totalGB: number;
+    enable: boolean;
+  };
+  summary: {
+    totalServers: number;
+    ok: number;
+    drift: number;
+    missing: number;
+    orphan: number;
+    unlinked: number;
+    error: number;
+    orphanCandidates: number;
+  };
+  servers: ServerReconciliationResult[];
+}
+
+interface ReconciliationResponse {
+  record: MultiServerKeyRecord;
+  report: ReconciliationReport;
+}
+
+interface RepairAction {
+  serverId: string;
+  serverName: string;
+  type: 'linked_client' | 'orphan_candidate' | 'missing_server' | 'panel_error';
+  status: 'updated' | 'linked' | 'skipped' | 'failed';
+  email?: string;
+  message: string;
+}
+
+interface RepairResponse {
+  actions: RepairAction[];
+  before: ReconciliationReport;
+  after: ReconciliationReport;
+  subLinksChanged: boolean;
+}
+
+type CleanupRecommendation =
+  | 'none'
+  | 'link_with_repair'
+  | 'sync_missing'
+  | 'review_disable_duplicate'
+  | 'review_delete_disabled_duplicate'
+  | 'manual_review'
+  | 'panel_error';
+
+interface OrphanCleanupItem {
+  serverId: string;
+  serverName: string;
+  recommendation: CleanupRecommendation;
+  risk: 'low' | 'medium' | 'high';
+  reason: string;
+  linkedClientEmail?: string;
+  candidate?: ReconciliationClientSnapshot;
+}
+
+interface OrphanCleanupReport {
+  dryRun: true;
+  generatedAt: string;
+  record: MultiServerKeyRecord;
+  summary: {
+    totalItems: number;
+    affectedServerIds: string[];
+    affectedServers: number;
+    orphanCandidates: number;
+    none: number;
+    link_with_repair: number;
+    sync_missing: number;
+    review_disable_duplicate: number;
+    review_delete_disabled_duplicate: number;
+    manual_review: number;
+    panel_error: number;
+  };
+  items: OrphanCleanupItem[];
+  reconciliation: ReconciliationReport;
+}
+
+interface PanelMutationReport {
+  generatedAt: string;
+  source: '3xui';
+  webDbKeyFieldsChanged: false;
+  mutation: 'update' | 'delete';
+  summary: {
+    total: number;
+    updated: number;
+    deleted: number;
+    skipped: number;
+    failed: number;
+  };
+  actions: Array<{
+    serverId: string;
+    serverName: string;
+    mutation: 'update' | 'delete';
+    status: 'updated' | 'deleted' | 'skipped' | 'failed';
+    email?: string;
+    source?: string;
+    message: string;
+  }>;
+}
+
+interface LiveKeySummary {
+  recordId: string;
+  generatedAt: string;
+  resolvedServers: number;
+  totalServers: number;
+  consistent: boolean;
+  status: 'active' | 'disabled' | 'expired' | 'unknown';
+  devices: number | null;
+  expiryTime: number | null;
+  dataLimitBytes: number | null;
+  usedBytes: number | null;
+  sourceServerName: string;
+}
+
 interface SummaryCounts {
   active: number;
   expired: number;
@@ -93,6 +249,8 @@ const DEFAULT_CREATE_FORM: CreateKeyForm = {
 export default function AdminMultiServerKeysPage() {
   const [keys, setKeys] = useState<MultiServerKeyRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveSummaries, setLiveSummaries] = useState<Record<string, LiveKeySummary>>({});
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState('');
@@ -106,6 +264,20 @@ export default function AdminMultiServerKeysPage() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MultiServerKeyRecord | null>(null);
   const [selectedDetails, setSelectedDetails] = useState<MultiServerKeyDetailsResponse | null>(null);
+  const [reconciliation, setReconciliation] = useState<ReconciliationResponse | null>(null);
+  const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [reconcileError, setReconcileError] = useState('');
+  const [repairingId, setRepairingId] = useState<string | null>(null);
+  const [repairMessage, setRepairMessage] = useState('');
+  const [repairError, setRepairError] = useState('');
+  const [repairResult, setRepairResult] = useState<RepairResponse | null>(null);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [cleanupError, setCleanupError] = useState('');
+  const [cleanupReport, setCleanupReport] = useState<OrphanCleanupReport | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkResult, setBulkResult] = useState<any>(null);
+  const [bulkDryRunResult, setBulkDryRunResult] = useState<any>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -140,9 +312,11 @@ export default function AdminMultiServerKeysPage() {
       const res = await fetch(`/api/admin/multi-server-keys?${params.toString()}`);
       const data = await res.json();
       if (data.success) {
-        setKeys(data.data.keys);
+        const nextKeys = data.data.keys as MultiServerKeyRecord[];
+        setKeys(nextKeys);
         setTotalPages(data.data.totalPages);
         setSummary(data.data.summary || { active: 0, expired: 0, disabled: 0, total: 0 });
+        void fetchLiveSummaries(nextKeys);
       } else {
         setError(data.error || 'Failed to load records');
       }
@@ -154,10 +328,41 @@ export default function AdminMultiServerKeysPage() {
     }
   }
 
+  async function fetchLiveSummaries(records: MultiServerKeyRecord[]) {
+    if (records.length === 0) {
+      setLiveSummaries({});
+      return;
+    }
+
+    setLiveLoading(true);
+    try {
+      const res = await fetch('/api/admin/multi-server-keys/live-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: records.map((record) => record._id) }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLiveSummaries(data.data?.summaries || {});
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLiveLoading(false);
+    }
+  }
+
   async function openDetails(record: MultiServerKeyRecord) {
     setSelectedRecord(record);
     setSelectedDetails(null);
+    setReconciliation(null);
     setDetailsError('');
+    setReconcileError('');
+    setRepairMessage('');
+    setRepairError('');
+    setRepairResult(null);
+    setCleanupError('');
+    setCleanupReport(null);
     setDetailsLoading(true);
     setShowDetailsModal(true);
     try {
@@ -174,6 +379,48 @@ export default function AdminMultiServerKeysPage() {
     } finally {
       setDetailsLoading(false);
     }
+
+    fetchReconciliation(record);
+  }
+
+  async function fetchReconciliation(record: MultiServerKeyRecord) {
+    setReconcileLoading(true);
+    setReconcileError('');
+    try {
+      const res = await fetch(`/api/admin/multi-server-keys/reconcile?id=${encodeURIComponent(record._id)}`);
+      const data = await res.json();
+      if (data.success) {
+        setReconciliation(data.data as ReconciliationResponse);
+      } else {
+        setReconcileError(data.error || 'Failed to run reconciliation');
+      }
+    } catch (err) {
+      setReconcileError('Network error while running reconciliation.');
+      console.error(err);
+    } finally {
+      setReconcileLoading(false);
+    }
+  }
+
+  async function refreshDetails(record: MultiServerKeyRecord) {
+    try {
+      const res = await fetch(`/api/admin/multi-server-keys/details?id=${encodeURIComponent(record._id)}`);
+      const data = await res.json();
+      if (data.success) {
+        setSelectedDetails(data.data as MultiServerKeyDetailsResponse);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadDetails(record: MultiServerKeyRecord) {
+    const res = await fetch(`/api/admin/multi-server-keys/details?id=${encodeURIComponent(record._id)}`);
+    const data = await res.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to load live 3xUI details');
+    }
+    return data.data as MultiServerKeyDetailsResponse;
   }
 
   function formatDate(ms?: number) {
@@ -185,8 +432,25 @@ export default function AdminMultiServerKeysPage() {
     });
   }
 
+  function formatDateTime(ms?: number) {
+    if (!ms || ms <= 0) return 'Unlimited';
+    return new Date(ms).toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  }
+
   function formatGb(bytes?: number) {
     if (!bytes || bytes <= 0) return '∞';
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+
+  function formatTraffic(bytes?: number | null) {
+    if (!bytes || bytes <= 0) return '0.00 GB';
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   }
 
@@ -200,6 +464,61 @@ export default function AdminMultiServerKeysPage() {
     return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
   }
 
+  function getReconciliationBadge(status: ReconciliationStatus) {
+    if (status === 'ok') return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300';
+    if (status === 'drift') return 'border-amber-500/20 bg-amber-500/10 text-amber-300';
+    if (status === 'missing' || status === 'error') return 'border-red-500/20 bg-red-500/10 text-red-300';
+    if (status === 'orphan') return 'border-orange-500/20 bg-orange-500/10 text-orange-300';
+    return 'border-slate-500/20 bg-slate-500/10 text-slate-300';
+  }
+
+  function getCleanupRiskBadge(risk: OrphanCleanupItem['risk']) {
+    if (risk === 'low') return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300';
+    if (risk === 'medium') return 'border-amber-500/20 bg-amber-500/10 text-amber-300';
+    return 'border-red-500/20 bg-red-500/10 text-red-300';
+  }
+
+  function getCleanupRecommendationLabel(recommendation: CleanupRecommendation) {
+    const labels: Record<CleanupRecommendation, string> = {
+      none: 'No action',
+      link_with_repair: 'Repair can link',
+      sync_missing: 'Use Create',
+      review_disable_duplicate: 'Review disable',
+      review_delete_disabled_duplicate: 'Review delete',
+      manual_review: 'Manual review',
+      panel_error: 'Panel error',
+    };
+    return labels[recommendation];
+  }
+
+  function formatPanelMutationSummary(panel?: PanelMutationReport | null) {
+    if (!panel) return '';
+    if (panel.mutation === 'delete') {
+      return `3xUI live delete: ${panel.summary.deleted} deleted, ${panel.summary.skipped} skipped, ${panel.summary.failed} failed. WEB record kept.`;
+    }
+    return `3xUI live update: ${panel.summary.updated} updated, ${panel.summary.skipped} skipped, ${panel.summary.failed} failed. WEB key fields unchanged.`;
+  }
+
+  function formatIssueValue(value?: string | number | boolean) {
+    if (value === undefined) return '-';
+    if (typeof value === 'boolean') return value ? 'enabled' : 'disabled';
+    if (typeof value === 'number' && value > 1_000_000_000_000) return formatDateTime(value);
+    if (typeof value === 'number' && value > 1024 * 1024) return formatGb(value);
+    return String(value);
+  }
+
+  async function copyToClipboard(value: string, id: string) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      setError('Unable to copy to clipboard');
+      console.error(err);
+    }
+  }
+
   async function updateRecord(id: string, updates: Record<string, unknown>) {
     try {
       const res = await fetch('/api/admin/multi-server-keys', {
@@ -211,15 +530,25 @@ export default function AdminMultiServerKeysPage() {
       if (!data.success) {
         throw new Error(data.error || 'Update failed');
       }
+      const panel = data.data?.panel as PanelMutationReport | null | undefined;
+      const panelMessage = formatPanelMutationSummary(panel);
+      if (panelMessage) {
+        window.alert(panelMessage);
+      }
       await fetchKeys();
+      if (selectedRecord?._id === id) {
+        await refreshDetails(selectedRecord);
+      }
+      return data.data;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update record');
       console.error(err);
+      return null;
     }
   }
 
   async function deleteRecord(id: string) {
-    if (!window.confirm('Are you sure you want to delete this multi-server key record?')) {
+    if (!window.confirm('Delete live 3xUI clients for this key? WEB order/history record will be kept.')) {
       return;
     }
     try {
@@ -232,6 +561,8 @@ export default function AdminMultiServerKeysPage() {
       if (!data.success) {
         throw new Error(data.error || 'Delete failed');
       }
+      const panel = data.data?.panel as PanelMutationReport | null | undefined;
+      window.alert(formatPanelMutationSummary(panel) || data.message || '3xUI live clients deleted.');
       await fetchKeys();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete record');
@@ -240,9 +571,22 @@ export default function AdminMultiServerKeysPage() {
   }
 
   async function toggleStatus(record: MultiServerKeyRecord) {
-    const nextStatus = record.status === 'disabled' ? 'active' : 'disabled';
-    await updateRecord(record._id, { status: nextStatus });
-    await syncRecord(record);
+    setSyncingId(record._id);
+    try {
+      const details = selectedDetails?.record._id === record._id ? selectedDetails : await loadDetails(record);
+      const liveClient = details.clients[0]?.client;
+      const liveEnabled = liveClient ? liveClient.enable !== false && !(liveClient.expiryTime > 0 && liveClient.expiryTime < Date.now()) : record.status !== 'disabled';
+      const nextStatus = liveEnabled ? 'disabled' : 'active';
+      await updateRecord(record._id, { status: nextStatus });
+      if (selectedRecord?._id === record._id) {
+        await refreshDetails(record);
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to update live 3xUI status');
+      console.error(err);
+    } finally {
+      setSyncingId(null);
+    }
   }
 
   async function syncRecord(record: MultiServerKeyRecord) {
@@ -255,36 +599,174 @@ export default function AdminMultiServerKeysPage() {
       });
       const data = await res.json();
       if (!data.success) {
-        throw new Error(data.error || 'Sync failed');
+        throw new Error(data.error || 'Refresh failed');
       }
-      window.alert(data.message || 'Synced successfully.');
-      await fetchKeys();
+      const refreshed = data.data as ReconciliationResponse;
+      if (refreshed?.report) {
+        setReconciliation(refreshed);
+      }
+      window.alert(data.message || 'Live 3xUI refresh complete.');
+      await Promise.all([fetchKeys(), refreshDetails(record)]);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Failed to sync record');
+      window.alert(err instanceof Error ? err.message : 'Failed to refresh live 3xUI state');
       console.error(err);
     } finally {
       setSyncingId(null);
     }
   }
 
-  function openEditModal(record: MultiServerKeyRecord) {
+  function openEditModal(record: MultiServerKeyRecord, liveClient?: ResolvedClient['client']) {
     setEditingRecord(record);
-    setEditDevices(record.devices || 1);
+    setEditDevices(liveClient?.limitIp || record.devices || 1);
     
-    if (record.expiryTime && record.expiryTime > 0) {
+    const expiryTime = liveClient?.expiryTime ?? record.expiryTime;
+    if (expiryTime && expiryTime > 0) {
       setEditUnlimitedExpiry(false);
-      const dateObj = new Date(record.expiryTime);
-      const year = dateObj.getFullYear();
-      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-      const day = String(dateObj.getDate()).padStart(2, '0');
+      // Convert stored UTC expiryTime to Myanmar local date (MMT UTC+6:30)
+      const MMT_OFFSET_MS = 6 * 60 * 60 * 1000 + 30 * 60 * 1000; // 6h30m
+      const mmtDate = new Date(Number(expiryTime) + MMT_OFFSET_MS);
+      const year = mmtDate.getUTCFullYear();
+      const month = String(mmtDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(mmtDate.getUTCDate()).padStart(2, '0');
       setEditExpiryDate(`${year}-${month}-${day}`);
     } else {
       setEditUnlimitedExpiry(true);
       setEditExpiryDate('');
     }
     
-    setEditDataLimit(record.dataLimitGB || 0);
+    const liveDataLimitGB = liveClient?.totalGB ? Math.round(liveClient.totalGB / (1024 * 1024 * 1024)) : undefined;
+    setEditDataLimit(liveDataLimitGB ?? record.dataLimitGB ?? 0);
     setShowEditModal(true);
+  }
+
+  async function openLiveEditModal(record: MultiServerKeyRecord) {
+    setEditingId(record._id);
+    try {
+      const details = selectedDetails?.record._id === record._id ? selectedDetails : await loadDetails(record);
+      openEditModal(record, details.clients[0]?.client);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to load live 3xUI values');
+      console.error(err);
+    } finally {
+      setEditingId(null);
+    }
+  }
+
+  async function repairRecord(record: MultiServerKeyRecord) {
+    // Step 1: Dry-run to preview actions
+    setRepairingId(record._id);
+    setRepairMessage('Running dry-run...');
+    setRepairError('');
+    setRepairResult(null);
+    setCleanupError('');
+    setCleanupReport(null);
+
+    try {
+      const res = await fetch('/api/admin/multi-server-keys/repair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: record._id, includeOrphans: true, dryRun: true }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Dry-run failed');
+
+      const dryRunData = data.data as RepairResponse;
+      setRepairResult(dryRunData);
+      setRepairMessage('Dry-run completed.');
+
+      // Ask admin to confirm applying changes
+      const proceed = window.confirm(
+        `Dry-run found ${dryRunData.actions.length} action(s). Apply changes now?`
+      );
+      if (!proceed) return;
+
+      // Step 2: Apply changes
+      setRepairMessage('Applying changes...');
+      const res2 = await fetch('/api/admin/multi-server-keys/repair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: record._id, includeOrphans: true, dryRun: false }),
+      });
+      const data2 = await res2.json();
+      if (!data2.success) throw new Error(data2.error || 'Repair failed');
+
+      const repairData = data2.data as RepairResponse;
+      setRepairResult(repairData);
+      setRepairMessage(data2.message || 'Repair applied.');
+      setReconciliation({ record, report: repairData.after });
+      await Promise.all([fetchKeys(), refreshDetails(record)]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to repair record';
+      setRepairError(message);
+      window.alert(message);
+      console.error(err);
+    } finally {
+      setRepairingId(null);
+    }
+  }
+
+  async function runCleanupDryRun(record: MultiServerKeyRecord) {
+    setCleanupLoading(true);
+    setCleanupError('');
+    setCleanupReport(null);
+
+    try {
+      const res = await fetch(`/api/admin/multi-server-keys/orphan-cleanup?id=${encodeURIComponent(record._id)}`);
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Cleanup dry-run failed');
+      }
+
+      const report = data.data as OrphanCleanupReport;
+      setCleanupReport(report);
+      setReconciliation({ record, report: report.reconciliation });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to run cleanup dry-run';
+      setCleanupError(message);
+      console.error(err);
+    } finally {
+      setCleanupLoading(false);
+    }
+  }
+
+  function toggleSelectId(id: string) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  async function handleBulkRepair() {
+    if (selectedIds.length === 0) return;
+    setBulkLoading(true);
+    try {
+      // Dry-run first
+      const res = await fetch('/api/admin/multi-server-keys/repair-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedIds, dryRun: true, includeOrphans: true }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Dry-run failed');
+      setBulkDryRunResult(data.data || []);
+
+      const proceed = window.confirm(`Dry-run completed for ${selectedIds.length} record(s). Proceed to apply changes?`);
+      if (!proceed) return;
+
+      const res2 = await fetch('/api/admin/multi-server-keys/repair-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedIds, dryRun: false, includeOrphans: true }),
+      });
+      const data2 = await res2.json();
+      if (!data2.success) throw new Error(data2.error || 'Bulk repair failed');
+      setBulkResult(data2.data || []);
+      window.alert('Bulk repair applied.');
+      await fetchKeys();
+      setSelectedIds([]);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err));
+      console.error(err);
+    } finally {
+      setBulkLoading(false);
+    }
   }
 
   function openCreateModal(mode: CreateKeyMode) {
@@ -341,28 +823,21 @@ export default function AdminMultiServerKeysPage() {
     try {
       let expiryTime = 0;
       if (!editUnlimitedExpiry && editExpiryDate) {
-        const dt = new Date(editExpiryDate);
-        if (!isNaN(dt.getTime())) {
-          dt.setHours(23, 59, 59, 999);
-          expiryTime = dt.getTime();
+        // Interpret the selected date as Myanmar local day end (23:59:59.999 MMT)
+        // and convert to UTC epoch ms for storage.
+        const parts = editExpiryDate.split('-').map((p) => Number(p));
+        if (parts.length === 3) {
+          const [y, m, d] = parts;
+          const MMT_OFFSET_MS = 6 * 60 * 60 * 1000 + 30 * 60 * 1000; // 6h30m
+          // Date.UTC gives ms for the given Y/M/D 23:59:59.999 in UTC,
+          // subtract MMT offset to get the UTC instant that corresponds to 23:59:59.999 MMT.
+          expiryTime = Date.UTC(y, m - 1, d, 23, 59, 59, 999) - MMT_OFFSET_MS;
         }
       }
       
       await updateRecord(editingRecord._id, { expiryTime, dataLimitGB: editDataLimit, devices: editDevices });
-      
-      // Auto-sync after successful update
-      const res = await fetch('/api/admin/multi-server-keys/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingRecord._id }),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Sync failed');
-      }
-      await fetchKeys();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Failed to update and sync record');
+      window.alert(err instanceof Error ? err.message : 'Failed to update record');
       console.error(err);
     } finally {
       setEditingId(null);
@@ -394,6 +869,15 @@ export default function AdminMultiServerKeysPage() {
           >
             <Plus className="h-4 w-4" />
             Sell Key
+          </button>
+          <button
+            type="button"
+            onClick={() => handleBulkRepair()}
+            disabled={selectedIds.length === 0 || bulkLoading}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-200 transition hover:bg-amber-500/20 disabled:opacity-40"
+          >
+            <Wrench className="h-4 w-4" />
+            Bulk Repair
           </button>
           <input
             value={search}
@@ -445,6 +929,13 @@ export default function AdminMultiServerKeysPage() {
               <table className="min-w-full border-collapse text-sm whitespace-nowrap">
               <thead>
                 <tr className="text-left text-gray-400 border-b border-white/10 uppercase text-xs tracking-[0.2em]">
+                  <th className="px-4 py-3 font-medium">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.length > 0 && selectedIds.length === keys.length}
+                      onChange={(e) => { if (e.target.checked) setSelectedIds(keys.map(k => k._id)); else setSelectedIds([]); }}
+                    />
+                  </th>
                   <th className="px-4 py-3 font-medium">Token</th>
                   <th className="px-4 py-3 font-medium">Username</th>
                   <th className="px-4 py-3 font-medium">Devices</th>
@@ -457,22 +948,60 @@ export default function AdminMultiServerKeysPage() {
                 </tr>
               </thead>
               <tbody>
-                {keys.map((record) => (
+                {keys.map((record) => {
+                  const live = liveSummaries[record._id];
+                  const displayStatus = live?.status && live.status !== 'unknown' ? live.status : (record.status || 'active');
+                  const displayDevices = live?.devices ?? record.devices ?? 1;
+                  const displayExpiry = live?.expiryTime ?? record.expiryTime;
+                  const displayDataLimit = live?.dataLimitBytes ?? (
+                    (record.dataLimitGB ?? 0) > 0 ? (record.dataLimitGB || 0) * 1024 * 1024 * 1024 : 0
+                  );
+
+                  return (
                   <tr
                     key={record._id}
                     onClick={() => openDetails(record)}
                     className="border-b border-white/10 hover:bg-white/5 transition-colors cursor-pointer"
                   >
+                    <td className="px-4 py-3 text-gray-200" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(record._id)}
+                        onChange={() => toggleSelectId(record._id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </td>
                     <td className="px-4 py-3 text-white">
                       <div className="font-medium">{record.token.slice(0, 8)}…</div>
                       <div className="text-[10px] text-gray-500">{record.migratedFromToken ? `from ${record.migratedFromToken.slice(0, 8)}…` : 'direct'}</div>
                     </td>
                     <td className="px-4 py-3 text-gray-200">{record.username}</td>
-                    <td className="px-4 py-3 text-gray-200">{record.devices || 1}</td>
-                    <td className="px-4 py-3 text-gray-200 text-xs">{formatDate(record.expiryTime)}</td>
-                    <td className="px-4 py-3 text-gray-200 text-xs">{(record.dataLimitGB ?? 0) === 0 ? 'Unlimited' : `${record.dataLimitGB} GB`}</td>
+                    <td className="px-4 py-3 text-gray-200">
+                      <div>{displayDevices}</div>
+                      {live && <div className="text-[10px] text-emerald-300">live</div>}
+                    </td>
                     <td className="px-4 py-3 text-gray-200 text-xs">
-                      {record.serverSubLinks?.length ?? 0} sub / {record.serverConfigLinks?.length ?? 0} cfg
+                      <div>{formatDate(displayExpiry)}</div>
+                      {live && !live.consistent && <div className="text-[10px] text-amber-300">mixed panels</div>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-200 text-xs">
+                      <div>{formatGb(displayDataLimit)}</div>
+                      {live?.usedBytes !== null && live?.usedBytes !== undefined && (
+                        <div className="text-[10px] text-gray-500">used {formatTraffic(live.usedBytes)}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-gray-200 text-xs">
+                      {live ? (
+                        <div>
+                          <div>{live.resolvedServers}/{live.totalServers} live</div>
+                          {live.sourceServerName && <div className="text-[10px] text-gray-500">{live.sourceServerName}</div>}
+                        </div>
+                      ) : (
+                        <div>
+                          <div>{record.serverSubLinks?.length ?? 0} sub / {record.serverConfigLinks?.length ?? 0} cfg</div>
+                          {liveLoading && <div className="text-[10px] text-cyan-300">checking live...</div>}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-200">
                       {(() => {
@@ -484,11 +1013,7 @@ export default function AdminMultiServerKeysPage() {
                               <a href={link} target="_blank" rel="noreferrer" className="text-xs text-cyan-300 truncate max-w-[140px] block hover:underline">{link}</a>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(link);
-                                  setCopiedId(record._id);
-                                  setTimeout(() => setCopiedId(null), 2000);
-                                }}
+                                onClick={() => copyToClipboard(link, record._id)}
                                 className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white hover:bg-white/10 transition-colors"
                               >{copiedId === record._id ? 'Copied' : 'Copy'}</button>
                             </div>
@@ -499,17 +1024,30 @@ export default function AdminMultiServerKeysPage() {
                       })()}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusBadge(record.status)}`}>
-                        {record.status || 'active'}
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStatusBadge(displayStatus)}`}>
+                        {displayStatus}
                       </span>
+                      {live && <div className="mt-1 text-[10px] text-emerald-300">3xUI</div>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); openEditModal(record); }}
+                          onClick={(e) => { e.stopPropagation(); openDetails(record); }}
+                          disabled={detailsLoading && selectedRecord?._id === record._id}
+                          className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-xs text-cyan-300 hover:bg-cyan-500/20 transition-colors disabled:opacity-50 min-w-[66px] flex justify-center"
+                          title="Open details, reconcile, repair, and cleanup checks"
+                        >
+                          {detailsLoading && selectedRecord?._id === record._id ? (
+                            <span className="w-3.5 h-3.5 rounded-full border-2 border-cyan-300 border-t-transparent animate-spin inline-block"></span>
+                          ) : 'Details'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); openLiveEditModal(record); }}
                           disabled={syncingId === record._id || editingId === record._id}
                           className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white hover:bg-white/10 transition-colors disabled:opacity-50 min-w-[56px] flex justify-center"
+                          title="Edit live 3xUI clients. WEB key fields are not changed."
                         >
                           {editingId === record._id ? (
                             <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block"></span>
@@ -520,28 +1058,31 @@ export default function AdminMultiServerKeysPage() {
                           onClick={(e) => { e.stopPropagation(); syncRecord(record); }}
                           disabled={syncingId === record._id}
                           className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-2.5 py-1.5 text-xs text-blue-300 hover:bg-blue-500/20 transition-colors disabled:opacity-50 min-w-[56px] flex justify-center"
-                          title="Sync expiry/data limits and automatically add missing new servers"
+                          title="Refresh live 3xUI state. No WEB DB key fields are changed."
                         >
                           {syncingId === record._id ? (
                             <span className="w-3.5 h-3.5 rounded-full border-2 border-blue-300 border-t-transparent animate-spin inline-block"></span>
-                          ) : 'Sync'}
+                          ) : 'Refresh'}
                         </button>
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); toggleStatus(record); }}
                           disabled={syncingId === record._id}
                           className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white hover:bg-white/10 transition-colors disabled:opacity-50"
-                        >{record.status === 'disabled' ? 'Enable' : 'Disable'}</button>
+                          title="Enable/disable live 3xUI clients. WEB key fields are not changed."
+                        >{displayStatus === 'disabled' ? 'Enable' : 'Disable'}</button>
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); deleteRecord(record._id); }}
                           disabled={syncingId === record._id}
                           className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
-                        >Delete</button>
+                          title="Delete live 3xUI clients only. WEB history record is kept."
+                        >3xUI Del</button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             </div>
@@ -580,21 +1121,54 @@ export default function AdminMultiServerKeysPage() {
               </div>
               <div className="flex items-center gap-2">
                 {selectedRecord && (
-                  <button
-                    onClick={() => syncRecord(selectedRecord)}
-                    disabled={syncingId === selectedRecord._id || detailsLoading}
-                    className="inline-flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm text-blue-300 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
-                  >
-                    {syncingId === selectedRecord._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Sync
-                  </button>
+                  <>
+                    <button
+                      onClick={() => fetchReconciliation(selectedRecord)}
+                      disabled={reconcileLoading || detailsLoading || cleanupLoading || repairingId === selectedRecord._id}
+                      className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {reconcileLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
+                      Reconcile
+                    </button>
+                    <button
+                      onClick={() => repairRecord(selectedRecord)}
+                      disabled={repairingId === selectedRecord._id || detailsLoading || reconcileLoading || cleanupLoading}
+                      className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {repairingId === selectedRecord._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
+                      Repair
+                    </button>
+                    <button
+                      onClick={() => runCleanupDryRun(selectedRecord)}
+                      disabled={cleanupLoading || detailsLoading || reconcileLoading || repairingId === selectedRecord._id}
+                      className="inline-flex items-center gap-2 rounded-xl border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-300 hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {cleanupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListChecks className="w-4 h-4" />}
+                      Cleanup
+                    </button>
+                    <button
+                      onClick={() => syncRecord(selectedRecord)}
+                      disabled={syncingId === selectedRecord._id || detailsLoading || cleanupLoading || repairingId === selectedRecord._id}
+                      className="inline-flex items-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm text-blue-300 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {syncingId === selectedRecord._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                      Refresh
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={() => {
                     setShowDetailsModal(false);
                     setSelectedRecord(null);
                     setSelectedDetails(null);
+                    setReconciliation(null);
                     setDetailsError('');
+                    setReconcileError('');
+                    setRepairMessage('');
+                    setRepairError('');
+                    setRepairResult(null);
+                    setCleanupError('');
+                    setCleanupReport(null);
                   }}
                   className="p-2 text-gray-400 hover:text-white rounded-xl transition-colors hover:bg-white/5"
                 >
@@ -658,7 +1232,7 @@ export default function AdminMultiServerKeysPage() {
                     <div className="rounded-3xl border border-white/10 bg-[#0b0b19] p-4 space-y-3">
                       <div className="flex items-center gap-2 text-white font-semibold">
                         <Shield className="w-4 h-4 text-cyan-300" />
-                        API / Sync Summary
+                        Live API Summary
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
@@ -715,6 +1289,274 @@ export default function AdminMultiServerKeysPage() {
                     </div>
                   </div>
 
+                  {(cleanupLoading || cleanupError || cleanupReport) && (
+                    <div className="rounded-3xl border border-white/10 bg-[#0b0b19] p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Cleanup Dry-Run</div>
+                          <div className="text-lg font-semibold text-white mt-1">Orphan and duplicate recommendations</div>
+                        </div>
+                        {cleanupReport && (
+                          <div className="text-xs text-gray-500">
+                            Checked {new Date(cleanupReport.generatedAt).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+
+                      {cleanupLoading ? (
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center text-gray-400">
+                          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                          Running dry-run only. No panel clients will be changed.
+                        </div>
+                      ) : cleanupError ? (
+                        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-red-300">
+                          {cleanupError}
+                        </div>
+                      ) : cleanupReport ? (
+                        <>
+                          <div className="mb-4 rounded-2xl border border-orange-500/20 bg-orange-500/10 p-3 text-sm text-orange-100">
+                            Dry-run only: this report does not delete, disable, rename, or relink any panel client.
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 md:grid-cols-6 mb-4">
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Items</div>
+                              <div className="mt-1 text-xl font-semibold text-white">{cleanupReport.summary.totalItems}</div>
+                            </div>
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Servers</div>
+                              <div className="mt-1 text-xl font-semibold text-cyan-300">{cleanupReport.summary.affectedServers}</div>
+                            </div>
+                            <div className="rounded-2xl border border-emerald-500/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Linkable</div>
+                              <div className="mt-1 text-xl font-semibold text-emerald-300">{cleanupReport.summary.link_with_repair}</div>
+                            </div>
+                            <div className="rounded-2xl border border-amber-500/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Disable</div>
+                              <div className="mt-1 text-xl font-semibold text-amber-300">{cleanupReport.summary.review_disable_duplicate}</div>
+                            </div>
+                            <div className="rounded-2xl border border-orange-500/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Delete Review</div>
+                              <div className="mt-1 text-xl font-semibold text-orange-300">{cleanupReport.summary.review_delete_disabled_duplicate}</div>
+                            </div>
+                            <div className="rounded-2xl border border-red-500/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Manual</div>
+                              <div className="mt-1 text-xl font-semibold text-red-300">{cleanupReport.summary.manual_review + cleanupReport.summary.panel_error}</div>
+                            </div>
+                          </div>
+
+                          {cleanupReport.items.length === 0 ? (
+                            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-emerald-200">
+                              No cleanup candidates found for this record.
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full border-collapse text-sm">
+                                <thead>
+                                  <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-gray-500">
+                                    <th className="px-3 py-2 font-medium">Server</th>
+                                    <th className="px-3 py-2 font-medium">Candidate</th>
+                                    <th className="px-3 py-2 font-medium">Recommendation</th>
+                                    <th className="px-3 py-2 font-medium">Risk</th>
+                                    <th className="px-3 py-2 font-medium">Reason</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {cleanupReport.items.map((item, index) => (
+                                    <tr key={`${item.serverId}-${item.candidate?.subId || item.recommendation}-${index}`} className="border-b border-white/10 align-top">
+                                      <td className="px-3 py-3">
+                                        <div className="font-medium text-white">{item.serverName}</div>
+                                        <div className="text-xs text-gray-500">{item.serverId}</div>
+                                      </td>
+                                      <td className="px-3 py-3 text-gray-300">
+                                        {item.candidate ? (
+                                          <div className="max-w-[260px]">
+                                            <div className="truncate">{item.candidate.email}</div>
+                                            <div className="text-xs text-gray-500">{item.candidate.enable ? 'enabled' : 'disabled'} - {formatDate(item.candidate.expiryTime)}</div>
+                                            <div className="text-xs text-gray-500 truncate">{item.candidate.subId || 'no subId'}</div>
+                                          </div>
+                                        ) : (
+                                          <span className="text-gray-500">No client candidate</span>
+                                        )}
+                                        {item.linkedClientEmail && (
+                                          <div className="mt-1 text-xs text-gray-500 truncate">
+                                            linked: {item.linkedClientEmail}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-3">
+                                        <span className="inline-flex rounded-full border border-orange-500/20 bg-orange-500/10 px-2 py-1 text-[11px] font-medium text-orange-300">
+                                          {getCleanupRecommendationLabel(item.recommendation)}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-3">
+                                        <span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-medium ${getCleanupRiskBadge(item.risk)}`}>
+                                          {item.risk}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-3 text-gray-300">
+                                        {item.reason}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </>
+                      ) : null}
+                    </div>
+                  )}
+
+                  {(reconcileLoading || reconcileError || reconciliation) && (
+                    <div className="rounded-3xl border border-white/10 bg-[#0b0b19] p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.2em] text-gray-500">Reconciliation</div>
+                          <div className="text-lg font-semibold text-white mt-1">DB vs live 3xUI panels</div>
+                        </div>
+                        {reconciliation && (
+                          <div className="text-xs text-gray-500">
+                            Last checked {new Date(reconciliation.report.generatedAt).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+
+                      {(repairMessage || repairError || repairResult) && (
+                        <div className={`mb-4 rounded-2xl border p-3 text-sm ${
+                          repairError
+                            ? 'border-red-500/20 bg-red-500/10 text-red-300'
+                            : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                        }`}>
+                          <div className="font-semibold">{repairError || repairMessage}</div>
+                          {repairResult && (
+                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                              <div>
+                                <span className="text-gray-400">Updated: </span>
+                                {repairResult.actions.filter((action) => action.status === 'updated' || action.status === 'linked').length}
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Skipped: </span>
+                                {repairResult.actions.filter((action) => action.status === 'skipped').length}
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Failed: </span>
+                                {repairResult.actions.filter((action) => action.status === 'failed').length}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {reconcileLoading ? (
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center text-gray-400">
+                          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                          Checking panel state...
+                        </div>
+                      ) : reconcileError ? (
+                        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-red-300">
+                          {reconcileError}
+                        </div>
+                      ) : reconciliation ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-3 md:grid-cols-6 mb-4">
+                            <div className="rounded-2xl border border-emerald-500/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">OK</div>
+                              <div className="mt-1 text-xl font-semibold text-emerald-300">{reconciliation.report.summary.ok}</div>
+                            </div>
+                            <div className="rounded-2xl border border-amber-500/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Drift</div>
+                              <div className="mt-1 text-xl font-semibold text-amber-300">{reconciliation.report.summary.drift}</div>
+                            </div>
+                            <div className="rounded-2xl border border-red-500/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Missing</div>
+                              <div className="mt-1 text-xl font-semibold text-red-300">{reconciliation.report.summary.missing}</div>
+                            </div>
+                            <div className="rounded-2xl border border-orange-500/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Orphan</div>
+                              <div className="mt-1 text-xl font-semibold text-orange-300">{reconciliation.report.summary.orphanCandidates}</div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-500/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Unlinked</div>
+                              <div className="mt-1 text-xl font-semibold text-slate-300">{reconciliation.report.summary.unlinked}</div>
+                            </div>
+                            <div className="rounded-2xl border border-red-500/10 bg-white/[0.03] p-3">
+                              <div className="text-xs text-gray-500">Errors</div>
+                              <div className="mt-1 text-xl font-semibold text-red-300">{reconciliation.report.summary.error}</div>
+                            </div>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full border-collapse text-sm">
+                              <thead>
+                                <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-gray-500">
+                                  <th className="px-3 py-2 font-medium">Server</th>
+                                  <th className="px-3 py-2 font-medium">State</th>
+                                  <th className="px-3 py-2 font-medium">Linked Client</th>
+                                  <th className="px-3 py-2 font-medium">Panel Expiry</th>
+                                  <th className="px-3 py-2 font-medium">Issues</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {reconciliation.report.servers.map((server) => (
+                                  <tr key={server.serverId} className="border-b border-white/10 align-top">
+                                    <td className="px-3 py-3">
+                                      <div className="font-medium text-white">{server.serverName}</div>
+                                      <div className="text-xs text-gray-500">{server.serverId}</div>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-medium ${getReconciliationBadge(server.status)}`}>
+                                        {server.status}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-3 text-gray-300">
+                                      {server.linkedClient ? (
+                                        <div className="max-w-[240px]">
+                                          <div className="truncate">{server.linkedClient.email}</div>
+                                          <div className="text-xs text-gray-500">{server.linkedClient.subId || 'no subId'}</div>
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-500">No linked client</span>
+                                      )}
+                                      {server.orphanCandidates.length > 0 && (
+                                        <div className="mt-2 rounded-lg border border-orange-500/20 bg-orange-500/10 px-2 py-1 text-xs text-orange-200">
+                                          {server.orphanCandidates.length} orphan candidate{server.orphanCandidates.length !== 1 ? 's' : ''}
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-3 text-gray-300">
+                                      {server.linkedClient?.expiryTime ? formatDateTime(server.linkedClient.expiryTime) : '-'}
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      {server.issues.length === 0 ? (
+                                        <span className="text-emerald-300">No issues</span>
+                                      ) : (
+                                        <div className="space-y-1">
+                                          {server.issues.map((issue, index) => (
+                                            <div key={`${server.serverId}-${issue.type}-${index}`} className="text-xs text-gray-300">
+                                              <span className="text-amber-300">{issue.type}</span>
+                                              <span className="text-gray-500"> - </span>
+                                              <span>{issue.message}</span>
+                                              {(issue.expected !== undefined || issue.actual !== undefined) && (
+                                                <div className="text-gray-500">
+                                                  expected {formatIssueValue(issue.expected)} / actual {formatIssueValue(issue.actual)}
+                                                </div>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  )}
+
                   <div className="rounded-3xl border border-white/10 bg-[#0b0b19] p-4">
                     <div className="flex items-center justify-between gap-3 mb-4">
                       <div>
@@ -728,7 +1570,7 @@ export default function AdminMultiServerKeysPage() {
 
                     {selectedDetails.clients.length === 0 ? (
                       <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-gray-400">
-                        No live client data resolved yet. Try Sync to re-check the panels.
+                        No live client data resolved yet. Try Refresh to re-check the panels.
                       </div>
                     ) : (
                       <div className="grid gap-3 lg:grid-cols-2">
@@ -752,7 +1594,7 @@ export default function AdminMultiServerKeysPage() {
                                 <div><span className="text-gray-500">Email:</span> {client.email}</div>
                                 <div><span className="text-gray-500">Protocol:</span> {client.protocol.toUpperCase()}</div>
                                 <div><span className="text-gray-500">Devices:</span> {client.limitIp || 0}</div>
-                                <div><span className="text-gray-500">Expiry:</span> {client.expiryTime > 0 ? formatDate(client.expiryTime) : 'Unlimited'}</div>
+                                <div><span className="text-gray-500">Expiry:</span> {client.expiryTime > 0 ? formatDateTime(client.expiryTime) : 'Unlimited'}</div>
                                 <div><span className="text-gray-500">Usage:</span> {usedGb.toFixed(2)} GB / {formatGb(client.totalGB)}</div>
                                 <div><span className="text-gray-500">Telegram ID:</span> {client.tgId || '—'}</div>
                                 <div className="break-all"><span className="text-gray-500">Sub ID:</span> {client.subId || '—'}</div>
@@ -789,17 +1631,19 @@ export default function AdminMultiServerKeysPage() {
                         <button
                           onClick={() => {
                             setShowDetailsModal(false);
-                            openEditModal(selectedRecord);
+                            openLiveEditModal(selectedRecord);
                           }}
                           className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white hover:bg-white/10 transition-colors"
+                          title="Edit live 3xUI clients. WEB key fields are not changed."
                         >
                           <Pencil className="w-4 h-4" />
-                          Edit
+                          Edit 3xUI
                         </button>
                         <button
                           onClick={() => toggleStatus(selectedRecord)}
                           disabled={syncingId === selectedRecord._id}
                           className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                          title="Enable/disable live 3xUI clients. WEB key fields are not changed."
                         >
                           {selectedRecord.status === 'disabled' ? 'Enable' : 'Disable'}
                         </button>
@@ -807,9 +1651,10 @@ export default function AdminMultiServerKeysPage() {
                           onClick={() => deleteRecord(selectedRecord._id)}
                           disabled={syncingId === selectedRecord._id}
                           className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                          title="Delete live 3xUI clients only. WEB history record is kept."
                         >
                           <Trash2 className="w-4 h-4" />
-                          Delete
+                          Delete 3xUI
                         </button>
                       </>
                     )}
@@ -834,7 +1679,7 @@ export default function AdminMultiServerKeysPage() {
                   </h2>
                 </div>
                 <p className="mt-1 text-sm text-gray-400">
-                  Creates a key across all enabled servers and stores it in the multi-server key list.
+                  Creates live 3xUI clients across enabled servers and keeps a WEB index/history record.
                 </p>
               </div>
               <button
@@ -943,7 +1788,7 @@ export default function AdminMultiServerKeysPage() {
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
             
-            <h2 className="text-xl font-bold text-white mb-6">Edit Multi-Server Key</h2>
+            <h2 className="text-xl font-bold text-white mb-6">Edit Live 3xUI Key</h2>
             
             <div className="space-y-4">
               <div>
@@ -1011,7 +1856,7 @@ export default function AdminMultiServerKeysPage() {
                 onClick={handleSaveEdit}
                 className="px-5 py-2 rounded-xl text-sm font-medium text-white bg-purple-600 hover:bg-purple-500 transition-colors shadow-lg shadow-purple-500/20"
               >
-                Save & Sync
+                Update 3xUI
               </button>
             </div>
           </div>

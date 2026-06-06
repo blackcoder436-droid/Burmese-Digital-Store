@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import {
 	Check,
@@ -8,14 +8,28 @@ import {
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
+	Clock3,
+	Cloud,
+	Copy,
 	Database,
+	Edit3,
 	Globe,
+	HardDrive,
+	History,
+	KeyRound,
+	Link2,
 	Loader2,
+	Network,
+	PanelTop,
 	Plus,
 	PlayCircle,
+	RefreshCw,
+	Save,
 	Server,
 	Settings,
+	ShieldCheck,
 	Terminal,
+	Trash2,
 	XCircle,
 } from 'lucide-react';
 
@@ -26,13 +40,26 @@ type RotateConfig = {
 	doToken4: string;
 	doTokens?: RotateTokenRow[];
 	serverLinks?: RotateServerLinkRow[];
+	cfAccounts?: RotateCfAccountRow[];
 	cfToken: string;
 	cfEmail: string;
 	xuiUsername: string;
 	xuiPassword: string;
 	enable2FA: boolean;
+	dropletRegion: string;
 	dropletSize: string;
 	dropletImage: string;
+	dropletBackups: boolean;
+	dropletIpv6: boolean;
+	dropletMonitoring: boolean;
+	dropletPublicNetworking: boolean;
+	dropletAgent: boolean;
+	dropletSshKeys: string;
+	dropletTags: string;
+	dropletVpcUuid: string;
+	dropletVolumes: string;
+	dropletUserData: string;
+	dropletBackupPolicy: string;
 };
 
 type StepResult = {
@@ -49,12 +76,104 @@ type RotateTokenRow = {
 	enabled: boolean;
 };
 
+type RotateCfAccountRow = {
+	id: string;
+	label: string;
+	token: string;
+	email: string;
+	enabled: boolean;
+};
+
 type RotateServerLinkRow = {
 	id: string;
 	serverName: string;
 	tokenId: string;
 	enabled: boolean;
 };
+
+type ServerPickerOption = {
+	value: string;
+	label: string;
+	resolvedIp?: string | null;
+	updatedAt?: string | null;
+	domain?: string;
+	enabled?: boolean;
+	badge?: string;
+};
+
+type DoSelectOption = {
+	value: string;
+	label: string;
+	description?: string;
+	available?: boolean;
+	regions?: string[];
+	region?: string;
+};
+
+type DoOptions = {
+	regions: DoSelectOption[];
+	sizes: DoSelectOption[];
+	images: DoSelectOption[];
+	sshKeys: DoSelectOption[];
+	vpcs: DoSelectOption[];
+	volumes: DoSelectOption[];
+	errors?: string[];
+};
+
+type PanelServerRow = {
+	serverId: string;
+	name: string;
+	flag: string;
+	url: string;
+	panelPath: string;
+	apiKey?: string;
+	domain: string;
+	subPort: number;
+	protocol: string;
+	enabledProtocols?: string[];
+	enabled: boolean;
+	badge?: string;
+	notes?: string;
+	resolvedIp?: string | null;
+	updatedAt?: string | null;
+};
+
+type PanelDraft = {
+	serverId: string;
+	name: string;
+	flag: string;
+	url: string;
+	panelPath: string;
+	apiKey: string;
+	domain: string;
+	subPort: string;
+	protocol: string;
+	enabledProtocols: string;
+	enabled: boolean;
+	badge: string;
+	notes: string;
+};
+
+type RotationHistoryRow = {
+	id: string;
+	action: string;
+	actionLabel: string;
+	serverId: string;
+	status: 'running' | 'success' | 'error';
+	message?: string;
+	error?: string;
+	oldIp?: string | null;
+	newIp?: string | null;
+	domain?: string | null;
+	panel?: string | null;
+	region?: string | null;
+	size?: string | null;
+	image?: string | null;
+	startedAt?: string | null;
+	updatedAt?: string | null;
+};
+
+type ConfigTab = 'servers' | 'digitalocean' | 'cloudflare' | 'panel' | 'history';
 
 const STEPS = [
 	{ id: 1, title: 'Config', icon: Settings },
@@ -64,14 +183,16 @@ const STEPS = [
 	{ id: 5, title: 'Panel', icon: Terminal },
 ] as const;
 
-const SERVER_OPTIONS = [
-	{ value: 'jan', label: 'Jan Server (Account 1)' },
-	{ value: 'sg1', label: 'SG-1 Server (Account 1)' },
-	{ value: 'sg2', label: 'SG-2 Server (Account 2)' },
-	{ value: 'sg3', label: 'SG-3 Server (Account 2)' },
-	{ value: 'sg4', label: 'SG-4 Server (Account 1 - NYC1)' },
-	{ value: 'backup', label: 'Backup Server (Account 2)' },
-] as const;
+const SERVER_OPTIONS: ServerPickerOption[] = [
+	{ value: 'jan', label: 'Jan Server (Account 1)', domain: 'jan.burmesedigital.store' },
+	{ value: 'sg1', label: 'SG-1 Server (Account 1)', domain: 'sg1.burmesedigital.store' },
+	{ value: 'sg2', label: 'SG-2 Server (Account 2)', domain: 'sg2.burmesedigital.store' },
+	{ value: 'sg3', label: 'SG-3 Server (Account 2)', domain: 'sg3.burmesedigital.store' },
+	{ value: 'sg4', label: 'SG-4 Server (Account 1 - NYC1)', domain: 'sg4.burmesedigital.store' },
+	{ value: 'backup', label: 'Backup Server (Account 2)', domain: 'backup.burmesedigital.store' },
+];
+
+const SERVER_LABELS = Object.fromEntries(SERVER_OPTIONS.map((option) => [option.value, option.label]));
 
 const DEFAULT_CONFIG: RotateConfig = {
 	doToken1: '',
@@ -80,13 +201,60 @@ const DEFAULT_CONFIG: RotateConfig = {
 	doToken4: '',
 	doTokens: [],
 	serverLinks: [],
+	cfAccounts: [],
 	cfToken: '',
 	cfEmail: 'blackcoder436@gmail.com',
 	xuiUsername: 'Blackcoder',
 	xuiPassword: 'Mka@2016',
 	enable2FA: false,
+	dropletRegion: 'sgp1',
 	dropletSize: 's-1vcpu-1gb',
 	dropletImage: 'ubuntu-22-04-x64',
+	dropletBackups: false,
+	dropletIpv6: false,
+	dropletMonitoring: true,
+	dropletPublicNetworking: true,
+	dropletAgent: true,
+	dropletSshKeys: '',
+	dropletTags: 'vpn, rotate',
+	dropletVpcUuid: '',
+	dropletVolumes: '',
+	dropletUserData: '',
+	dropletBackupPolicy: '',
+};
+
+const CONFIG_TABS: Array<{ id: ConfigTab; label: string; icon: any }> = [
+	{ id: 'digitalocean', label: 'DigitalOcean', icon: Cloud },
+	{ id: 'cloudflare', label: 'Cloudflare', icon: Globe },
+	{ id: 'panel', label: '3xUI', icon: PanelTop },
+	{ id: 'servers', label: 'Servers', icon: Server },
+	{ id: 'history', label: 'History', icon: History },
+];
+
+const EMPTY_DO_OPTIONS: DoOptions = {
+	regions: [],
+	sizes: [],
+	images: [],
+	sshKeys: [],
+	vpcs: [],
+	volumes: [],
+	errors: [],
+};
+
+const EMPTY_PANEL_DRAFT: PanelDraft = {
+	serverId: '',
+	name: '',
+	flag: 'SG',
+	url: '',
+	panelPath: '/mka',
+	apiKey: '',
+	domain: '',
+	subPort: '2096',
+	protocol: 'trojan',
+	enabledProtocols: 'trojan, vless, vmess, shadowsocks',
+	enabled: true,
+	badge: '',
+	notes: '',
 };
 
 const DROPLET_SIZE_OPTIONS = [
@@ -96,6 +264,18 @@ const DROPLET_SIZE_OPTIONS = [
 	{ value: 's-2vcpu-4gb', label: '$24.00/mo', description: '2 vCPU - 4 GB RAM - 80 GB SSD - 4 TB Transfer' },
 	{ value: 's-4vcpu-8gb', label: '$48.00/mo', description: '4 vCPU - 8 GB RAM - 160 GB SSD - 5 TB Transfer' },
 	{ value: 's-8vcpu-16gb', label: '$96.00/mo', description: '8 vCPU - 16 GB RAM - 320 GB SSD - 6 TB Transfer' },
+] as const;
+
+const DROPLET_REGION_OPTIONS = [
+	{ value: 'sgp1', label: 'Singapore - SGP1', description: 'Default for SG panels' },
+	{ value: 'nyc1', label: 'New York - NYC1', description: 'Legacy SG4 fallback' },
+	{ value: 'nyc3', label: 'New York - NYC3' },
+	{ value: 'sfo3', label: 'San Francisco - SFO3' },
+	{ value: 'ams3', label: 'Amsterdam - AMS3' },
+	{ value: 'fra1', label: 'Frankfurt - FRA1' },
+	{ value: 'lon1', label: 'London - LON1' },
+	{ value: 'tor1', label: 'Toronto - TOR1' },
+	{ value: 'blr1', label: 'Bangalore - BLR1' },
 ] as const;
 
 const DROPLET_IMAGE_OPTIONS = [
@@ -138,6 +318,41 @@ function normalizeTokensFromConfig(config: Partial<RotateConfig>): RotateTokenRo
 	return [
 		{ id: 'do_token_1', label: 'Token 1', token: '', enabled: true },
 		{ id: 'do_token_2', label: 'Token 2', token: '', enabled: true },
+	];
+}
+
+function normalizeCfAccountsFromConfig(config: Partial<RotateConfig>): RotateCfAccountRow[] {
+	const arrayAccounts = Array.isArray(config.cfAccounts) ? config.cfAccounts : [];
+	if (arrayAccounts.length > 0) {
+		return arrayAccounts.map((row, index) => ({
+			id: row.id || createId(`cf_account_${index + 1}`),
+			label: row.label || `Cloudflare ${index + 1}`,
+			token: row.token || '',
+			email: row.email || '',
+			enabled: row.enabled !== false,
+		}));
+	}
+
+	if (config.cfToken) {
+		return [
+			{
+				id: 'cf_account_1',
+				label: 'Cloudflare 1',
+				token: config.cfToken || '',
+				email: config.cfEmail || '',
+				enabled: true,
+			},
+		];
+	}
+
+	return [
+		{
+			id: 'cf_account_1',
+			label: 'Cloudflare 1',
+			token: '',
+			email: config.cfEmail || 'blackcoder436@gmail.com',
+			enabled: true,
+		},
 	];
 }
 
@@ -184,6 +399,107 @@ function sleep(ms: number) {
 	return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function formatRelativeTime(value?: string | null) {
+	if (!value) return 'unknown';
+
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return 'unknown';
+
+	const diffSeconds = Math.round((date.getTime() - Date.now()) / 1000);
+	const absSeconds = Math.abs(diffSeconds);
+	const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+	if (absSeconds < 60) return formatter.format(diffSeconds, 'second');
+	if (absSeconds < 3600) return formatter.format(Math.round(diffSeconds / 60), 'minute');
+	if (absSeconds < 86400) return formatter.format(Math.round(diffSeconds / 3600), 'hour');
+
+	return formatter.format(Math.round(diffSeconds / 86400), 'day');
+}
+
+function formatDateTimeShort(value?: string | null) {
+	if (!value) return 'unknown';
+
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return 'unknown';
+
+	return new Intl.DateTimeFormat('en-GB', {
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+		hour12: false,
+	}).format(date);
+}
+
+function normalizeKey(value?: string | null) {
+	return String(value || '').trim().toLowerCase();
+}
+
+function splitCsv(value?: string | null) {
+	return String(value || '')
+		.split(',')
+		.map((item) => item.trim())
+		.filter(Boolean);
+}
+
+function joinCsv(values: string[]) {
+	return values.map((item) => item.trim()).filter(Boolean).join(', ');
+}
+
+function optionForCurrentValue(value: string, fallbackLabel = 'Custom value'): DoSelectOption[] {
+	return value ? [{ value, label: value, description: fallbackLabel }] : [];
+}
+
+function filterByRegion(options: DoSelectOption[], region: string) {
+	if (!region) return options;
+	return options.filter((option) => {
+		if (option.available === false) return false;
+		if (option.region) return option.region === region;
+		if (Array.isArray(option.regions) && option.regions.length > 0) return option.regions.includes(region);
+		return true;
+	});
+}
+
+function getPanelDraftFromServer(server: PanelServerRow): PanelDraft {
+	return {
+		serverId: server.serverId || '',
+		name: server.name || '',
+		flag: server.flag || 'SG',
+		url: server.url || '',
+		panelPath: server.panelPath || '/mka',
+		apiKey: server.apiKey || '',
+		domain: server.domain || '',
+		subPort: String(server.subPort || 2096),
+		protocol: server.protocol || 'trojan',
+		enabledProtocols: joinCsv(server.enabledProtocols || ['trojan', 'vless', 'vmess', 'shadowsocks']),
+		enabled: server.enabled !== false,
+		badge: server.badge || '',
+		notes: server.notes || '',
+	};
+}
+
+function getStatusClass(status: RotationHistoryRow['status']) {
+	if (status === 'success') return 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200';
+	if (status === 'running') return 'border-sky-400/30 bg-sky-400/10 text-sky-200';
+	return 'border-red-400/30 bg-red-400/10 text-red-200';
+}
+
+async function copyText(value: string) {
+	if (!value) return;
+
+	try {
+		if (navigator?.clipboard?.writeText) {
+			await navigator.clipboard.writeText(value);
+			toast.success('IP copied');
+		} else {
+			toast.error('Clipboard is not available');
+		}
+	} catch {
+		toast.error('Failed to copy IP');
+	}
+}
+
 export default function RotateWizardPage() {
 	const [loading, setLoading] = useState(true);
 	const [actionLoading, setActionLoading] = useState(false);
@@ -192,8 +508,51 @@ export default function RotateWizardPage() {
 	const [config, setConfig] = useState(DEFAULT_CONFIG);
 	const [stepResults, setStepResults] = useState<Record<number, StepResult>>({});
 	const [doTokens, setDoTokens] = useState<RotateTokenRow[]>(normalizeTokensFromConfig(DEFAULT_CONFIG));
+	const [cfAccounts, setCfAccounts] = useState<RotateCfAccountRow[]>(normalizeCfAccountsFromConfig(DEFAULT_CONFIG));
 	const [serverLinks, setServerLinks] = useState<RotateServerLinkRow[]>([]);
+	const [serverOptions, setServerOptions] = useState<ServerPickerOption[]>(SERVER_OPTIONS);
+	const [configTab, setConfigTab] = useState<ConfigTab>('digitalocean');
+	const [doOptions, setDoOptions] = useState<DoOptions>(EMPTY_DO_OPTIONS);
+	const [doOptionsLoading, setDoOptionsLoading] = useState(false);
+	const [doOptionsError, setDoOptionsError] = useState('');
+	const [panelServers, setPanelServers] = useState<PanelServerRow[]>([]);
+	const [panelDraft, setPanelDraft] = useState<PanelDraft>(EMPTY_PANEL_DRAFT);
+	const [editingPanelId, setEditingPanelId] = useState('');
+	const [showPanelForm, setShowPanelForm] = useState(false);
+	const [panelSaving, setPanelSaving] = useState(false);
+	const [history, setHistory] = useState<RotationHistoryRow[]>([]);
+	const [historyLoading, setHistoryLoading] = useState(false);
 	const availableTokens = doTokens.filter((row) => row.token);
+	const selectedServerLabel = serverOptions.find((option) => option.value === targetServer)?.label || targetServer;
+	const selectedServerOption = serverOptions.find((option) => option.value === targetServer);
+	const linkedServerRow = serverLinks.find((row) => normalizeKey(row.serverName) === normalizeKey(targetServer) && row.enabled !== false);
+	const linkedDoTokenLabel = (() => {
+		if (!linkedServerRow?.tokenId) return null;
+
+		const linkedToken = doTokens.find((row) => normalizeKey(row.id) === normalizeKey(linkedServerRow.tokenId));
+		return linkedToken?.label || linkedServerRow.tokenId || null;
+	})();
+	const regionOptions = doOptions.regions.length > 0 ? doOptions.regions : [...DROPLET_REGION_OPTIONS];
+	const sizeOptions = filterByRegion(doOptions.sizes, config.dropletRegion).length > 0
+		? filterByRegion(doOptions.sizes, config.dropletRegion)
+		: [...DROPLET_SIZE_OPTIONS];
+	const imageOptions = filterByRegion(doOptions.images, config.dropletRegion).length > 0
+		? filterByRegion(doOptions.images, config.dropletRegion)
+		: [...DROPLET_IMAGE_OPTIONS];
+	const vpcOptions = filterByRegion(doOptions.vpcs, config.dropletRegion);
+	const volumeOptions = filterByRegion(doOptions.volumes, config.dropletRegion);
+	const regionChoices = regionOptions.some((option) => option.value === config.dropletRegion)
+		? regionOptions
+		: [...optionForCurrentValue(config.dropletRegion, 'Saved region'), ...regionOptions];
+	const sizeChoices = sizeOptions.some((option) => option.value === config.dropletSize)
+		? sizeOptions
+		: [...optionForCurrentValue(config.dropletSize, 'Saved size'), ...sizeOptions];
+	const imageChoices = imageOptions.some((option) => option.value === config.dropletImage)
+		? imageOptions
+		: [...optionForCurrentValue(config.dropletImage, 'Saved image'), ...imageOptions];
+	const vpcChoices = config.dropletVpcUuid && !vpcOptions.some((option) => option.value === config.dropletVpcUuid)
+		? [{ value: '', label: 'Default VPC', description: 'DigitalOcean default' }, ...optionForCurrentValue(config.dropletVpcUuid, 'Saved VPC'), ...vpcOptions]
+		: [{ value: '', label: 'Default VPC', description: 'DigitalOcean default' }, ...vpcOptions];
 
 	useEffect(() => {
 		let mounted = true;
@@ -207,6 +566,7 @@ export default function RotateWizardPage() {
 					const loadedConfig = { ...DEFAULT_CONFIG, ...data.data.config } as RotateConfig;
 					setConfig(loadedConfig);
 					setDoTokens(normalizeTokensFromConfig(loadedConfig));
+					setCfAccounts(normalizeCfAccountsFromConfig(loadedConfig));
 					setServerLinks(normalizeServerLinksFromConfig(loadedConfig));
 				}
 			} catch {
@@ -222,6 +582,163 @@ export default function RotateWizardPage() {
 			mounted = false;
 		};
 	}, []);
+
+	useEffect(() => {
+		let mounted = true;
+
+		async function loadServers() {
+			try {
+				const response = await fetch('/api/admin/servers');
+				const data = await readApiJson(response);
+
+				if (mounted && data?.success && Array.isArray(data?.data?.servers) && data.data.servers.length > 0) {
+					const panelRows: PanelServerRow[] = data.data.servers.map((server: any) => ({
+						serverId: String(server.serverId || server.id || ''),
+						name: String(server.name || server.serverId || 'Server'),
+						flag: String(server.flag || 'SG'),
+						url: String(server.url || ''),
+						panelPath: String(server.panelPath || '/mka'),
+						apiKey: String(server.apiKey || ''),
+						domain: String(server.domain || ''),
+						subPort: Number(server.subPort || 2096),
+						protocol: String(server.protocol || 'trojan'),
+						enabledProtocols: Array.isArray(server.enabledProtocols) ? server.enabledProtocols : ['trojan', 'vless', 'vmess', 'shadowsocks'],
+						enabled: server.enabled !== false,
+						badge: server.badge || '',
+						notes: server.notes || '',
+						resolvedIp: server.resolvedIp || null,
+						updatedAt: server.updatedAt || null,
+					})).filter((server: PanelServerRow) => server.serverId);
+					const liveServers: ServerPickerOption[] = data.data.servers.map((server: any) => ({
+						value: String(server.serverId || server.id || ''),
+						label: String(SERVER_LABELS[String(server.serverId || server.id || '')] || server.name || server.serverId || 'Server'),
+						resolvedIp: server.resolvedIp || null,
+						updatedAt: server.updatedAt || null,
+						domain: server.domain || '',
+						enabled: server.enabled !== false,
+						badge: server.badge || '',
+					})).filter((server: ServerPickerOption) => server.value);
+
+					if (liveServers.length > 0) {
+						setPanelServers(panelRows);
+						setServerOptions(liveServers);
+						setTargetServer((current) =>
+							liveServers.some((server) => server.value === current)
+								? current
+								: liveServers[0].value
+						);
+					}
+				}
+			} catch {
+				// Keep the fallback list already shown on the page.
+			}
+		}
+
+		void loadServers();
+
+		return () => {
+			mounted = false;
+		};
+	}, []);
+
+	useEffect(() => {
+		void loadDigitalOceanOptions(true);
+	}, [targetServer, linkedDoTokenLabel, availableTokens.length]);
+
+	useEffect(() => {
+		void loadHistory(true);
+	}, []);
+
+	async function refreshServers() {
+		const response = await fetch('/api/admin/servers');
+		const data = await readApiJson(response);
+		if (!data?.success || !Array.isArray(data?.data?.servers)) return;
+
+		const panelRows: PanelServerRow[] = data.data.servers.map((server: any) => ({
+			serverId: String(server.serverId || server.id || ''),
+			name: String(server.name || server.serverId || 'Server'),
+			flag: String(server.flag || 'SG'),
+			url: String(server.url || ''),
+			panelPath: String(server.panelPath || '/mka'),
+			apiKey: String(server.apiKey || ''),
+			domain: String(server.domain || ''),
+			subPort: Number(server.subPort || 2096),
+			protocol: String(server.protocol || 'trojan'),
+			enabledProtocols: Array.isArray(server.enabledProtocols) ? server.enabledProtocols : ['trojan', 'vless', 'vmess', 'shadowsocks'],
+			enabled: server.enabled !== false,
+			badge: server.badge || '',
+			notes: server.notes || '',
+			resolvedIp: server.resolvedIp || null,
+			updatedAt: server.updatedAt || null,
+		})).filter((server: PanelServerRow) => server.serverId);
+		const liveServers: ServerPickerOption[] = panelRows.map((server) => ({
+			value: server.serverId,
+			label: String(SERVER_LABELS[server.serverId] || server.name || server.serverId || 'Server'),
+			resolvedIp: server.resolvedIp || null,
+			updatedAt: server.updatedAt || null,
+			domain: server.domain || '',
+			enabled: server.enabled !== false,
+			badge: server.badge || '',
+		}));
+
+		setPanelServers(panelRows);
+		if (liveServers.length > 0) {
+			setServerOptions(liveServers);
+			setTargetServer((current) => liveServers.some((server) => server.value === current) ? current : liveServers[0].value);
+		}
+	}
+
+	async function loadDigitalOceanOptions(silent = false) {
+		if (availableTokens.length === 0) {
+			setDoOptions(EMPTY_DO_OPTIONS);
+			setDoOptionsError('Save at least one enabled DigitalOcean token to load live choices.');
+			return;
+		}
+
+		setDoOptionsLoading(true);
+		if (!silent) setDoOptionsError('');
+
+		try {
+			const response = await fetch(`/api/admin/rotate-config/do-options?serverId=${encodeURIComponent(targetServer)}`, {
+				cache: 'no-store',
+			});
+			const data = await readApiJson(response);
+
+			if (data?.success && data?.data) {
+				setDoOptions({ ...EMPTY_DO_OPTIONS, ...data.data });
+				setDoOptionsError(Array.isArray(data.data.errors) && data.data.errors.length > 0 ? data.data.errors[0] : '');
+				if (!silent) toast.success('DigitalOcean choices refreshed');
+			} else {
+				setDoOptionsError(data?.error || 'Unable to load DigitalOcean choices');
+				if (!silent) toast.error(data?.error || 'Unable to load DigitalOcean choices');
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unable to load DigitalOcean choices';
+			setDoOptionsError(message);
+			if (!silent) toast.error(message);
+		} finally {
+			setDoOptionsLoading(false);
+		}
+	}
+
+	async function loadHistory(silent = false) {
+		setHistoryLoading(true);
+
+		try {
+			const response = await fetch('/api/admin/rotate-history?limit=30', { cache: 'no-store' });
+			const data = await readApiJson(response);
+
+			if (data?.success && Array.isArray(data?.data?.history)) {
+				setHistory(data.data.history);
+			} else if (!silent) {
+				toast.error(data?.error || 'Unable to load rotation history');
+			}
+		} catch {
+			if (!silent) toast.error('Unable to load rotation history');
+		} finally {
+			setHistoryLoading(false);
+		}
+	}
 
 	function handleConfigChange(event: any) {
 		const target = event.target;
@@ -263,6 +780,30 @@ export default function RotateWizardPage() {
 		});
 	}
 
+	function updateCfAccount(index: number, field: keyof RotateCfAccountRow, value: string | boolean) {
+		setCfAccounts((current) => {
+			const next = [...current];
+			next[index] = { ...next[index], [field]: value } as RotateCfAccountRow;
+			return next;
+		});
+	}
+
+	function addCfAccountRow() {
+		setCfAccounts((current) => [
+			...current,
+			{ id: createId('cf_account'), label: `Cloudflare ${current.length + 1}`, token: '', email: '', enabled: true },
+		]);
+	}
+
+	function removeCfAccountRow(index: number) {
+		setCfAccounts((current) => {
+			const next = current.filter((_, i) => i !== index);
+			return next.length > 0
+				? next.map((row, i) => ({ ...row, label: row.label || `Cloudflare ${i + 1}` }))
+				: [{ id: 'cf_account_1', label: 'Cloudflare 1', token: '', email: config.cfEmail || '', enabled: true }];
+		});
+	}
+
 	function addServerLinkRow() {
 		setServerLinks((current) => [
 			...current,
@@ -289,6 +830,121 @@ export default function RotateWizardPage() {
 		})));
 	}
 
+	function updateConfigCsv(name: keyof RotateConfig, value: string, checked: boolean) {
+		setConfig((current) => {
+			const values = new Set(splitCsv(String(current[name] || '')));
+			if (checked) values.add(value);
+			else values.delete(value);
+			return { ...current, [name]: joinCsv(Array.from(values)) } as RotateConfig;
+		});
+	}
+
+	function resetPanelDraft() {
+		setEditingPanelId('');
+		setPanelDraft(EMPTY_PANEL_DRAFT);
+		setShowPanelForm(false);
+	}
+
+	function openPanelDraft() {
+		setEditingPanelId('');
+		setPanelDraft(EMPTY_PANEL_DRAFT);
+		setShowPanelForm(true);
+	}
+
+	function editPanel(server: PanelServerRow) {
+		setEditingPanelId(server.serverId);
+		setPanelDraft(getPanelDraftFromServer(server));
+		setShowPanelForm(true);
+		setConfigTab('panel');
+	}
+
+	function handlePanelDraftChange(event: any) {
+		const target = event.target;
+		const name = target.name;
+		const type = target.type;
+		const checked = target.checked;
+		const value = target.value;
+
+		setPanelDraft((current) => ({
+			...current,
+			[name]: type === 'checkbox' ? checked : value,
+		}));
+	}
+
+	async function handleSavePanel() {
+		const serverId = panelDraft.serverId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+		if (!serverId || !panelDraft.name.trim() || !panelDraft.url.trim() || !panelDraft.domain.trim()) {
+			toast.error('Panel server ID, name, URL, and domain are required');
+			return;
+		}
+
+		setPanelSaving(true);
+		try {
+			const payload: any = {
+				serverId: editingPanelId || serverId,
+				name: panelDraft.name.trim(),
+				flag: panelDraft.flag.trim() || 'SG',
+				url: panelDraft.url.trim().replace(/\/$/, ''),
+				panelPath: panelDraft.panelPath.trim() || '/mka',
+				apiKey: panelDraft.apiKey.trim(),
+				domain: panelDraft.domain.trim(),
+				subPort: Number(panelDraft.subPort) || 2096,
+				protocol: panelDraft.protocol || 'trojan',
+				enabledProtocols: splitCsv(panelDraft.enabledProtocols),
+				enabled: panelDraft.enabled,
+				badge: panelDraft.badge.trim(),
+				notes: panelDraft.notes.trim(),
+			};
+
+			if (editingPanelId && serverId !== editingPanelId) {
+				payload.newServerId = serverId;
+			}
+
+			const response = await fetch('/api/admin/servers', {
+				method: editingPanelId ? 'PATCH' : 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(payload),
+			});
+			const data = await readApiJson(response);
+
+			if (data?.success) {
+				toast.success(editingPanelId ? 'Panel updated' : 'Panel added');
+				resetPanelDraft();
+				await refreshServers();
+			} else {
+				toast.error(data?.error || 'Failed to save panel');
+			}
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to save panel');
+		} finally {
+			setPanelSaving(false);
+		}
+	}
+
+	async function handleDeletePanel(serverId: string) {
+		if (!window.confirm(`Delete panel server "${serverId}"?`)) return;
+
+		setPanelSaving(true);
+		try {
+			const response = await fetch(`/api/admin/servers?serverId=${encodeURIComponent(serverId)}`, {
+				method: 'DELETE',
+			});
+			const data = await readApiJson(response);
+
+			if (data?.success) {
+				toast.success('Panel deleted');
+				if (editingPanelId === serverId) resetPanelDraft();
+				await refreshServers();
+			} else {
+				toast.error(data?.error || 'Failed to delete panel');
+			}
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to delete panel');
+		} finally {
+			setPanelSaving(false);
+		}
+	}
+
 	async function handleSaveConfig() {
 		setActionLoading(true);
 
@@ -309,6 +965,15 @@ export default function RotateWizardPage() {
 					enabled: row.enabled !== false,
 				}))
 				.filter((row) => row.serverName && row.tokenId);
+			const cleanedCfAccounts = cfAccounts
+				.map((row, index) => ({
+					id: row.id || createId(`cf_account_${index + 1}`),
+					label: row.label || `Cloudflare ${index + 1}`,
+					token: String(row.token || '').trim(),
+					email: String(row.email || '').trim().toLowerCase(),
+					enabled: row.enabled !== false,
+				}))
+				.filter((row) => row.token);
 
 			const payload = {
 				...config,
@@ -318,6 +983,9 @@ export default function RotateWizardPage() {
 				doToken4: cleanedTokens[3]?.token || '',
 				doTokens: cleanedTokens,
 				serverLinks: cleanedServerLinks,
+				cfToken: cleanedCfAccounts[0]?.token || '',
+				cfEmail: cleanedCfAccounts[0]?.email || config.cfEmail || '',
+				cfAccounts: cleanedCfAccounts,
 			};
 
 			const response = await fetch('/api/admin/rotate-config', {
@@ -329,6 +997,7 @@ export default function RotateWizardPage() {
 			const data = await readApiJson(response);
 			if (data?.success) {
 				toast.success('Configuration saved successfully');
+				void loadDigitalOceanOptions(true);
 				setCurrentStep(2);
 			} else {
 				toast.error(data?.error || 'Failed to save configuration');
@@ -401,6 +1070,7 @@ export default function RotateWizardPage() {
 			toast.error(message);
 		} finally {
 			setActionLoading(false);
+			void loadHistory(true);
 		}
 	}
 
@@ -461,6 +1131,7 @@ export default function RotateWizardPage() {
 			toast.error(message);
 		} finally {
 			setActionLoading(false);
+			void loadHistory(true);
 		}
 	}
 
@@ -532,8 +1203,17 @@ export default function RotateWizardPage() {
 						</div>
 
 						<div className="flex flex-col items-start gap-3">
+							{linkedDoTokenLabel ? (
+								<div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100">
+									DO Token: {linkedDoTokenLabel}
+								</div>
+							) : (
+								<div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+									No DO token linked
+								</div>
+							)}
 							<div className="rounded-full border border-sky-400/20 bg-sky-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-sky-100">
-								{targetServer}
+								{selectedServerLabel}
 							</div>
 							<button
 								type="button"
@@ -589,34 +1269,560 @@ export default function RotateWizardPage() {
 						<section className="animate-in fade-in slide-in-from-right-4 duration-500 p-6 sm:p-8">
 							<StepHeader
 								step={1}
-								title="Config"
-								description="Choose server and credentials."
+								title="Config Setup"
+								description="Manage target servers, DigitalOcean create options, Cloudflare DNS, 3xUI panels, and rotation history from one clean workspace."
 							/>
 
-							<div className="grid gap-8 lg:grid-cols-2">
+							<div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+								<div className="min-w-0 space-y-5">
+									<div className="flex gap-2 overflow-x-auto rounded-lg border border-white/10 bg-white/[0.03] p-1">
+										{CONFIG_TABS.map((tab) => {
+											const TabIcon = tab.icon;
+											const selected = configTab === tab.id;
+											return (
+												<button
+													key={tab.id}
+													type="button"
+													onClick={() => setConfigTab(tab.id)}
+													className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-semibold transition ${
+														selected
+															? 'bg-sky-400 text-slate-950'
+															: 'text-slate-400 hover:bg-white/5 hover:text-white'
+													}`}
+												>
+													<TabIcon className="h-3.5 w-3.5" />
+													{tab.label}
+												</button>
+											);
+										})}
+									</div>
+
+									{configTab === 'servers' ? (
+										<div className="space-y-5">
+											<SectionPanel
+												title="Target server"
+												description="Pick the server you want to rotate. Live IP/time comes from the server registry."
+												icon={Server}
+											>
+												<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+													{serverOptions.map((option) => {
+														const selected = targetServer === option.value;
+														const ipValue = option.resolvedIp || option.domain || 'unavailable';
+
+														return (
+															<button
+																key={option.value}
+																type="button"
+																onClick={() => setTargetServer(option.value)}
+																className={`rounded-lg border p-3 text-left transition ${
+																	selected
+																		? 'border-sky-400/70 bg-sky-400/15 text-white'
+																		: 'border-white/10 bg-slate-950/40 text-slate-300 hover:border-white/20 hover:bg-white/5'
+																}`}
+															>
+																<div className="flex items-start justify-between gap-3">
+																	<div className="min-w-0">
+																		<div className="flex flex-wrap items-center gap-2">
+																			<span className="truncate text-sm font-semibold">{option.label}</span>
+																			{option.enabled === false ? (
+																				<span className="rounded-md border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+																					Disabled
+																				</span>
+																			) : null}
+																		</div>
+																		<p className="mt-1 truncate font-mono text-xs text-slate-400">{ipValue}</p>
+																		<p className="mt-1 text-xs text-slate-500">{formatRelativeTime(option.updatedAt)}</p>
+																	</div>
+																	<div className={`mt-1 h-3 w-3 shrink-0 rounded-full ${selected ? 'bg-sky-300' : 'bg-slate-600'}`} />
+																</div>
+															</button>
+														);
+													})}
+												</div>
+											</SectionPanel>
+
+											<SectionPanel
+												title="Server to DO token links"
+												description="Map each panel/server to the DigitalOcean account token that owns its droplet."
+												icon={Link2}
+												action={
+													<button
+														type="button"
+														onClick={addServerLinkRow}
+														className="inline-flex items-center gap-2 rounded-lg border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+													>
+														<Plus className="h-3.5 w-3.5" />
+														Add link
+													</button>
+												}
+											>
+												{serverLinks.length === 0 ? (
+													<div className="rounded-lg border border-dashed border-white/10 bg-slate-950/40 px-4 py-5 text-sm text-slate-500">
+														Add a link so each server rotates through the correct DO account.
+													</div>
+												) : (
+													<div className="grid gap-3">
+														{serverLinks.map((row, index) => (
+															<div key={row.id} className="grid gap-3 rounded-lg border border-white/10 bg-slate-950/40 p-3 lg:grid-cols-[1fr_1fr_auto_auto]">
+																<SelectField
+																	label="Server"
+																	name={`serverName-${index}`}
+																	value={row.serverName}
+																	onChange={(event) => updateServerLink(index, 'serverName', event.target.value)}
+																	options={serverOptions.map((server) => ({
+																		value: server.value,
+																		label: server.label,
+																		description: server.domain || server.resolvedIp || '',
+																	}))}
+																/>
+																<SelectField
+																	label="DO token"
+																	name={`tokenId-${index}`}
+																	value={row.tokenId}
+																	onChange={(event) => updateServerLink(index, 'tokenId', event.target.value)}
+																	options={availableTokens.map((token) => ({
+																		value: token.id,
+																		label: token.label || token.id,
+																		description: token.enabled === false ? 'Disabled' : 'Enabled',
+																	}))}
+																/>
+																<ToggleField
+																	label="Enabled"
+																	checked={row.enabled !== false}
+																	onChange={(checked) => updateServerLink(index, 'enabled', checked)}
+																/>
+																<button
+																	type="button"
+																	onClick={() => removeServerLinkRow(index)}
+																	className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-lg border border-white/10 bg-white/5 px-3 text-xs font-semibold text-slate-300 transition hover:bg-white/10"
+																>
+																	<Trash2 className="h-3.5 w-3.5" />
+																	Remove
+																</button>
+															</div>
+														))}
+													</div>
+												)}
+											</SectionPanel>
+										</div>
+									) : null}
+
+									{configTab === 'digitalocean' ? (
+										<div className="space-y-5">
+											<SectionPanel
+												title="DigitalOcean accounts"
+												description="Add any number of account tokens, then link each server to the right token."
+												icon={KeyRound}
+												action={
+													<button
+														type="button"
+														onClick={addDoTokenRow}
+														className="inline-flex items-center gap-2 rounded-lg border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+													>
+														<Plus className="h-3.5 w-3.5" />
+														Add token
+													</button>
+												}
+											>
+												<div className="grid gap-3">
+													{doTokens.map((row, index) => (
+														<div key={row.id} className="grid gap-3 rounded-lg border border-white/10 bg-slate-950/40 p-3 lg:grid-cols-[0.8fr_1.4fr_auto_auto]">
+															<Field
+																label="Label"
+																name={`doTokenLabel-${index}`}
+																value={row.label}
+																onChange={(event) => updateDoToken(index, 'label', event.target.value)}
+															/>
+															<Field
+																label="Token"
+																name={`doToken-${index}`}
+																value={row.token}
+																onChange={(event) => updateDoToken(index, 'token', event.target.value)}
+																type="password"
+															/>
+															<ToggleField
+																label="Enabled"
+																checked={row.enabled !== false}
+																onChange={(checked) => updateDoToken(index, 'enabled', checked)}
+															/>
+															<button
+																type="button"
+																onClick={() => removeDoTokenRow(index)}
+																className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-lg border border-white/10 bg-white/5 px-3 text-xs font-semibold text-slate-300 transition hover:bg-white/10"
+															>
+																<Trash2 className="h-3.5 w-3.5" />
+																Remove
+															</button>
+														</div>
+													))}
+												</div>
+											</SectionPanel>
+
+											<SectionPanel
+												title="Droplet create setup"
+												description="These choices are used when the old droplet is deleted and recreated."
+												icon={HardDrive}
+												action={
+													<button
+														type="button"
+														onClick={() => void loadDigitalOceanOptions(false)}
+														disabled={doOptionsLoading}
+														className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+													>
+														<RefreshCw className={`h-3.5 w-3.5 ${doOptionsLoading ? 'animate-spin' : ''}`} />
+														Refresh DO
+													</button>
+												}
+											>
+												{doOptionsError ? (
+													<div className="mb-4 rounded-lg border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-xs leading-5 text-amber-100">
+														{doOptionsError}
+													</div>
+												) : null}
+												<div className="grid gap-4 lg:grid-cols-3">
+													<SelectField label="Region" name="dropletRegion" value={config.dropletRegion} onChange={handleConfigChange} options={regionChoices} />
+													<SelectField label="Size" name="dropletSize" value={config.dropletSize} onChange={handleConfigChange} options={sizeChoices} />
+													<SelectField label="Image" name="dropletImage" value={config.dropletImage} onChange={handleConfigChange} options={imageChoices} />
+												</div>
+												<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+													<ToggleField label="Backups" description="Enable DO automated backups." checked={config.dropletBackups} onChange={(checked) => setConfig((current) => ({ ...current, dropletBackups: checked }))} />
+													<ToggleField label="IPv6" description="Only applies when public networking is on." checked={config.dropletIpv6} onChange={(checked) => setConfig((current) => ({ ...current, dropletIpv6: checked }))} />
+													<ToggleField label="Monitoring" description="Install DO monitoring agent." checked={config.dropletMonitoring} onChange={(checked) => setConfig((current) => ({ ...current, dropletMonitoring: checked }))} />
+													<ToggleField label="Public networking" description="Leave on for VPN panels." checked={config.dropletPublicNetworking} onChange={(checked) => setConfig((current) => ({ ...current, dropletPublicNetworking: checked }))} />
+													<ToggleField label="Droplet agent" description="Enable DO droplet agent." checked={config.dropletAgent} onChange={(checked) => setConfig((current) => ({ ...current, dropletAgent: checked }))} />
+												</div>
+												<div className="mt-4 grid gap-4 lg:grid-cols-2">
+													<SelectField label="VPC" name="dropletVpcUuid" value={config.dropletVpcUuid} onChange={handleConfigChange} options={vpcChoices} />
+													<Field label="Tags" name="dropletTags" value={config.dropletTags} onChange={handleConfigChange} help="Comma separated, for example: vpn, rotate, sg" />
+												</div>
+												<div className="mt-4 grid gap-4 lg:grid-cols-2">
+													<MultiChoiceField
+														label="SSH keys"
+														values={splitCsv(config.dropletSshKeys)}
+														options={doOptions.sshKeys}
+														onToggle={(value, checked) => updateConfigCsv('dropletSshKeys', value, checked)}
+													/>
+													<MultiChoiceField
+														label="Volumes"
+														values={splitCsv(config.dropletVolumes)}
+														options={volumeOptions}
+														onToggle={(value, checked) => updateConfigCsv('dropletVolumes', value, checked)}
+													/>
+												</div>
+												<div className="mt-4 grid gap-4 lg:grid-cols-2">
+													<TextAreaField
+														label="Extra cloud-init"
+														name="dropletUserData"
+														value={config.dropletUserData}
+														onChange={handleConfigChange}
+														help="Optional. The root password bootstrap is always prepended by the rotate workflow."
+													/>
+													<TextAreaField
+														label="Backup policy JSON"
+														name="dropletBackupPolicy"
+														value={config.dropletBackupPolicy}
+														onChange={handleConfigChange}
+														help="Optional DigitalOcean backup_policy object as JSON."
+													/>
+												</div>
+											</SectionPanel>
+										</div>
+									) : null}
+
+									{configTab === 'cloudflare' ? (
+										<SectionPanel
+											title="Cloudflare accounts"
+											description="Save every Cloudflare token you want to use. DNS records can be managed under the selected token from Private Servers deploy."
+											icon={ShieldCheck}
+											action={
+												<button
+													type="button"
+													onClick={addCfAccountRow}
+													className="inline-flex items-center gap-2 rounded-lg border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+												>
+													<Plus className="h-3.5 w-3.5" />
+													Add token
+												</button>
+											}
+										>
+											<div className="grid gap-3">
+												{cfAccounts.map((row, index) => (
+													<div key={row.id} className="grid gap-3 rounded-lg border border-white/10 bg-slate-950/40 p-3 lg:grid-cols-[0.8fr_1.3fr_1fr_auto_auto]">
+														<Field
+															label="Label"
+															name={`cfAccountLabel-${index}`}
+															value={row.label}
+															onChange={(event) => updateCfAccount(index, 'label', event.target.value)}
+														/>
+														<Field
+															label="API token / Global key"
+															name={`cfAccountToken-${index}`}
+															value={row.token}
+															onChange={(event) => updateCfAccount(index, 'token', event.target.value)}
+															type="password"
+															help="Do not include Bearer."
+														/>
+														<Field
+															label="Account email"
+															name={`cfAccountEmail-${index}`}
+															value={row.email}
+															onChange={(event) => updateCfAccount(index, 'email', event.target.value)}
+															type="email"
+															help="Required for Global API Key."
+														/>
+														<ToggleField
+															label="Enabled"
+															checked={row.enabled !== false}
+															onChange={(checked) => updateCfAccount(index, 'enabled', checked)}
+														/>
+														<button
+															type="button"
+															onClick={() => removeCfAccountRow(index)}
+															className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-lg border border-white/10 bg-white/5 px-3 text-xs font-semibold text-slate-300 transition hover:bg-white/10"
+														>
+															<Trash2 className="h-3.5 w-3.5" />
+															Remove
+														</button>
+													</div>
+												))}
+											</div>
+											<div className="mt-4 rounded-lg border border-white/10 bg-slate-950/40 px-4 py-3 text-xs leading-5 text-slate-400">
+												The first saved account stays synced with the legacy Cloudflare fields so the current rotate job keeps working.
+											</div>
+										</SectionPanel>
+									) : null}
+
+									{configTab === 'panel' ? (
+										<div className="space-y-5">
+											<SectionPanel
+												title="3xUI install credentials"
+												description="Applied after install/restore so the panel can be managed consistently."
+												icon={Terminal}
+											>
+												<div className="grid gap-4 lg:grid-cols-2">
+													<Field label="Username" name="xuiUsername" value={config.xuiUsername} onChange={handleConfigChange} />
+													<Field label="Password" name="xuiPassword" value={config.xuiPassword} onChange={handleConfigChange} type="password" />
+												</div>
+												<div className="mt-4">
+													<ToggleField label="Enable 2FA during install" checked={config.enable2FA} onChange={(checked) => setConfig((current) => ({ ...current, enable2FA: checked }))} />
+												</div>
+											</SectionPanel>
+
+											<SectionPanel
+												title={editingPanelId ? `Edit panel: ${editingPanelId}` : 'Add 3xUI panel'}
+												description="This is the server registry used by rotation, provisioning, and subscription flows."
+												icon={PanelTop}
+												action={
+													showPanelForm || editingPanelId ? (
+														<button
+															type="button"
+															onClick={resetPanelDraft}
+															className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+														>
+															Close
+														</button>
+													) : (
+														<button
+															type="button"
+															onClick={openPanelDraft}
+															className="inline-flex items-center gap-2 rounded-lg border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20"
+														>
+															<Plus className="h-3.5 w-3.5" />
+															Add 3xUI panel
+														</button>
+													)
+												}
+											>
+												{showPanelForm || editingPanelId ? (
+													<>
+														<div className="grid gap-4 lg:grid-cols-3">
+															<Field label="Server ID" name="serverId" value={panelDraft.serverId} onChange={handlePanelDraftChange} help="Lowercase slug, e.g. sg1 or us1." />
+															<Field label="Name" name="name" value={panelDraft.name} onChange={handlePanelDraftChange} />
+															<Field label="Flag code" name="flag" value={panelDraft.flag} onChange={handlePanelDraftChange} help="Use short text if emoji display is unavailable." />
+															<Field label="Domain" name="domain" value={panelDraft.domain} onChange={handlePanelDraftChange} />
+															<Field label="Panel URL" name="url" value={panelDraft.url} onChange={handlePanelDraftChange} help="Example: https://sg1.example.com:8080" />
+															<Field label="Panel path" name="panelPath" value={panelDraft.panelPath} onChange={handlePanelDraftChange} />
+															<Field label="Sub port" name="subPort" value={panelDraft.subPort} onChange={handlePanelDraftChange} />
+															<SelectField
+																label="Default protocol"
+																name="protocol"
+																value={panelDraft.protocol}
+																onChange={handlePanelDraftChange}
+																options={[
+																	{ value: 'trojan', label: 'Trojan' },
+																	{ value: 'vless', label: 'VLESS' },
+																	{ value: 'vmess', label: 'VMess' },
+																]}
+															/>
+															<Field label="Badge" name="badge" value={panelDraft.badge} onChange={handlePanelDraftChange} />
+														</div>
+														<div className="mt-4 grid gap-4 lg:grid-cols-2">
+															<Field label="Enabled protocols" name="enabledProtocols" value={panelDraft.enabledProtocols} onChange={handlePanelDraftChange} help="Comma separated protocols." />
+															<Field label="3xUI API key" name="apiKey" value={panelDraft.apiKey} onChange={handlePanelDraftChange} type="password" />
+														</div>
+														<div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto]">
+															<TextAreaField label="Notes" name="notes" value={panelDraft.notes} onChange={handlePanelDraftChange} rows={3} />
+															<ToggleField label="Enabled" checked={panelDraft.enabled} onChange={(checked) => setPanelDraft((current) => ({ ...current, enabled: checked }))} />
+														</div>
+														<div className="mt-5 flex justify-end">
+															<button
+																type="button"
+																onClick={handleSavePanel}
+																disabled={panelSaving}
+																className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
+															>
+																{panelSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+																{editingPanelId ? 'Update panel' : 'Add panel'}
+															</button>
+														</div>
+													</>
+												) : null}
+											</SectionPanel>
+
+											<SectionPanel title="Panel registry" description="Edit or remove panels from the same rotation workflow." icon={Network}>
+												<div className="grid gap-3">
+													{panelServers.length === 0 ? (
+														<div className="rounded-lg border border-dashed border-white/10 bg-slate-950/40 px-4 py-5 text-sm text-slate-500">
+															No panel servers are saved yet.
+														</div>
+													) : panelServers.map((server) => (
+														<div key={server.serverId} className="flex flex-col gap-3 rounded-lg border border-white/10 bg-slate-950/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+															<div className="min-w-0">
+																<div className="flex flex-wrap items-center gap-2">
+																	<p className="font-semibold text-white">{server.name}</p>
+																	<span className="rounded-md border border-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-400">{server.serverId}</span>
+																	{server.enabled ? null : <span className="rounded-md border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200">Disabled</span>}
+																</div>
+																<p className="mt-1 truncate text-xs text-slate-400">{server.domain} / {server.url}</p>
+																<p className="mt-1 font-mono text-xs text-slate-500">{server.resolvedIp || 'IP unknown'}</p>
+															</div>
+															<div className="flex gap-2">
+																<button
+																	type="button"
+																	onClick={() => editPanel(server)}
+																	className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+																>
+																	<Edit3 className="h-3.5 w-3.5" />
+																	Edit
+																</button>
+																<button
+																	type="button"
+																	onClick={() => void handleDeletePanel(server.serverId)}
+																	disabled={panelSaving}
+																	className="inline-flex items-center gap-2 rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+																>
+																	<Trash2 className="h-3.5 w-3.5" />
+																	Delete
+																</button>
+															</div>
+														</div>
+													))}
+												</div>
+											</SectionPanel>
+										</div>
+									) : null}
+
+									{configTab === 'history' ? (
+										<HistoryTable rows={history} loading={historyLoading} onRefresh={() => void loadHistory(false)} />
+									) : null}
+								</div>
+
+								<aside className="space-y-4">
+									<SectionPanel title="Rotation summary" description="Current target and saved infrastructure settings." icon={Clock3}>
+										<div className="space-y-3 text-sm">
+											<div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
+												<span className="text-slate-400">Target</span>
+												<span className="text-right font-semibold text-white">{selectedServerLabel}</span>
+											</div>
+											<div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
+												<span className="text-slate-400">Domain</span>
+												<span className="text-right text-slate-200">{selectedServerOption?.domain || 'not set'}</span>
+											</div>
+											<div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
+												<span className="text-slate-400">Current IP</span>
+												<button
+													type="button"
+													onClick={() => void copyText(selectedServerOption?.resolvedIp || '')}
+													disabled={!selectedServerOption?.resolvedIp}
+													className="font-mono text-xs text-sky-200 transition hover:text-sky-100 disabled:cursor-not-allowed disabled:text-slate-500"
+												>
+													{selectedServerOption?.resolvedIp || 'unknown'}
+												</button>
+											</div>
+											<div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
+												<span className="text-slate-400">DO token</span>
+												<span className="text-right text-slate-200">{linkedDoTokenLabel || 'fallback / not linked'}</span>
+											</div>
+											<div className="flex items-start justify-between gap-3">
+												<span className="text-slate-400">Droplet</span>
+												<span className="text-right text-slate-200">{config.dropletRegion} / {config.dropletSize}</span>
+											</div>
+										</div>
+										<div className="mt-5 rounded-lg border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-xs leading-5 text-sky-100">
+											Save config before running rotate so the background job uses the latest DO, Cloudflare, and panel settings.
+										</div>
+									</SectionPanel>
+								</aside>
+							</div>
+
+							<div className="hidden">
 								<div className="space-y-5">
 									<div>
-										<div className="mt-3 grid gap-3 sm:grid-cols-2">
-											{SERVER_OPTIONS.map((option) => {
+										<div className="mt-3 grid gap-2 sm:grid-cols-2">
+											{serverOptions.map((option) => {
 												const selected = targetServer === option.value;
+												const ipValue = option.resolvedIp || option.domain || 'unavailable';
+
 												return (
-													<button
+													<div
 														key={option.value}
-														type="button"
-														onClick={() => setTargetServer(option.value)}
-														className={`rounded-2xl border px-4 py-4 text-left transition-all ${
+														className={`rounded-xl border px-3 py-3 text-left transition-all ${
 															selected
 																? 'border-sky-400/70 bg-sky-400/15 text-white'
 																: 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
 														}`}
 													>
-														<div className="flex items-center gap-3">
-															<div className={`flex h-4 w-4 items-center justify-center rounded-full border ${selected ? 'border-sky-300 bg-sky-400' : 'border-slate-500'}`}>
+														<button
+															type="button"
+															onClick={() => setTargetServer(option.value)}
+															className="flex w-full items-start gap-3 text-left"
+														>
+															<div className={`mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border ${selected ? 'border-sky-300 bg-sky-400' : 'border-slate-500'}`}>
 																{selected ? <span className="h-1.5 w-1.5 rounded-full bg-slate-950" /> : null}
 															</div>
-															<span className="text-sm font-medium leading-5">{option.label}</span>
+															<div className="min-w-0 flex-1">
+																<div className="flex flex-wrap items-center gap-2">
+																	<span className="text-sm font-semibold leading-5">{option.label}</span>
+																	{option.badge ? (
+																		<span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.15em] text-sky-200">
+																			{option.badge}
+																		</span>
+																	) : null}
+																</div>
+																<div className="mt-1 space-y-0.5 text-[11px] leading-4 text-slate-400">
+																	<div>
+																		<span className="font-medium text-slate-300">IP:</span> {ipValue}
+																	</div>
+																	<div>
+																		<span className="font-medium text-slate-300">Time:</span> {formatDateTimeShort(option.updatedAt)}
+																		<span className="ml-2 text-slate-500">({formatRelativeTime(option.updatedAt)})</span>
+																	</div>
+																</div>
+															</div>
+														</button>
+
+														<div className="mt-2 flex items-center justify-end gap-2">
+															<button
+																type="button"
+																onClick={() => void copyText(ipValue)}
+																disabled={ipValue === 'unavailable'}
+																className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+															>
+																<Copy className="h-3 w-3" />
+																Copy IP
+															</button>
 														</div>
-													</button>
+													</div>
 												);
 											})}
 										</div>
@@ -845,10 +2051,10 @@ export default function RotateWizardPage() {
 									type="button"
 									onClick={handleSaveConfig}
 									disabled={actionLoading}
-									className="inline-flex items-center justify-center rounded-full bg-sky-500 px-6 py-3 text-sm font-semibold text-slate-950 transition-all hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
+									className="inline-flex items-center justify-center rounded-lg bg-sky-500 px-6 py-3 text-sm font-semibold text-slate-950 transition-all hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
 								>
-									{actionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-									Next
+									{actionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+									Save config
 									<ChevronRight className="ml-2 h-4 w-4" />
 								</button>
 							</div>
@@ -949,6 +2155,40 @@ function StepHeader({
 	);
 }
 
+function SectionPanel({
+	title,
+	description,
+	icon: Icon,
+	children,
+	action,
+}: {
+	title: string;
+	description?: string;
+	icon?: any;
+	children: ReactNode;
+	action?: ReactNode;
+}) {
+	return (
+		<section className="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+			<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+				<div className="flex min-w-0 items-start gap-3">
+					{Icon ? (
+						<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-sky-400/20 bg-sky-400/10 text-sky-200">
+							<Icon className="h-4 w-4" />
+						</div>
+					) : null}
+					<div className="min-w-0">
+						<h3 className="text-sm font-semibold text-white">{title}</h3>
+						{description ? <p className="mt-1 text-xs leading-5 text-slate-400">{description}</p> : null}
+					</div>
+				</div>
+				{action ? <div className="shrink-0">{action}</div> : null}
+			</div>
+			<div className="mt-4">{children}</div>
+		</section>
+	);
+}
+
 function Field({
 	label,
 	name,
@@ -972,10 +2212,187 @@ function Field({
 				type={type}
 				value={value}
 				onChange={onChange}
-				className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
+				className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
 			/>
 			{help ? <span className="mt-2 block text-xs leading-5 text-slate-500">{help}</span> : null}
 		</label>
+	);
+}
+
+function TextAreaField({
+	label,
+	name,
+	value,
+	onChange,
+	help,
+	rows = 4,
+}: {
+	label: string;
+	name: string;
+	value: string;
+	onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
+	help?: string;
+	rows?: number;
+}) {
+	return (
+		<label className="block">
+			<span className="text-sm text-slate-300">{label}</span>
+			<textarea
+				name={name}
+				value={value}
+				onChange={onChange}
+				rows={rows}
+				className="mt-2 w-full resize-y rounded-lg border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
+			/>
+			{help ? <span className="mt-2 block text-xs leading-5 text-slate-500">{help}</span> : null}
+		</label>
+	);
+}
+
+function ToggleField({
+	label,
+	description,
+	checked,
+	onChange,
+}: {
+	label: string;
+	description?: string;
+	checked: boolean;
+	onChange: (checked: boolean) => void;
+}) {
+	return (
+		<label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-white/10 bg-slate-950/45 px-4 py-3 transition hover:border-white/20">
+			<div className="min-w-0">
+				<span className="block text-sm font-medium text-slate-100">{label}</span>
+				{description ? <span className="mt-1 block text-xs leading-5 text-slate-500">{description}</span> : null}
+			</div>
+			<input
+				type="checkbox"
+				checked={checked}
+				onChange={(event) => onChange(event.target.checked)}
+				className="mt-1 h-4 w-4 shrink-0 rounded border-slate-500 bg-slate-900 text-sky-500 focus:ring-sky-500"
+			/>
+		</label>
+	);
+}
+
+function MultiChoiceField({
+	label,
+	values,
+	options,
+	onToggle,
+	emptyText = 'No live options available yet.',
+}: {
+	label: string;
+	values: string[];
+	options: DoSelectOption[];
+	onToggle: (value: string, checked: boolean) => void;
+	emptyText?: string;
+}) {
+	return (
+		<div>
+			<p className="text-sm text-slate-300">{label}</p>
+			{options.length === 0 ? (
+				<div className="mt-2 rounded-lg border border-dashed border-white/10 bg-slate-950/40 px-4 py-3 text-sm text-slate-500">
+					{emptyText}
+				</div>
+			) : (
+				<div className="mt-2 grid gap-2 sm:grid-cols-2">
+					{options.map((option) => {
+						const checked = values.includes(option.value);
+						return (
+							<label
+								key={option.value}
+								className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 text-sm transition ${
+									checked
+										? 'border-sky-400/60 bg-sky-400/10 text-white'
+										: 'border-white/10 bg-slate-950/45 text-slate-300 hover:border-white/20'
+								}`}
+							>
+								<input
+									type="checkbox"
+									checked={checked}
+									onChange={(event) => onToggle(option.value, event.target.checked)}
+									className="mt-0.5 h-4 w-4 rounded border-slate-500 bg-slate-900 text-sky-500 focus:ring-sky-500"
+								/>
+								<span className="min-w-0">
+									<span className="block truncate font-medium">{option.label}</span>
+									{option.description ? <span className="mt-0.5 block truncate text-xs text-slate-500">{option.description}</span> : null}
+								</span>
+							</label>
+						);
+					})}
+				</div>
+			)}
+		</div>
+	);
+}
+
+function HistoryTable({
+	rows,
+	loading,
+	onRefresh,
+}: {
+	rows: RotationHistoryRow[];
+	loading: boolean;
+	onRefresh: () => void;
+}) {
+	return (
+		<SectionPanel
+			title="Rotation history"
+			description="Latest rotation records with IP, time, panel, and domain."
+			icon={History}
+			action={
+				<button
+					type="button"
+					onClick={onRefresh}
+					disabled={loading}
+					className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+					Refresh
+				</button>
+			}
+		>
+			{rows.length === 0 ? (
+				<div className="rounded-lg border border-dashed border-white/10 bg-slate-950/40 px-4 py-6 text-sm text-slate-500">
+					No rotation records yet.
+				</div>
+			) : (
+				<div className="overflow-x-auto">
+					<table className="min-w-[760px] w-full text-left text-sm">
+						<thead className="text-xs uppercase tracking-[0.16em] text-slate-500">
+							<tr className="border-b border-white/10">
+								<th className="py-3 pr-4 font-semibold">Time</th>
+								<th className="py-3 pr-4 font-semibold">Server</th>
+								<th className="py-3 pr-4 font-semibold">Action</th>
+								<th className="py-3 pr-4 font-semibold">IP</th>
+								<th className="py-3 pr-4 font-semibold">Domain</th>
+								<th className="py-3 pr-4 font-semibold">Panel</th>
+							</tr>
+						</thead>
+						<tbody>
+							{rows.map((row) => (
+								<tr key={row.id} className="border-b border-white/5 text-slate-300 last:border-0">
+									<td className="py-3 pr-4 text-xs text-slate-400">{formatDateTimeShort(row.updatedAt)}</td>
+									<td className="py-3 pr-4 font-medium uppercase text-white">{row.serverId}</td>
+									<td className="py-3 pr-4">
+										<span className={`inline-flex rounded-lg border px-2 py-1 text-[11px] font-semibold ${getStatusClass(row.status)}`}>
+											{row.actionLabel}
+										</span>
+									</td>
+									<td className="py-3 pr-4 font-mono text-xs">
+										{row.newIp || row.oldIp || 'unknown'}
+									</td>
+									<td className="py-3 pr-4">{row.domain || 'unknown'}</td>
+									<td className="max-w-[220px] truncate py-3 pr-4 text-xs text-slate-400">{row.panel || row.message || 'unknown'}</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+			)}
+		</SectionPanel>
 	);
 }
 
@@ -1001,7 +2418,7 @@ function SelectField({
 			<button
 				type="button"
 				onClick={() => setIsOpen(!isOpen)}
-				className="mt-2 w-full flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition hover:border-white/20 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
+				className="mt-2 flex w-full items-center justify-between rounded-lg border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition hover:border-white/20 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
 			>
 				<span className="truncate">
 					{selectedOption?.label} {selectedOption?.description ? `- ${selectedOption.description}` : ''}
@@ -1015,7 +2432,7 @@ function SelectField({
 						className="fixed inset-0 z-10"
 						onClick={() => setIsOpen(false)}
 					/>
-					<div className="absolute z-20 mt-2 max-h-60 w-full overflow-auto rounded-2xl border border-white/10 bg-slate-900 py-1 shadow-xl shadow-black/50 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
+					<div className="absolute z-20 mt-2 max-h-60 w-full overflow-auto rounded-lg border border-white/10 bg-slate-900 py-1 shadow-xl shadow-black/50 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
 						{options.map((option) => (
 							<button
 								key={option.value}

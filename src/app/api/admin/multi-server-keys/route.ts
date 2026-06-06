@@ -3,8 +3,10 @@ import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import dbConnect from '@/lib/mongodb';
 import { createLogger } from '@/lib/logger';
-import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers, updateVpnClient, revokeVpnKey, listServerClients } from '@/lib/xui';
-import { getEnabledServers } from '@/lib/vpn-servers';
+import {
+  mutateMultiServerKeyPanels,
+  type PanelMutationUpdates,
+} from '@/lib/multi-server-key-panel-actions';
 
 const log = createLogger({ route: '/api/admin/multi-server-keys' });
 
@@ -111,7 +113,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing record id' }, { status: 400 });
     }
 
-    const updates: Record<string, unknown> = {};
+    const updates: PanelMutationUpdates = {};
     if (expiryTime !== undefined) {
       if (typeof expiryTime !== 'number' || expiryTime < 0) {
         return NextResponse.json({ success: false, error: 'Invalid expiryTime' }, { status: 400 });
@@ -143,97 +145,25 @@ export async function PATCH(request: NextRequest) {
     const mongoose = await dbConnect();
     const db = mongoose.connection.getClient().db();
     const objectId = new mongoose.Types.ObjectId(id);
-    const result = await db.collection('vpn_keys').updateOne({ _id: objectId }, { $set: updates });
+    const record = await db.collection('vpn_keys').findOne({ _id: objectId });
 
-    if (result.matchedCount === 0) {
+    if (!record) {
       return NextResponse.json({ success: false, error: 'Record not found' }, { status: 404 });
     }
 
-    // Propagate updates to actual 3xUI panels (best-effort).
-    try {
-      const record = await db.collection('vpn_keys').findOne({ _id: objectId });
-      if (record) {
-        const tasks: Promise<unknown>[] = [];
-        const targetUsername = String(record.username || '').trim();
-        const targetDeviceLabel = `${updates.devices !== undefined ? updates.devices : record.devices || 1}D`;
-        const targetBaseName = targetUsername ? `${targetUsername} - ${targetDeviceLabel}` : '';
-        const applyUpdatesToClient = async (client: any) => {
-          try {
-            const serverId = client.serverId;
-            const cAny = client as any;
-            const clientEmail = cAny.email || cAny.clientEmail || cAny.client || cAny.clientId;
-            if (!serverId || !clientEmail) return;
+    const panelReport = await mutateMultiServerKeyPanels(record, 'update', updates);
+    log.info('Live 3xUI clients updated from WEB action', {
+      recordId: id,
+      updates,
+      summary: panelReport.summary,
+      webDbKeyFieldsChanged: false,
+    });
 
-            const panelUpdates: any = {};
-            if (updates.expiryTime !== undefined) panelUpdates.expiryTime = updates.expiryTime as number;
-            if (updates.dataLimitGB !== undefined) panelUpdates.dataLimitGB = updates.dataLimitGB as number;
-              if (updates.devices !== undefined) panelUpdates.devices = updates.devices as number;
-            if (updates.status !== undefined) panelUpdates.enable = updates.status === 'active';
-
-            if (Object.keys(panelUpdates).length > 0) {
-                const ok = await updateVpnClient(serverId, clientEmail, panelUpdates);
-                if (!ok) {
-                  log.warn('Failed to propagate update to panel', { id, serverId, clientEmail, panelUpdates });
-                }
-            }
-          } catch (err) {
-            log.warn('Failed to propagate update to panel', { id, err: err instanceof Error ? err.message : String(err) });
-          }
-        };
-
-        // Prefer explicit config links, fallback to subLinks
-        const cfgLinks: string[] = Array.isArray(record.serverConfigLinks) ? record.serverConfigLinks : [];
-        const subLinks: string[] = Array.isArray(record.serverSubLinks) ? record.serverSubLinks : [];
-
-        for (const cfg of cfgLinks) {
-          tasks.push((async () => {
-            const client = await findClientByConfigLinkAcrossServers(String(cfg));
-            if (client) await applyUpdatesToClient(client);
-          })());
-        }
-
-        for (const sub of subLinks) {
-          tasks.push((async () => {
-            const match = String(sub).match(/\/sub\/(?:api\/vpn\/)?([a-zA-Z0-9-]{8,64})/i);
-            const token = match ? match[1] : String(sub);
-            const client = await findClientBySubIdAcrossServers(token, String(sub));
-            if (client) await applyUpdatesToClient(client);
-          })());
-        }
-
-        await Promise.allSettled(tasks);
-
-        if (targetBaseName) {
-          const enabledServers = await getEnabledServers();
-          for (const server of enabledServers) {
-            tasks.push((async () => {
-              try {
-                const clients = await listServerClients(server.id);
-                const matched = (clients || []).filter((client: any) => {
-                  const email = String(client.email || '').trim();
-                  return email === targetBaseName || email.startsWith(`${targetBaseName} Key`);
-                });
-                for (const client of matched) {
-                  await applyUpdatesToClient({ ...client, serverId: server.id });
-                }
-              } catch (err) {
-                log.warn('Fallback name-based panel update failed', {
-                  id,
-                  serverId: server.id,
-                  err: err instanceof Error ? err.message : String(err),
-                });
-              }
-            })());
-          }
-
-          await Promise.allSettled(tasks);
-        }
-      }
-    } catch (err) {
-      log.warn('Error while propagating updates to panels', { error: err instanceof Error ? err.message : String(err) });
-    }
-
-    return NextResponse.json({ success: true, data: { id, updates } });
+    return NextResponse.json({
+      success: true,
+      message: `Updated live 3xUI clients: ${panelReport.summary.updated} updated, ${panelReport.summary.failed} failed. WEB key fields were not changed.`,
+      data: { id, updates, panel: panelReport },
+    });
   } catch (error) {
     log.error('Admin multi-server keys update error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ success: false, error: 'Failed to update record' }, { status: 500 });
@@ -268,81 +198,19 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Record not found' }, { status: 404 });
     }
 
-    // Revoke all VPN clients from all servers before deleting the record
-    const revokeTasks: Promise<unknown>[] = [];
-    
-    // Revoke from config links
-    const cfgLinks: string[] = Array.isArray(record.serverConfigLinks) ? record.serverConfigLinks : [];
-    for (const cfg of cfgLinks) {
-      revokeTasks.push((async () => {
-        try {
-          const client = await findClientByConfigLinkAcrossServers(String(cfg));
-          if (client && client.serverId) {
-            const cAny = client as any;
-            const clientEmail = cAny.email || cAny.clientEmail || cAny.client || cAny.clientId;
-            if (clientEmail) {
-              const revoked = await revokeVpnKey(client.serverId, clientEmail);
-              if (revoked) {
-                log.info('VPN key revoked from config link', { recordId: id, configLink: cfg, serverId: client.serverId });
-              } else {
-                log.warn('Failed to revoke VPN key from config link', { recordId: id, configLink: cfg });
-              }
-            }
-          }
-        } catch (err) {
-          log.error('Error revoking config link client', { recordId: id, cfg, error: err instanceof Error ? err.message : String(err) });
-        }
-      })());
-    }
+    const panelReport = await mutateMultiServerKeyPanels(record, 'delete');
 
-    // Revoke from sub links
-    const subLinks: string[] = Array.isArray(record.serverSubLinks) ? record.serverSubLinks : [];
-    for (const sub of subLinks) {
-      revokeTasks.push((async () => {
-        try {
-          // Extract sub ID from various URL formats
-          // Support: /sub/{id}, /api/vpn/sub/{id}, and full URLs like https://domain.com/api/vpn/sub/{id}
-          let token = String(sub);
-          
-          // Remove protocol and domain if present
-          const urlPart = token.includes('://') ? new URL(token).pathname + new URL(token).search : token;
-          
-          // Extract ID from path
-          const match = urlPart.match(/(?:\/api\/vpn)?\/sub\/([a-zA-Z0-9-]{8,64})/i);
-          token = match ? match[1] : token;
-          
-          const client = await findClientBySubIdAcrossServers(token, String(sub));
-          if (client && client.serverId) {
-            const cAny = client as any;
-            const clientEmail = cAny.email || cAny.clientEmail || cAny.client || cAny.clientId;
-            if (clientEmail) {
-              const revoked = await revokeVpnKey(client.serverId, clientEmail);
-              if (revoked) {
-                log.info('VPN key revoked from sub link', { recordId: id, subLink: sub, serverId: client.serverId });
-              } else {
-                log.warn('Failed to revoke VPN key from sub link', { recordId: id, subLink: sub });
-              }
-            }
-          }
-        } catch (err) {
-          log.error('Error revoking sub link client', { recordId: id, sub, error: err instanceof Error ? err.message : String(err) });
-        }
-      })());
-    }
+    log.info('Live 3xUI clients deleted from WEB action', {
+      recordId: id,
+      summary: panelReport.summary,
+      webDbKeyFieldsChanged: false,
+    });
 
-    // Wait for all revoke operations to complete (best-effort)
-    await Promise.allSettled(revokeTasks);
-
-    // Now delete the database record
-    const result = await db.collection('vpn_keys').deleteOne({ _id: objectId });
-
-    if (result.deletedCount === 0) {
-      return NextResponse.json({ success: false, error: 'Record not found or already deleted' }, { status: 404 });
-    }
-
-    log.info('Multi-server key deleted with revocation', { recordId: id, configLinkCount: cfgLinks.length, subLinkCount: subLinks.length });
-
-    return NextResponse.json({ success: true, data: { id, revokedCount: cfgLinks.length + subLinks.length } });
+    return NextResponse.json({
+      success: true,
+      message: `Deleted live 3xUI clients: ${panelReport.summary.deleted} deleted, ${panelReport.summary.failed} failed. WEB record was kept for history/index.`,
+      data: { id, panel: panelReport },
+    });
   } catch (error) {
     log.error('Admin multi-server keys delete error', { error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ success: false, error: 'Failed to delete record' }, { status: 500 });

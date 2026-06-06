@@ -188,11 +188,20 @@ function hasRecentPurchaseIntent(recentUserContext?: string): boolean {
   return Boolean(recentUserContext && isPurchaseOrPaymentIntent(recentUserContext.toLowerCase()));
 }
 
+function isPaymentConfirmationMessage(message: string): boolean {
+  return (
+    /\b(paid|payment\s*sent|sent\s*payment|slip|receipt|screenshot)\b/i.test(message) ||
+    /(လွှဲပြီး|လွဲပြီး|လွှဲလိုက်|ငွေချေပြီး|ပေးချေပြီး|ပေးပြီး|ဘောင်ချာ|ပြေစာ|စလစ်|ဆလစ်)/i.test(message)
+  );
+}
+
 function matchVpnPurchaseReply(params: {
   message: string;
   recentUserContext?: string;
 }): string | null {
   const currentText = params.message.toLowerCase();
+  if (isPaymentConfirmationMessage(currentText)) return null;
+
   const currentPurchaseIntent = isPurchaseOrPaymentIntent(currentText);
   const recentPurchaseIntent = hasRecentPurchaseIntent(params.recentUserContext);
   const planRequest = parseVpnPlanRequest(params.message);
@@ -223,6 +232,79 @@ function matchVpnPurchaseReply(params: {
 
   if (/vpn|ဗီပီအန်/i.test(currentText) || currentPurchaseIntent) {
     return 'ရပါတယ်ဗျ၊ VPN ဝယ်ဖို့ device ဘယ်နှစ်လုံးနဲ့ ဘယ်နှစ်လ သုံးချင်တာလဲ ပြောပါ။ ဥပမာ 2 device, 1 month လိုပို့ပေးပါ။';
+  }
+
+  return null;
+}
+
+function matchFacebookLearnedSupportReply(params: {
+  message: string;
+  recentUserContext?: string;
+  recentAssistantContext?: string;
+  attachment?: GenerateCustomerReplyInput['supportAttachment'];
+}): string | null {
+  const currentText = params.message.toLowerCase();
+  const recentText = [params.recentUserContext, params.recentAssistantContext]
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase();
+  const fullText = [params.message, params.recentUserContext, params.attachment?.textHint]
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase();
+
+  const hasVpnContext =
+    /vpn|hiddify|happ|v2ray|v2box|streisand|outline|shadowrocket|key|server|vmess|vless|trojan|proxy|proxies|subscription|link/i.test(fullText) ||
+    /(ဗီပီအန်|လိုင်း|ချိတ်|ကီး|ဆာဗာ|လင့်|လင့်)/i.test(fullText);
+
+  if (isPaymentConfirmationMessage(params.message)) {
+    if (params.attachment || /photo|image|screenshot|slip|ss|ပုံ|စလစ်|ဆလစ်|ဘောင်ချာ/i.test(fullText)) {
+      return 'လက်ခံရရှိပါတယ်ဗျ။ Payment ကို admin စစ်ပြီး order/key ကို ဆက်လုပ်ပေးပါမယ်။';
+    }
+
+    return 'လွှဲပြီးထားရင် payment screenshot/slip လေး ပို့ပေးပါဗျ။ Admin စစ်ပြီး order/key ကို ဆက်လုပ်ပေးပါမယ်။';
+  }
+
+  if (/(key|ကီး).*(မရောက်|မရသေး|မရေက်|မတွေ့|မရဘူး)|\bbd-\d+/i.test(fullText)) {
+    return 'စစ်ပေးပါ့မယ်ဗျ။ Order number/ဝယ်ထားတဲ့ account info လေးပို့ပေးပါ၊ key အခြေအနေကို ကြည့်ပေးပါမယ်။';
+  }
+
+  if (!hasVpnContext || isPurchaseOrPaymentIntent(currentText)) return null;
+
+  const asksCopyProblem =
+    /(copy|ကူး|ကော်ပီ).*(မရ|မရဘူး|မရပါ|အဆင်မပြေ)|(?:ယူမရ|ကူးမရ)/i.test(currentText);
+  if (asksCopyProblem) {
+    return 'Copy ယူမရရင် လင့်ကိုနှိပ်ပြီး Subscription/QR နေရာကနေ copy ယူကြည့်ပါဗျ။ မရသေးရင် screenshot လေးပို့ပေးပါ၊ ကျနော် ကြည့်ပေးပါ့မယ်။';
+  }
+
+  const asksHowToUseLink =
+    /(copy|ကူး|ကော်ပီ|link|လင့်|လင့်|နှိပ်|ဝင်|browser).*(လား|ရမလား|ရဦးမှာ|ထည့်|ထည့္|ဘယ်လို|ဘယ္လို)|(?:ဒါ|ဒီဟာ).*(copy|ကူး|ထည့်|ထည့္)/i.test(currentText);
+  const recentKeyContext =
+    /vpn-subscription-link|subscription|key|ကီး|link|လင့်|လင့်|copy|hiddify|happ|v2box/i.test(recentText);
+  if (asksHowToUseLink && recentKeyContext) {
+    return 'Link ကို copy ယူပြီး app ထဲမှာထည့်ပါဗျ။ လင့်ကို browser ထဲဝင်နှိပ်စရာမလိုပါဘူးဗျ။';
+  }
+
+  const mentionsMultiServer =
+    /multi\s*server|multisever|multi\s*sever|server\s*ပြောင်း|ဆာဗာ.*ပြောင်း/i.test(fullText);
+  const asksRepeatChange =
+    /(ထပ်|ပြန်).{0,24}(ပြောင်း|ချိန်း)|အရင်ကီး|ဝယ်ထားတုန်းက|share|device|app.*ထည့်|app.*ထည့္/i.test(fullText);
+  if (mentionsMultiServer && asksRepeatChange) {
+    return 'Multi server key က တစ်ခါပြောင်းပြီးရင် ထပ်ပြောင်းစရာမလိုပါဘူးဗျ။ အရင်ကီး/link ကိုပဲ Hiddify/HApp/V2Box ထဲ ပြန်ထည့်သုံးပါ၊ မရသေးရင် key screenshot လေးပို့ပေးပါ။';
+  }
+
+  if (/hiddify/i.test(fullText) && /(key.*ဘယ်|ဘယ်မှာ.*ထည့်|ဘယ်နား.*ထည့်|add from clipboard|\+)/i.test(fullText)) {
+    return 'Hiddify မှာ + ကိုနှိပ်ပြီး Add from Clipboard ရွေးပါဗျ။ Key/link ကို copy ယူထားရင် auto ဝင်သွားပြီး Connect လုပ်လို့ရပါမယ်။';
+  }
+
+  const asksBestApp =
+    /(ဘယ် app.*ကောင်း|ဘယ် app.*သုံး|ဘယ် app|iphone|i phone|ios|android|windows|mac).*(ကောင်း|အဆင်ပြေ|သုံး|ရမလဲ|လား)|which app|best app/i.test(fullText);
+  if (asksBestApp) {
+    return 'Hiddify က အများဆုံး အဆင်ပြေပါတယ်ဗျ။ မရရင် HApp or V2Box နဲ့စမ်းပါ။ ဘယ် device/ISP နဲ့သုံးမှာလဲဗျ?';
+  }
+
+  if (/(outline).*(ချိတ်မရ|မရ|error|လိုင်းကျ|နှေး)|(?:outline).*(အဆင်မပြေ)/i.test(fullText)) {
+    return 'Outline နဲ့မရရင် Hiddify/HApp/V2Box ထဲ key ကိုပြောင်းထည့်ပြီးစမ်းပါဗျ။ မရသေးရင် error screenshot လေးပို့ပေးပါ၊ ကျနော် စစ်ပေးပါ့မယ်။';
   }
 
   return null;
@@ -551,7 +633,9 @@ export async function generateCustomerAgentReply(
       });
     }
 
-    const hasPriorAssistantReply = session.messages.some((msg) => msg.role === 'assistant');
+    const hasPriorAssistantReply = session.messages.some(
+      (msg: { role?: string }) => msg.role === 'assistant'
+    );
     const recentUserContext = buildRecentUserContext(session.messages);
     const recentAssistantContext = buildRecentAssistantContext(session.messages);
 
@@ -571,6 +655,16 @@ export async function generateCustomerAgentReply(
 
     if (reply) {
       source = 'fixed';
+    }
+
+    if (!reply) {
+      reply = matchFacebookLearnedSupportReply({
+        message,
+        recentUserContext,
+        recentAssistantContext,
+        attachment: input.supportAttachment,
+      });
+      if (reply) source = 'fixed';
     }
 
     if (!reply) {

@@ -1,1 +1,0 @@
-const fs = require('fs'); let c = fs.readFileSync('src/lib/rotationActions.ts', 'utf8').replace(/\0/g, ''); while(c.trimRight().endsWith('}')){ c = c.trimRight().slice(0, -1); } fs.writeFileSync('src/lib/rotationActions.ts', c.trimRight() + '\n}\n');

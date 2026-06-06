@@ -8,6 +8,28 @@ import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
 import { sanitizeString, sanitizeUrlString, isValidObjectId } from '@/lib/security';
 import { normalizeImageSrc } from '@/lib/image';
+import { getProductFulfillmentMode, getStockForSave, normalizeStockQty, type ProductFulfillmentMode } from '@/lib/product-stock';
+
+function normalizeFulfillmentMode(value: unknown, fallback: ProductFulfillmentMode): ProductFulfillmentMode {
+  return value === 'manual' || value === 'preloaded' ? value : fallback;
+}
+
+function normalizeProductDetails(details: unknown) {
+  if (!Array.isArray(details)) return [];
+
+  return details.map((detail) => {
+    const item = detail && typeof detail === 'object' ? detail as Record<string, unknown> : {};
+    return {
+      serialKey: sanitizeString(String(item.serialKey || '')).slice(0, 500),
+      loginEmail: sanitizeString(String(item.loginEmail || '')).slice(0, 200),
+      loginPassword: sanitizeString(String(item.loginPassword || '')).slice(0, 200),
+      additionalInfo: sanitizeString(String(item.additionalInfo || '')).slice(0, 1000),
+      sold: item.sold === true,
+      soldTo: item.soldTo,
+      soldAt: item.soldAt,
+    };
+  });
+}
 
 // PUT /api/admin/products/[id] - Update product
 export async function PUT(
@@ -30,7 +52,28 @@ export async function PUT(
     await connectDB();
 
     const body = await request.json();
-    const { name, category, description, price, image, featured, active, purchaseDisabled, details, allowedPaymentGateways } = body;
+    const {
+      name,
+      category,
+      description,
+      price,
+      image,
+      featured,
+      active,
+      purchaseDisabled,
+      details,
+      stock,
+      fulfillmentMode,
+      allowedPaymentGateways,
+    } = body;
+
+    const oldProduct = await Product.findById(id).select('stock name details fulfillmentMode').lean() as any;
+    if (!oldProduct) {
+      return NextResponse.json(
+        { success: false, error: 'Product not found' },
+        { status: 404 }
+      );
+    }
 
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = sanitizeString(name);
@@ -42,12 +85,25 @@ export async function PUT(
     if (active !== undefined) updateData.active = active;
     if (purchaseDisabled !== undefined) updateData.purchaseDisabled = purchaseDisabled;
     if (allowedPaymentGateways !== undefined) updateData.allowedPaymentGateways = Array.isArray(allowedPaymentGateways) ? allowedPaymentGateways : [];
-    if (details !== undefined) {
-      updateData.details = details;
-      updateData.stock = details.length;
-    }
+    const oldMode = getProductFulfillmentMode(oldProduct);
+    const nextFulfillmentMode = normalizeFulfillmentMode(fulfillmentMode, oldMode);
+    const nextDetails = details !== undefined
+      ? normalizeProductDetails(details)
+      : Array.isArray(oldProduct.details)
+        ? oldProduct.details
+        : [];
 
-    const oldProduct = await Product.findById(id).select('stock name').lean() as any;
+    if (fulfillmentMode !== undefined) updateData.fulfillmentMode = nextFulfillmentMode;
+    if (details !== undefined || nextFulfillmentMode === 'manual') {
+      updateData.details = nextFulfillmentMode === 'preloaded' ? nextDetails : [];
+    }
+    if (details !== undefined || stock !== undefined || fulfillmentMode !== undefined) {
+      updateData.stock = getStockForSave(
+        nextFulfillmentMode,
+        nextDetails,
+        stock !== undefined ? normalizeStockQty(stock) : oldProduct.stock
+      );
+    }
 
     const product = await Product.findByIdAndUpdate(
       id,

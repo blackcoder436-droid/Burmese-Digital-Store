@@ -8,6 +8,21 @@ import { Agent } from 'undici';
 import { createLogger } from '@/lib/logger';
 import { getServer, getEnabledServers, getAllServers, type VpnServer } from '@/lib/vpn-servers';
 import { hostnameMatchesAllowlist, validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
+import {
+  buildSafeClientEmail,
+  clientEmailNeedsRename,
+  isInvalidClientEmailMessage,
+  sanitizeClientLabel,
+  toClientsApiPayload,
+} from '@/lib/xui-client-email';
+
+export {
+  buildSafeClientEmail,
+  clientEmailNeedsRename,
+  isInvalidClientEmailMessage,
+  sanitizeClientLabel,
+  toClientsApiPayload,
+} from '@/lib/xui-client-email';
 
 const log = createLogger({ module: 'xui' });
 
@@ -92,23 +107,6 @@ function normalizeInbound(raw: XuiInbound): XuiInbound {
     streamSettings: normalizeJsonField(raw.streamSettings),
     sniffing: normalizeJsonField(raw.sniffing),
   };
-}
-
-function sanitizeClientLabel(value: string): string {
-  return value
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^A-Za-z0-9._-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^[._-]+|[._-]+$/g, '')
-    .slice(0, 48);
-}
-
-function toClientsApiPayload(client: Record<string, unknown>): Record<string, unknown> {
-  const payload = { ...client };
-  const tgId = String(payload.tgId ?? '').trim();
-  payload.tgId = /^\d+$/.test(tgId) ? Number(tgId) : 0;
-  return payload;
 }
 
 // ==========================================
@@ -581,29 +579,29 @@ class XuiSession {
         subId,
       });
 
-      // POST addClient. 3x-ui v3.1+ moved clients to first-class endpoints,
-      // while older panels still use the inbound-scoped endpoint.
+      // 3x-ui v3.2+ stores clients as first-class rows and exposes /clients/*.
+      // Older panels still use the inbound-scoped endpoint, so keep it as fallback.
       const legacyBody = new URLSearchParams({
         id: String(inboundId),
         settings: JSON.stringify({ clients: [clientSettings] }),
       });
 
-      let res = await this.request('/panel/api/inbounds/addClient', {
+      let res = await this.request('/panel/api/clients/add', {
         method: 'POST',
-        body: legacyBody,
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: JSON.stringify({ client: toClientsApiPayload(clientSettings), inboundIds: [inboundId] }),
+        headers: { 'Content-Type': 'application/json' },
       });
 
-      const legacyCreate = await this.readApiResponse(res, 'create client via legacy inbound API');
-      let result = legacyCreate.result;
-      const status = legacyCreate.status;
+      const clientsCreate = await this.readApiResponse(res, 'create client via clients API');
+      let result = clientsCreate.result;
+      const status = clientsCreate.status;
       if (!result.success && status === 404) {
-        res = await this.request('/panel/api/clients/add', {
+        res = await this.request('/panel/api/inbounds/addClient', {
           method: 'POST',
-          body: JSON.stringify({ client: toClientsApiPayload(clientSettings), inboundIds: [inboundId] }),
-          headers: { 'Content-Type': 'application/json' },
+          body: legacyBody,
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
-        ({ result } = await this.readApiResponse(res, 'create client via clients API'));
+        ({ result } = await this.readApiResponse(res, 'create client via legacy inbound API'));
       }
 
       if (!result.success) {
@@ -674,20 +672,51 @@ class XuiSession {
   }
 
   // ---- Delete client ----
-  async deleteClient(inboundId: number, clientEmail: string): Promise<boolean> {
+  async deleteClient(inboundId: number, clientEmail: string, clientIdentifier?: string): Promise<boolean> {
     if (!this.loggedIn && !(await this.login())) return false;
 
     try {
       const encoded = encodeURIComponent(clientEmail);
-      const res = await this.request(`/panel/api/inbounds/${inboundId}/delClient/${encoded}`, {
+      const res = await this.request(`/panel/api/clients/del/${encoded}`, {
         method: 'POST',
       });
-      const legacyDelete = await this.readApiResponse(res, 'delete client via legacy inbound API');
-      let result = legacyDelete.result;
-      const status = legacyDelete.status;
-      if (!result.success && status === 404) {
-        const nextRes = await this.request(`/panel/api/clients/del/${encoded}`, { method: 'POST' });
-        ({ result } = await this.readApiResponse(nextRes, 'delete client via clients API'));
+      const clientsDelete = await this.readApiResponse(res, 'delete client via clients API');
+      let result = clientsDelete.result;
+      const status = clientsDelete.status;
+
+      if (!result.success && clientEmailNeedsRename(clientEmail)) {
+        const found = await this.getClientFull(clientEmail);
+        if (found?.client) {
+          const safeEmail = buildSafeClientEmail(found.client);
+          const renamedClient = toClientsApiPayload({ ...found.client, email: safeEmail });
+          const renameRes = await this.request(`/panel/api/clients/update/${encoded}`, {
+            method: 'POST',
+            body: JSON.stringify(renamedClient),
+            headers: { 'Content-Type': 'application/json' },
+          });
+          const renameUpdate = await this.readApiResponse(renameRes, 'rename invalid-email client before delete');
+          if (renameUpdate.result.success) {
+            const renamedDeleteRes = await this.request(`/panel/api/clients/del/${encodeURIComponent(safeEmail)}`, {
+              method: 'POST',
+            });
+            ({ result } = await this.readApiResponse(renamedDeleteRes, 'delete renamed client via clients API'));
+          }
+        }
+      }
+
+      const shouldTryLegacyDelete =
+        !result.success &&
+        (Boolean(clientIdentifier) ||
+          status === 404 ||
+          clientEmailNeedsRename(clientEmail) ||
+          isInvalidClientEmailMessage(result.msg));
+
+      if (shouldTryLegacyDelete) {
+        const legacyId = encodeURIComponent(clientIdentifier || clientEmail);
+        const nextRes = await this.request(`/panel/api/inbounds/${inboundId}/delClient/${legacyId}`, {
+          method: 'POST',
+        });
+        ({ result } = await this.readApiResponse(nextRes, 'delete client via legacy inbound API'));
       }
       return result.success;
     } catch (error: unknown) {
@@ -702,13 +731,13 @@ class XuiSession {
 
     try {
       const encoded = encodeURIComponent(clientEmail);
-      const res = await this.request(`/panel/api/inbounds/getClientTraffics/${encoded}`);
-      const legacyTraffic = await this.readApiResponse(res, 'get client traffic via legacy inbound API');
-      let result = legacyTraffic.result;
-      const status = legacyTraffic.status;
+      const res = await this.request(`/panel/api/clients/traffic/${encoded}`);
+      const clientsTraffic = await this.readApiResponse(res, 'get client traffic via clients API');
+      let result = clientsTraffic.result;
+      const status = clientsTraffic.status;
       if (!result.success && status === 404) {
-        const nextRes = await this.request(`/panel/api/clients/traffic/${encoded}`);
-        ({ result } = await this.readApiResponse(nextRes, 'get client traffic via clients API'));
+        const nextRes = await this.request(`/panel/api/inbounds/getClientTraffics/${encoded}`);
+        ({ result } = await this.readApiResponse(nextRes, 'get client traffic via legacy inbound API'));
       }
       return result.success ? (result.obj as ClientStats) : null;
     } catch (error: unknown) {
@@ -718,7 +747,35 @@ class XuiSession {
   }
 
   // ---- Find client by email across all inbounds ----
-  async findClient(clientEmail: string): Promise<{ inboundId: number; protocol: string } | null> {
+  async findClient(clientEmail: string): Promise<{
+    inboundId: number;
+    protocol: string;
+    clientId?: string;
+    clientPassword?: string;
+  } | null> {
+    if (!this.loggedIn && !(await this.login())) return null;
+
+    try {
+      const encoded = encodeURIComponent(clientEmail);
+      const res = await this.request(`/panel/api/clients/get/${encoded}`);
+      const { result } = await this.readApiResponse(res, 'get client via clients API');
+      const obj = result.obj as { client?: Record<string, unknown>; inboundIds?: number[] } | undefined;
+      const client = obj?.client;
+      const inboundId = Array.isArray(obj?.inboundIds) ? Number(obj?.inboundIds[0]) : 0;
+      if (result.success && client && inboundId) {
+        const inbounds = await this.getInbounds();
+        const inbound = inbounds.find((ib) => Number(ib.id) === inboundId);
+        return {
+          inboundId,
+          protocol: String(inbound?.protocol || ''),
+          clientId: String(client.uuid || client.id || ''),
+          clientPassword: String(client.password || ''),
+        };
+      }
+    } catch {
+      // Fall back to inbound-scoped parsing below.
+    }
+
     const inbounds = await this.getInbounds();
     for (const ib of inbounds) {
       try {
@@ -726,7 +783,12 @@ class XuiSession {
         const clients = settings.clients || [];
         for (const client of clients) {
           if (client.email === clientEmail) {
-            return { inboundId: ib.id, protocol: ib.protocol };
+            return {
+              inboundId: ib.id,
+              protocol: ib.protocol,
+              clientId: String(client.uuid || client.id || ''),
+              clientPassword: String(client.password || ''),
+            };
           }
         }
       } catch { /* skip parse errors */ }
@@ -740,6 +802,24 @@ class XuiSession {
     protocol: string;
     client: Record<string, unknown>;
   } | null> {
+    if (!this.loggedIn && !(await this.login())) return null;
+
+    try {
+      const encoded = encodeURIComponent(clientEmail);
+      const res = await this.request(`/panel/api/clients/get/${encoded}`);
+      const { result } = await this.readApiResponse(res, 'get full client via clients API');
+      const obj = result.obj as { client?: Record<string, unknown>; inboundIds?: number[] } | undefined;
+      const client = obj?.client;
+      const inboundId = Array.isArray(obj?.inboundIds) ? Number(obj?.inboundIds[0]) : 0;
+      if (result.success && client && inboundId) {
+        const inbounds = await this.getInbounds();
+        const inbound = inbounds.find((ib) => Number(ib.id) === inboundId);
+        return { inboundId, protocol: String(inbound?.protocol || ''), client };
+      }
+    } catch {
+      // Fall back to inbound-scoped parsing below.
+    }
+
     const inbounds = await this.getInbounds();
     for (const ib of inbounds) {
       try {
@@ -764,34 +844,62 @@ class XuiSession {
     if (!this.loggedIn && !(await this.login())) return false;
 
     try {
+      const email = String(updatedClient.email || '');
+      if (!email) {
+        log.error('Cannot update client without email', { clientUUID });
+        return false;
+      }
+
+      const payload = toClientsApiPayload(updatedClient);
+      let legacyPayload = payload;
+      const res = await this.request(`/panel/api/clients/update/${encodeURIComponent(email)}`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const clientsUpdate = await this.readApiResponse(res, 'update client via clients API');
+      let result = clientsUpdate.result;
+      const status = clientsUpdate.status;
+
+      if (result.success) return true;
+
+      if (isInvalidClientEmailMessage(result.msg) || clientEmailNeedsRename(email)) {
+        const safeEmail = buildSafeClientEmail(payload);
+        if (safeEmail && safeEmail !== email) {
+          const renamedPayload = toClientsApiPayload({ ...payload, email: safeEmail });
+          legacyPayload = renamedPayload;
+          const renameRes = await this.request(`/panel/api/clients/update/${encodeURIComponent(email)}`, {
+            method: 'POST',
+            body: JSON.stringify(renamedPayload),
+            headers: { 'Content-Type': 'application/json' },
+          });
+          const renameUpdate = await this.readApiResponse(renameRes, 'update invalid-email client via clients API');
+          if (renameUpdate.result.success) {
+            log.info('Renamed legacy 3x-ui client email during update', {
+              server: this.server.id,
+              oldEmail: email,
+              newEmail: safeEmail,
+            });
+            return true;
+          }
+          result = renameUpdate.result;
+        }
+      }
+
       const body = new URLSearchParams({
         id: String(inboundId),
-        settings: JSON.stringify({ clients: [updatedClient] }),
+        settings: JSON.stringify({ clients: [legacyPayload] }),
       });
 
-      const res = await this.request(`/panel/api/inbounds/updateClient/${encodeURIComponent(clientUUID)}`, {
+      const legacyId = String(payload.id || clientUUID);
+      const nextRes = await this.request(`/panel/api/inbounds/updateClient/${encodeURIComponent(legacyId)}`, {
         method: 'POST',
         body,
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
-      const legacyUpdate = await this.readApiResponse(res, 'update client via legacy inbound API');
-      let result = legacyUpdate.result;
-      const status = legacyUpdate.status;
-      if (!result.success && status === 404) {
-        const email = String(updatedClient.email || '');
-        if (!email) {
-          log.error('Cannot update client via clients API without email', { clientUUID });
-          return false;
-        }
-        const nextRes = await this.request(`/panel/api/clients/update/${encodeURIComponent(email)}`, {
-          method: 'POST',
-          body: JSON.stringify(toClientsApiPayload(updatedClient)),
-          headers: { 'Content-Type': 'application/json' },
-        });
-        ({ result } = await this.readApiResponse(nextRes, 'update client via clients API'));
-      }
+      ({ result } = await this.readApiResponse(nextRes, 'update client via legacy inbound API'));
       if (!result.success) {
-        log.error('Failed to update client', { msg: result.msg, clientUUID });
+        log.error('Failed to update client', { msg: result.msg, clientUUID, clientsApiStatus: status });
       }
       return result.success;
     } catch (error: unknown) {
@@ -816,6 +924,7 @@ class XuiSession {
     clientPassword: string;
   }[]> {
     const inbounds = await this.getInbounds();
+    const inboundById = new Map(inbounds.map((ib) => [Number(ib.id), ib]));
     const clients: {
       email: string;
       protocol: string;
@@ -831,6 +940,46 @@ class XuiSession {
       clientPassword: string;
     }[] = [];
 
+    try {
+      const res = await this.request('/panel/api/clients/list');
+      const { result } = await this.readApiResponse(res, 'list clients via clients API');
+      const rows = result.success && Array.isArray(result.obj)
+        ? result.obj as Record<string, unknown>[]
+        : [];
+
+      if (rows.length > 0) {
+        for (const row of rows) {
+          const inboundIds = Array.isArray(row.inboundIds)
+            ? row.inboundIds.map((value) => Number(value)).filter(Boolean)
+            : [];
+          const mappedInboundIds = inboundIds.length > 0 ? inboundIds : [0];
+          const traffic = row.traffic as Record<string, unknown> | undefined;
+
+          for (const inboundId of mappedInboundIds) {
+            const inbound = inboundById.get(inboundId);
+            clients.push({
+              email: String(row.email || ''),
+              protocol: String(inbound?.protocol || ''),
+              enable: row.enable !== false,
+              expiryTime: parseExpiryNumber(row.expiryTime ?? traffic?.expiryTime),
+              limitIp: Number(row.limitIp || 0),
+              totalGB: Number(row.totalGB || traffic?.total || 0),
+              up: Number(traffic?.up || 0),
+              down: Number(traffic?.down || 0),
+              tgId: String(row.tgId || ''),
+              subId: String(row.subId || ''),
+              clientId: String(row.uuid || (typeof row.id === 'string' ? row.id : '') || ''),
+              clientPassword: String(row.password || ''),
+            });
+          }
+        }
+
+        return clients;
+      }
+    } catch {
+      // Fall back to inbound-scoped parsing below.
+    }
+
     for (const ib of inbounds) {
       try {
         const settings = JSON.parse(ib.settings || '{}');
@@ -844,14 +993,14 @@ class XuiSession {
             email: c.email || '',
             protocol: ib.protocol,
             enable: c.enable !== false,
-            expiryTime: c.expiryTime || 0,
+            expiryTime: parseExpiryNumber(c.expiryTime),
             limitIp: c.limitIp || 0,
             totalGB: c.totalGB || 0,
             up: (stats?.up as number) || 0,
             down: (stats?.down as number) || 0,
             tgId: c.tgId || '',
             subId: c.subId || '',
-            clientId: c.id ? String(c.id) : '',
+            clientId: c.uuid ? String(c.uuid) : c.id ? String(c.id) : '',
             clientPassword: c.password ? String(c.password) : '',
           });
         }
@@ -992,6 +1141,8 @@ export interface XuiClientInfo {
   subId: string;
   serverId: string;
   serverName: string;
+  clientId?: string;
+  clientPassword?: string;
 }
 
 export async function findClientBySubIdAcrossServers(subId: string, fullUrlHint?: string): Promise<XuiClientInfo | null> {
@@ -1206,7 +1357,11 @@ export async function revokeVpnKey(serverId: string, clientEmail: string): Promi
     return false;
   }
 
-  return session.deleteClient(info.inboundId, clientEmail);
+  const clientIdentifier = info.protocol === 'trojan' || info.protocol === 'shadowsocks'
+    ? info.clientPassword
+    : info.clientId;
+
+  return session.deleteClient(info.inboundId, clientEmail, clientIdentifier);
 }
 
 /**
@@ -1238,7 +1393,7 @@ export async function updateVpnClient(
   // Trojan/SS use "password", vless/vmess use "id"
   const clientUUID = (protocol === 'trojan' || protocol === 'shadowsocks')
     ? String(client.password || '')
-    : String(client.id || '');
+    : String(client.uuid || client.id || '');
 
   if (!clientUUID) {
     log.error('Cannot determine client UUID for update', { clientEmail, protocol });
@@ -1263,6 +1418,21 @@ export async function updateVpnClient(
   }
 
   return success;
+}
+
+/**
+ * Parse expiry time values returned by 3x-UI which may be numeric (ms) or a date string.
+ * Returns epoch milliseconds or 0 when unknown/unparseable.
+ */
+function parseExpiryNumber(value: unknown): number {
+  if (value === null || value === undefined || value === '') return 0;
+  const asNumber = Number(value);
+  if (Number.isFinite(asNumber)) return asNumber;
+  try {
+    const parsed = Date.parse(String(value));
+    if (!Number.isNaN(parsed) && Number.isFinite(parsed)) return parsed;
+  } catch {}
+  return 0;
 }
 
 /**

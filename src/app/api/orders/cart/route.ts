@@ -16,6 +16,7 @@ import { computeScreenshotHash, detectFraudFlags } from '@/lib/fraud-detection';
 import { saveToQuarantine } from '@/lib/quarantine';
 import { sendPaymentScreenshot, buildScreenshotCaption, sendOrderWithApproveButtons } from '@/lib/telegram';
 import { notifyBotUser } from '@/lib/order-actions';
+import { getAvailableProductStock } from '@/lib/product-stock';
 import path from 'path';
 import User from '@/models/User';
 import { createNotification, notifyAdmins } from '@/models/Notification';
@@ -32,6 +33,76 @@ import {
 interface CartItem {
   productId: string;
   quantity: number;
+}
+
+const DOMAIN_PRODUCT_PREFIX = 'domain-';
+const DOMAIN_FIXED_PRICE = 30000;
+const DOMAIN_EXTENSIONS = [
+  'tech',
+  'dev',
+  'software',
+  'engineer',
+  'codes',
+  'systems',
+  'app',
+  'studio',
+  'page',
+  'live',
+  'me',
+  'ninja',
+  'rocks',
+  'games',
+  'works',
+  'email',
+  'foo',
+];
+const DOMAIN_NAME_RE = new RegExp(
+  `^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.(${DOMAIN_EXTENSIONS.join('|')})$`
+);
+
+function parseDomainCartProductId(productId: string): string | null {
+  const normalized = productId.toLowerCase().trim();
+  if (!normalized.startsWith(DOMAIN_PRODUCT_PREFIX)) return null;
+
+  const domain = normalized.slice(DOMAIN_PRODUCT_PREFIX.length);
+  return DOMAIN_NAME_RE.test(domain) ? domain : null;
+}
+
+async function ensureDomainProducts(cartItems: CartItem[]): Promise<void> {
+  const domains = Array.from(
+    new Set(
+      cartItems
+        .map((item) => parseDomainCartProductId(item.productId))
+        .filter((domain): domain is string => Boolean(domain))
+    )
+  );
+
+  if (domains.length === 0) return;
+
+  await Promise.all(
+    domains.map((domain) =>
+      Product.updateOne(
+        { slug: `${DOMAIN_PRODUCT_PREFIX}${domain}` },
+        {
+          $set: {
+            name: domain,
+            slug: `${DOMAIN_PRODUCT_PREFIX}${domain}`,
+            category: 'other',
+            description: `1 year domain registration for ${domain}. Manual registration after admin payment verification.`,
+            price: DOMAIN_FIXED_PRICE,
+            stock: 1,
+            fulfillmentMode: 'manual',
+            details: [],
+            image: '/icons/favicon-32x32.png',
+            active: true,
+            purchaseDisabled: false,
+            productType: 'single',
+          },
+        },
+        { upsert: true }
+      )
+    )
+  );
 }
 
 // POST /api/orders/cart — Create multiple orders from cart (one payment screenshot for all)
@@ -145,6 +216,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Domain search results are cart-only items, so create/update their manual products first.
+    await ensureDomainProducts(cartItems);
+
     // Fetch all products by _id (ObjectId) or slug (string ID)
     const productQueries = cartItems.map((item) => {
       if (isValidObjectId(item.productId)) {
@@ -184,13 +258,10 @@ export async function POST(request: NextRequest) {
 
     // Check stock for each item
     for (const item of cartItems) {
-      const product = products.find((p) => p._id.toString() === item.productId);
+      const product = products.find((p) => p._id.toString() === item.productId || p.slug === item.productId);
       if (!product) continue;
-      const hasStockDetails = Array.isArray(product.details) && product.details.length > 0;
-      const availableStock = hasStockDetails
-        ? product.details.filter((d: { sold: boolean }) => !d.sold).length
-        : null;
-      if (availableStock !== null && availableStock < item.quantity) {
+      const availableStock = getAvailableProductStock(product);
+      if (availableStock < item.quantity) {
         return NextResponse.json(
           { success: false, error: `${product.name}: Only ${availableStock} in stock` },
           { status: 400 }
@@ -201,7 +272,7 @@ export async function POST(request: NextRequest) {
     // Calculate total
     let grandTotal = 0;
     const orderItems = cartItems.map((item) => {
-      const product = products.find((p) => p._id.toString() === item.productId)!;
+      const product = products.find((p) => p._id.toString() === item.productId || p.slug === item.productId)!;
       const subtotal = product.price * item.quantity;
       grandTotal += subtotal;
       return { product, quantity: item.quantity, subtotal };

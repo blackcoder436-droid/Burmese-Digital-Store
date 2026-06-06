@@ -118,7 +118,7 @@ ${serverStatus}
       }
     }
 
-    const adminModel = process.env.AI_ADMIN_MODEL || 'gpt-4o';
+    const adminModel = process.env.AI_ADMIN_MODEL || 'openai/gpt-4.1';
 
     if (stream) {
       try {

@@ -80,9 +80,13 @@ const serverSchema = z.object({
 
   // AI Chat Assistant (GitHub Models / OpenAI-compatible)
   AI_API_KEY: z.string().optional(),
-  AI_API_URL: z.string().url().optional().default('https://models.inference.ai.azure.com'),
-  AI_MODEL: z.string().optional().default('gpt-4o-mini'),
-  AI_ADMIN_MODEL: z.string().optional().default('gpt-4o'),
+  GITHUB_TOKEN: z.string().optional(),
+  GITHUB_MODELS_TOKEN: z.string().optional(),
+  GITHUB_MODELS_API_VERSION: z.string().optional().default('2026-03-10'),
+  GITHUB_MODELS_REQUEST_TIMEOUT: z.string().optional().default('60000'),
+  AI_API_URL: z.string().url().optional().default('https://models.github.ai/inference'),
+  AI_MODEL: z.string().optional().default('openai/gpt-4.1-mini'),
+  AI_ADMIN_MODEL: z.string().optional().default('openai/gpt-4.1'),
   AI_CHAT_ENABLED: z.enum(['true', 'false']).optional().default('false'),
 
   // Admin

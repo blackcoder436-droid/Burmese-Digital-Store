@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 900;
 const PROCESS_STARTED_AT = new Date();
 const STALE_RUNNING_JOB_MS = 20 * 60 * 1000;
+const ROTATE_JOB_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
 
 type RotateJobUpdate = {
   jobId: string;
@@ -48,6 +49,34 @@ async function updateRotateJob(jobId: string, updates: Partial<RotateJobUpdate>)
   );
 }
 
+async function recordCompletedRotateJob(action: string, serverId: string, result: any, status: 'success' | 'error' = 'success') {
+  const now = Date.now();
+  await RotateJobModel.create({
+    jobId: `${action}:${serverId}:${now}`,
+    action,
+    serverId,
+    status,
+    message: status === 'success' ? (result?.message || 'Step completed successfully') : (result?.error || result?.message || 'Step failed'),
+    result: status === 'success' ? result : null,
+    error: status === 'error' ? (result?.error || result?.message || 'Step failed') : '',
+    startedAt: new Date(now),
+    updatedAt: new Date(now),
+    expiresAt: new Date(now + ROTATE_JOB_RETENTION_MS),
+  });
+}
+
+async function runTrackedAction(action: string, serverId: string, runner: () => Promise<any>) {
+  try {
+    const result = await runner();
+    await recordCompletedRotateJob(action, serverId, result, 'success');
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await recordCompletedRotateJob(action, serverId, { error: message, message }, 'error');
+    throw error;
+  }
+}
+
 async function startRotateJob(action: string, serverId: string, runner: (progress: (message: string) => Promise<void>) => Promise<any>) {
   await cleanupRotateJobs();
 
@@ -63,7 +92,7 @@ async function startRotateJob(action: string, serverId: string, runner: (progres
     message: 'Panel install/restore is running in the background.',
     startedAt: new Date(now),
     updatedAt: new Date(now),
-    expiresAt: new Date(now + 24 * 60 * 60 * 1000),
+    expiresAt: new Date(now + ROTATE_JOB_RETENTION_MS),
   });
 
   void runner((message: string) => updateRotateJob(job.jobId, { message }))
@@ -151,18 +180,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'backup') {
-      const result = await actionBackupServer(serverId);
-      return NextResponse.json(result);
+      return runTrackedAction(action, serverId, () => actionBackupServer(serverId));
     }
     
     if (action === 'recreate_vps') {
-      const result = await actionRecreateServer(serverId);
-      return NextResponse.json(result);
+      return runTrackedAction(action, serverId, () => actionRecreateServer(serverId));
     }
 
     if (action === 'update_dns') {
-      const result = await actionUpdateDNS(serverId);
-      return NextResponse.json(result);
+      return runTrackedAction(action, serverId, () => actionUpdateDNS(serverId));
     }
 
     if (action === 'install_3xui') {

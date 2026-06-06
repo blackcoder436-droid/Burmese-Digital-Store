@@ -274,6 +274,26 @@ export default function AdminAiOpsPage() {
     }
   }
 
+  async function seedProjectKnowledge() {
+    if (!confirm('Seed/update project knowledge and AI rules?')) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/ai-ops/seed-project-knowledge', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Seed failed');
+      toast.success('Project knowledge seeded');
+      await Promise.all([fetchKnowledge(), fetchCommands()]);
+      setActiveTab('knowledge');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Seed failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveKnowledge() {
     if (!knowledgeForm.title.trim() || !knowledgeForm.content.trim()) {
       toast.error('Title and content are required');
@@ -416,18 +436,29 @@ export default function AdminAiOpsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 text-center text-xs">
-          <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-            <p className="font-bold text-emerald-300">{stats.enabledKnowledge}</p>
-            <p className="text-gray-500">Knowledge</p>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-            <p className="font-bold text-cyan-300">{stats.activeCommands}</p>
-            <p className="text-gray-500">Commands</p>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-            <p className="font-bold text-amber-300">{stats.failedLogs}</p>
-            <p className="text-gray-500">Failed</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button
+            onClick={seedProjectKnowledge}
+            disabled={saving}
+            className="btn-secondary inline-flex items-center justify-center gap-2"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}
+            Seed Project Knowledge
+          </button>
+
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+              <p className="font-bold text-emerald-300">{stats.enabledKnowledge}</p>
+              <p className="text-gray-500">Knowledge</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+              <p className="font-bold text-cyan-300">{stats.activeCommands}</p>
+              <p className="text-gray-500">Commands</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+              <p className="font-bold text-amber-300">{stats.failedLogs}</p>
+              <p className="text-gray-500">Failed</p>
+            </div>
           </div>
         </div>
       </div>

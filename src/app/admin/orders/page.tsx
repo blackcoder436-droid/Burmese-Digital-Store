@@ -659,7 +659,7 @@ export default function AdminOrdersPage() {
                     <div className="p-4 bg-dark-800 rounded-xl border border-dark-700 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold text-gray-400">Delivery message</p>
-                        <span className="text-[10px] text-gray-500">Shown to the customer after approval</span>
+                        <span className="text-[10px] text-gray-500">Required for this product</span>
                       </div>
                       <textarea
                         value={deliveryMessageInput}
@@ -716,6 +716,13 @@ export default function AdminOrdersPage() {
                         const allChecked = Object.values(checklist).every(Boolean);
                         if (!allChecked) {
                           toast.error(t('admin.ordersPage.completeAllChecks'));
+                          return;
+                        }
+                        if (
+                          selectedOrder.orderType !== 'vpn' &&
+                          !deliveryMessageInput.trim()
+                        ) {
+                          toast.error(t('admin.ordersPage.deliveryInfoRequired'));
                           return;
                         }
                         updateOrderStatus(

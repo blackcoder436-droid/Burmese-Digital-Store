@@ -4,7 +4,8 @@ import connectDB from '@/lib/mongodb';
 import Order from '@/models/Order';
 import Product from '@/models/Product';
 import { createNotification } from '@/models/Notification';
-import type { NotificationType } from '@/models/Notification';
+import { getAvailableProductStock, getProductFulfillmentMode } from '@/lib/product-stock';
+import { Types } from 'mongoose';
 
 const log = createLogger({ route: '/api/stripe/webhook' });
 
@@ -54,11 +55,54 @@ export async function POST(request: NextRequest) {
       const quantity = parseInt(metadata.quantity || '1');
       const productId = metadata.productId;
       const userId = metadata.userId;
+      if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(productId)) {
+        log.error('Stripe webhook: invalid metadata IDs', { productId, userId });
+        return NextResponse.json({ received: true });
+      }
+      const userObjectId = new Types.ObjectId(userId);
 
       // Find available product details
       const product = await Product.findById(productId);
       if (!product) {
         log.error('Stripe webhook: product not found', { productId });
+        return NextResponse.json({ received: true });
+      }
+
+      const fulfillmentMode = getProductFulfillmentMode(product);
+      const availableStock = getAvailableProductStock(product);
+      if (availableStock < quantity) {
+        log.error('Stripe webhook: not enough product stock', { productId, availableStock, quantity });
+        return NextResponse.json({ received: true });
+      }
+
+      if (fulfillmentMode === 'manual') {
+        const order = new Order({
+          user: userObjectId,
+          product: product._id,
+          orderType: 'product',
+          quantity,
+          totalAmount: parseInt(metadata.originalAmountMmk || '0'),
+          paymentMethod: 'stripe',
+          paymentScreenshot: `stripe:${session.id}`,
+          transactionId: session.payment_intent || session.id,
+          status: 'pending',
+          deliveredKeys: [],
+        });
+        await order.save();
+
+        createNotification({
+          user: userId,
+          type: 'order_status' as any,
+          title: 'Order Pending',
+          message: `Your order ${order.orderNumber} is pending admin delivery.`,
+        }).catch(() => {});
+
+        log.info('Stripe manual product payment queued for admin delivery', {
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          sessionId: session.id,
+        });
+
         return NextResponse.json({ received: true });
       }
 
@@ -73,7 +117,7 @@ export async function POST(request: NextRequest) {
       // Mark details as sold
       for (const detail of availableDetails) {
         detail.sold = true;
-        detail.soldTo = userId;
+        detail.soldTo = userObjectId;
         detail.soldAt = new Date();
       }
       product.stock = product.details.filter((d: { sold: boolean }) => !d.sold).length;
@@ -81,8 +125,8 @@ export async function POST(request: NextRequest) {
 
       // Create order
       const order = new Order({
-        user: userId,
-        product: productId,
+        user: userObjectId,
+        product: product._id,
         orderType: 'product',
         quantity,
         totalAmount: parseInt(metadata.originalAmountMmk || '0'),
@@ -100,7 +144,6 @@ export async function POST(request: NextRequest) {
         type: 'order_status' as any,
         title: 'Order Completed',
         message: `Your order ${order.orderNumber} has been completed via Stripe payment.`,
-        link: `/account/orders/${order._id}`,
       }).catch(() => {});
 
       log.info('Stripe payment completed', {

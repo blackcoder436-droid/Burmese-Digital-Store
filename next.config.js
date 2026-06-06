@@ -30,6 +30,7 @@ const nextConfig = {
     ],
   },
   serverExternalPackages: ['tesseract.js', 'sharp', 'ssh2'],
+  outputFileTracingRoot: __dirname,
   // Disable x-powered-by header to reduce fingerprinting
   poweredByHeader: false,
   // Compress responses

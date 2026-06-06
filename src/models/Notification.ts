@@ -23,6 +23,7 @@ export interface INotificationDocument extends Document {
   title: string;
   message: string;
   orderId?: mongoose.Types.ObjectId;
+  link?: string;
   read: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -65,6 +66,10 @@ const NotificationSchema: Schema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'Order',
     },
+    link: {
+      type: String,
+      maxlength: [500, 'Link too long'],
+    },
     read: {
       type: Boolean,
       default: false,
@@ -94,6 +99,7 @@ export async function createNotification(data: {
   title: string;
   message: string;
   orderId?: string | mongoose.Types.ObjectId;
+  link?: string;
 }): Promise<INotificationDocument> {
   const doc = await Notification.create(data);
 
@@ -105,6 +111,7 @@ export async function createNotification(data: {
       message: data.message,
       notificationId: doc._id.toString(),
       orderId: data.orderId?.toString(),
+      link: data.link,
     });
   } catch {
     // SSE push is best-effort
@@ -121,6 +128,7 @@ export async function notifyAdmins(data: {
   title: string;
   message: string;
   orderId?: string | mongoose.Types.ObjectId;
+  link?: string;
 }): Promise<void> {
   const User = mongoose.models.User;
   if (!User) return;
@@ -134,6 +142,7 @@ export async function notifyAdmins(data: {
     title: data.title,
     message: data.message,
     orderId: data.orderId,
+    link: data.link,
     read: false,
   }));
 
@@ -149,6 +158,7 @@ export async function notifyAdmins(data: {
         message: data.message,
         notificationId: docs[i]._id.toString(),
         orderId: data.orderId?.toString(),
+        link: data.link,
       });
     }
   } catch {

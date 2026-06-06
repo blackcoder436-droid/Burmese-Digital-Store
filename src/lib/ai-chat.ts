@@ -10,6 +10,11 @@
 import { VPN_PLANS, getPlansForDevices, getDeviceCounts } from '@/lib/vpn-plans';
 import { getEnabledServers, type VpnServer } from '@/lib/vpn-servers';
 import { vpsPlans } from '@/lib/vps-plans';
+import {
+  getStreamingDeltaText,
+  requestGitHubModelsChatCompletion,
+  runGitHubModelsTextCompletion,
+} from '@/lib/github-models';
 
 // ==========================================
 // FAQ Auto-Reply — handles common questions
@@ -641,6 +646,17 @@ export async function getCustomerSystemPrompt(): Promise<string> {
 - NEVER say you are GPT, Claude, Gemini, or any public AI model — you are BDS Admin
 - If asked if you're AI/bot, say you're BDS Admin from Burmese Digital Store
 
+## Facebook Chat Learned Style
+- Real Page chats are short Messenger bubbles: "ဟုတ်ကဲ့ဗျ", "ရပါတယ်ဗျ", "စစ်ပေးပါ့မယ်ဗျ", "ပို့ပေးပါဗျ", "ပြန်ချိတ်ကြည့်ပါဗျ" are natural.
+- Prefer casual BDS admin Myanmar style with "ဗျ/ပါဗျ"; use "ကျနော်" or "ကျွန်တော်" naturally, but do not sound robotic.
+- Do not send the long automated greeting/sales paragraph from old Facebook history. Answer the customer's exact message first.
+- For VPN support, give one next action only: ask app name, ask ISP/device, ask for screenshot, or tell them the exact app step.
+- For key/link confusion: tell them to copy the link/key into the app; do not click/open the link in a browser unless copy is not working.
+- Hiddify setup: + button → Add from Clipboard. HApp/V2Box are common alternatives when Hiddify or Outline is not OK.
+- Multi-server key: after changing once, the same key/link can be reused in Hiddify/HApp/V2Box and on allowed devices; no need to change again unless admin says so.
+- Payment/slip: acknowledge with "လက်ခံရရှိပါတယ်ဗျ" and say admin will manually verify. Never approve payment or deliver paid keys just because a screenshot was sent.
+- Facebook history is style and solved-case guidance only. Never reuse old prices, old payment account details, old VPN links, old server status, or old refund wording as current facts.
+
 ## Strict Boundaries - What You Handle Through Other Channels
 - VPN key generation → tell them you'll prepare it after payment, or direct to Telegram Bot for instant purchase
 - Account-specific issues → tell them to use /account page or say you will check it
@@ -681,7 +697,7 @@ ${vpnKnowledge}
 - Server question: "ကျွန်တော့် Singapore server တွေက Myanmar users အတွက် အကောင်းဆုံးပါ"
 - Speed question: All servers high-speed, Singapore has 20-50ms latency from Myanmar
 - Payment: KPay, WaveMoney, AYA Pay, CB Pay; "ကျွန်တော် စစ်ဆေးပြီး VPN key ပေးပါမယ်"; 1-5 min
-- Setup help: Provide step-by-step for their platform, offer personal help if stuck
+- Setup help: Give the next app-specific step only; for Hiddify say "+ ကိုနှိပ်ပြီး Add from Clipboard ရွေးပါဗျ"
 - Refund: Digital products non-refundable after delivery, "ပြဿနာရှိရင် ကျွန်တော့်ဆီ တိုက်ရိုက်ပြောပါ"
 - Contact/Social: "ကျွန်တော့် Telegram/WhatsApp ကနေ တိုက်ရိုက်ဆက်သွယ်ပါ"
 - Budget query: When asked "X MMK ဆို ဘာရလဲ", list ALL matching plans at or below that budget
@@ -818,6 +834,10 @@ export function resolveAiApiUrl(): string {
   return process.env.AI_API_URL || DEFAULT_AI_API_URL;
 }
 
+function resolveAiApiKey(): string | undefined {
+  return process.env.GITHUB_MODELS_TOKEN || process.env.GITHUB_TOKEN || process.env.AI_API_KEY;
+}
+
 export function resolveAiModel(model?: string): string {
   const apiUrl = resolveAiApiUrl();
   const selected = model || process.env.AI_MODEL || DEFAULT_AI_MODEL;
@@ -838,7 +858,7 @@ export function resolveAiModel(model?: string): string {
  * Works with GitHub Models, OpenAI, Google Gemini (via OpenAI compat), etc.
  */
 export async function callAiApi(options: AiChatOptions): Promise<string> {
-  const apiKey = process.env.AI_API_KEY;
+  const apiKey = resolveAiApiKey();
   const apiUrl = resolveAiApiUrl();
   const model = resolveAiModel(options.model);
 
@@ -846,33 +866,14 @@ export async function callAiApi(options: AiChatOptions): Promise<string> {
     throw new Error('AI_API_KEY is not configured');
   }
 
-  const response = await fetch(`${apiUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: options.messages,
-      max_tokens: options.maxTokens ?? 1024,
-      temperature: options.temperature ?? 0.7,
-      stream: false,
-    }),
+  return runGitHubModelsTextCompletion({
+    token: apiKey,
+    apiUrl,
+    model,
+    messages: options.messages,
+    maxTokens: options.maxTokens ?? 1024,
+    temperature: options.temperature ?? 0.7,
   });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
-    throw new Error(`AI API error (${response.status}): ${errorText}`);
-  }
-
-  const data = await response.json();
-
-  if (!data.choices?.[0]?.message?.content) {
-    throw new Error('Invalid AI API response format');
-  }
-
-  return data.choices[0].message.content;
 }
 
 /**
@@ -880,7 +881,7 @@ export async function callAiApi(options: AiChatOptions): Promise<string> {
  * Returns a ReadableStream for SSE.
  */
 export async function callAiApiStream(options: AiChatOptions): Promise<ReadableStream> {
-  const apiKey = process.env.AI_API_KEY;
+  const apiKey = resolveAiApiKey();
   const apiUrl = resolveAiApiUrl();
   const model = resolveAiModel(options.model);
 
@@ -888,25 +889,15 @@ export async function callAiApiStream(options: AiChatOptions): Promise<ReadableS
     throw new Error('AI_API_KEY is not configured');
   }
 
-  const response = await fetch(`${apiUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: options.messages,
-      max_tokens: options.maxTokens ?? 1024,
-      temperature: options.temperature ?? 0.7,
-      stream: true,
-    }),
+  const response = await requestGitHubModelsChatCompletion({
+    token: apiKey,
+    apiUrl,
+    model,
+    messages: options.messages,
+    maxTokens: options.maxTokens ?? 1024,
+    temperature: options.temperature ?? 0.7,
+    stream: true,
   });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
-    throw new Error(`AI API error (${response.status}): ${errorText}`);
-  }
 
   if (!response.body) {
     throw new Error('No response body for streaming');
@@ -943,7 +934,7 @@ export async function callAiApiStream(options: AiChatOptions): Promise<ReadableS
 
           try {
             const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
+            const content = getStreamingDeltaText(parsed);
             if (content) {
               controller.enqueue(
                 new TextEncoder().encode(`data: ${JSON.stringify({ content })}\n\n`)

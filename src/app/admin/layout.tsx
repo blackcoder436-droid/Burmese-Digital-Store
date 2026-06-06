@@ -24,6 +24,7 @@ import {
   MessageSquare,
   Bot,
   BrainCircuit,
+  RefreshCw,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 import AdminHeader from '@/components/layout/AdminHeader';
@@ -34,6 +35,9 @@ const allNavItems = [
   { href: '/admin/orders', labelKey: 'admin.nav.orders', icon: ShoppingCart, group: 'main' },
   { href: '/admin/multi-server-keys', labelKey: 'Multi-Server Keys', icon: Globe, group: 'main', raw: true },
   { href: '/admin/servers', labelKey: 'admin.nav.servers', icon: Server, group: 'main' },
+  { href: '/admin/private-servers', labelKey: 'Private VPN', icon: Shield, group: 'main', raw: true },
+  { href: '/admin/rotate', labelKey: 'Rotate', icon: RefreshCw, group: 'main', raw: true },
+  { href: '/admin/social-posts', labelKey: 'Social Posts', icon: MessageSquare, group: 'main', raw: true },
   { href: '/admin/users', labelKey: 'admin.nav.users', icon: Users, group: 'main' },
   { href: '/admin/analytics', labelKey: 'admin.nav.analytics', icon: BarChart3, group: 'tools' },
   { href: '/admin/performance', labelKey: 'performance', icon: Activity, group: 'tools', raw: true },

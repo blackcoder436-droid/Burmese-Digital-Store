@@ -4,6 +4,7 @@
 declare module 'stripe' {
   interface StripeCheckoutSession {
     id: string;
+    url: string | null;
     payment_intent?: string;
     metadata: Record<string, string>;
   }

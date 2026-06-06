@@ -40,6 +40,7 @@ interface Product {
   price: number;
   category: string;
   stock: number;
+  fulfillmentMode?: 'preloaded' | 'manual';
   details?: { sold: boolean }[];
   image?: string;
   purchaseDisabled?: boolean;
@@ -168,8 +169,7 @@ export default function ProductDetailPage() {
 
   function handleAddToCart() {
     if (!product || product.purchaseDisabled) return;
-    const hasManualFulfillment = Array.isArray(product.details) && product.details.length === 0;
-    const effectiveStock = product.stock > 0 ? product.stock : hasManualFulfillment ? 10 : 0;
+    const effectiveStock = Math.max(0, product.stock || 0);
     if (effectiveStock <= 0) return;
 
     addItem({
@@ -265,9 +265,8 @@ export default function ProductDetailPage() {
 
   const subtotal = product.price * quantity;
   const total = Math.max(0, subtotal - couponDiscount);
-  const hasManualFulfillment = Array.isArray(product.details) && product.details.length === 0;
-  const canPurchase = !product.purchaseDisabled && (product.stock > 0 || hasManualFulfillment);
-  const maxQuantity = product.stock > 0 ? product.stock : hasManualFulfillment ? 10 : 0;
+  const canPurchase = !product.purchaseDisabled && product.stock > 0;
+  const maxQuantity = Math.max(0, product.stock || 0);
   const alreadyInCart = isInCart(product._id);
   const cartItem = getItem(product._id);
   const normalizedImage = normalizeImageSrc(product.image);
@@ -345,12 +344,10 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="flex flex-col items-end gap-2 shrink-0">
-              <span className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap ${product.stock > 0 ? 'bg-emerald-500/20 text-emerald-400' : hasManualFulfillment ? 'bg-blue-500/20 text-blue-300' : 'bg-red-500/20 text-red-400'}`}>
+              <span className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap ${product.stock > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
                 {product.stock > 0
                   ? `${product.stock} ${t('shop.productDetail.inStockSuffix')}`
-                  : hasManualFulfillment
-                    ? tr('Manual fulfillment available', 'Manual fulfillment ရနိုင်ပါတယ်')
-                    : t('shop.outOfStock')}
+                  : t('shop.outOfStock')}
               </span>
               {durationOnlyMatch && (
                 <span className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 whitespace-nowrap">

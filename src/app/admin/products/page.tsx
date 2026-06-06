@@ -14,6 +14,7 @@ import {
   ShieldOff,
   ShieldCheck,
   CreditCard,
+  Hash,
 } from 'lucide-react';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
@@ -32,7 +33,6 @@ interface Product {
   active: boolean;
   purchaseDisabled: boolean;
   allowedPaymentGateways: string[];
-  details: any[];
 }
 
 interface PaymentGateway {
@@ -48,11 +48,11 @@ const defaultProduct = {
   category: 'vpn',
   description: '',
   price: 0,
+  stock: 0,
   image: '',
   featured: false,
   purchaseDisabled: false,
   allowedPaymentGateways: [] as string[],
-  details: [] as { serialKey: string; loginEmail: string; loginPassword: string; additionalInfo: string }[],
 };
 
 export default function AdminProductsPage() {
@@ -63,7 +63,6 @@ export default function AdminProductsPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState(defaultProduct);
   const [saving, setSaving] = useState(false);
-  const [bulkKeys, setBulkKeys] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [importingCsv, setImportingCsv] = useState(false);
   const [bulkToggling, setBulkToggling] = useState(false);
@@ -71,6 +70,7 @@ export default function AdminProductsPage() {
   const csvInputRef = useRef<HTMLInputElement | null>(null);
   const normalizedFormImage = normalizeImageSrc(form.image);
   const hasFormImage = hasCustomProductImage(form.image);
+
   useEffect(() => {
     fetchProducts();
     fetchGateways();
@@ -104,21 +104,7 @@ export default function AdminProductsPage() {
 
     setSaving(true);
     try {
-      // Parse bulk keys into details array
-      let details = form.details;
-      if (bulkKeys.trim()) {
-        const lines = bulkKeys.trim().split('\n');
-        details = lines.map((line) => {
-          const parts = line.split('|').map((p) => p.trim());
-          return {
-            serialKey: parts[0] || '',
-            loginEmail: parts[1] || '',
-            loginPassword: parts[2] || '',
-            additionalInfo: parts[3] || '',
-            sold: false,
-          };
-        });
-      }
+      const stock = Math.max(0, Math.floor(Number(form.stock) || 0));
 
       const url = editing
         ? `/api/admin/products/${editing}`
@@ -128,7 +114,13 @@ export default function AdminProductsPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, details, allowedPaymentGateways: form.allowedPaymentGateways }),
+        body: JSON.stringify({
+          ...form,
+          details: [],
+          stock,
+          fulfillmentMode: 'manual',
+          allowedPaymentGateways: form.allowedPaymentGateways,
+        }),
       });
 
       const data = await res.json();
@@ -137,7 +129,6 @@ export default function AdminProductsPage() {
         setShowForm(false);
         setEditing(null);
         setForm(defaultProduct);
-        setBulkKeys('');
         fetchProducts();
       } else {
         toast.error(data.error || t('admin.productsPage.saveFailed'));
@@ -239,11 +230,11 @@ export default function AdminProductsPage() {
       category: product.category,
       description: product.description,
       price: product.price,
+      stock: product.stock || 0,
       image: normalizeImageSrc(product.image) || '',
       featured: product.featured,
       purchaseDisabled: product.purchaseDisabled || false,
       allowedPaymentGateways: product.allowedPaymentGateways || [],
-      details: product.details || [],
     });
     setEditing(product._id);
     setShowForm(true);
@@ -333,7 +324,6 @@ export default function AdminProductsPage() {
               setShowForm(true);
               setEditing(null);
               setForm(defaultProduct);
-              setBulkKeys('');
             }}
             className="btn-electric text-sm flex items-center space-x-2"
           >
@@ -459,7 +449,7 @@ export default function AdminProductsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-gray-300 block mb-2">
                     {t('admin.productsPage.price')}
@@ -474,34 +464,50 @@ export default function AdminProductsPage() {
                     className="input-field"
                   />
                 </div>
-                <div className="flex items-end">
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.featured}
-                      onChange={(e) =>
-                        setForm({ ...form, featured: e.target.checked })
-                      }
-                      className="w-5 h-5 rounded-lg border-purple-500/30 bg-[#12122a] text-purple-500 focus:ring-purple-500"
-                    />
-                    <span className="text-sm text-gray-300">
-                      {t('admin.productsPage.featuredProduct')}
-                    </span>
+                <div>
+                  <label className="text-sm text-gray-300 mb-2 flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-purple-400" />
+                    {t('admin.productsPage.stockQty')}
                   </label>
-                  <label className="flex items-center space-x-3 cursor-pointer mt-3">
-                    <input
-                      type="checkbox"
-                      checked={form.purchaseDisabled}
-                      onChange={(e) =>
-                        setForm({ ...form, purchaseDisabled: e.target.checked })
-                      }
-                      className="w-5 h-5 rounded-lg border-amber-500/30 bg-[#12122a] text-amber-500 focus:ring-amber-500"
-                    />
-                    <span className="text-sm text-gray-300">
-                      {t('admin.productsPage.purchaseDisabled')}
-                    </span>
-                  </label>
+                  <input
+                    type="number"
+                    value={form.stock}
+                    onChange={(e) =>
+                      setForm({ ...form, stock: Math.max(0, Number(e.target.value) || 0) })
+                    }
+                    min={0}
+                    className="input-field"
+                  />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.featured}
+                    onChange={(e) =>
+                      setForm({ ...form, featured: e.target.checked })
+                    }
+                    className="w-5 h-5 rounded-lg border-purple-500/30 bg-[#12122a] text-purple-500 focus:ring-purple-500"
+                  />
+                  <span className="text-sm text-gray-300">
+                    {t('admin.productsPage.featuredProduct')}
+                  </span>
+                </label>
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.purchaseDisabled}
+                    onChange={(e) =>
+                      setForm({ ...form, purchaseDisabled: e.target.checked })
+                    }
+                    className="w-5 h-5 rounded-lg border-amber-500/30 bg-[#12122a] text-amber-500 focus:ring-amber-500"
+                  />
+                  <span className="text-sm text-gray-300">
+                    {t('admin.productsPage.purchaseDisabled')}
+                  </span>
+                </label>
               </div>
 
               {/* Crypto Payment Gateway Selection (Myanmar pay always accepted) */}
@@ -548,22 +554,6 @@ export default function AdminProductsPage() {
                   </div>
                 </div>
               )}
-
-              <div>
-                <label className="text-sm text-gray-300 block mb-2">
-                  {t('admin.productsPage.stockKeysLabel')}
-                </label>
-                <textarea
-                  rows={5}
-                  value={bulkKeys}
-                  onChange={(e) => setBulkKeys(e.target.value)}
-                  placeholder={`ABC-123-DEF|user@email.com|password123|Valid until 2027\nXYZ-456-GHI|||Serial key only`}
-                  className="input-field resize-none font-mono text-xs"
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  {t('admin.productsPage.stockKeysHint')}
-                </p>
-              </div>
 
               <div className="flex justify-end gap-3 pt-5 border-t border-dark-700">
                 <button

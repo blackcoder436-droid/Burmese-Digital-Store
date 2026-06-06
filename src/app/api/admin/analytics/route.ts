@@ -370,6 +370,7 @@ async function getRecentOrders() {
 
 async function getAbandonedCartStats(start: Date, end: Date) {
   const abandonmentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const abandonedEnd = new Date(Math.min(end.getTime(), abandonmentCutoff.getTime()));
 
   const [
     startedCarts,
@@ -390,14 +391,14 @@ async function getAbandonedCartStats(start: Date, end: Date) {
       itemCount: { $gt: 0 },
     }),
     CartSession.countDocuments({
-      updatedAt: { $gte: start, $lte: end, $lte: abandonmentCutoff },
+      updatedAt: { $gte: start, $lte: abandonedEnd },
       itemCount: { $gt: 0 },
       checkoutCompletedAt: null,
     }),
     CartSession.aggregate([
       {
         $match: {
-          updatedAt: { $gte: start, $lte: end, $lte: abandonmentCutoff },
+          updatedAt: { $gte: start, $lte: abandonedEnd },
           itemCount: { $gt: 0 },
           checkoutCompletedAt: null,
         },

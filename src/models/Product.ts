@@ -14,6 +14,8 @@ export interface IProductDetailDocument {
   soldAt?: Date;
 }
 
+export type ProductFulfillmentMode = 'preloaded' | 'manual';
+
 export interface IProductDocument extends Document {
   name: string;
   slug: string;
@@ -21,6 +23,7 @@ export interface IProductDocument extends Document {
   description: string;
   price: number;
   stock: number;
+  fulfillmentMode: ProductFulfillmentMode;
   details: IProductDetailDocument[];
   image?: string;
   featured: boolean;
@@ -108,6 +111,11 @@ const ProductSchema: Schema = new Schema(
       type: Number,
       default: 0,
       min: [0, 'Stock cannot be negative'],
+    },
+    fulfillmentMode: {
+      type: String,
+      enum: ['preloaded', 'manual'],
+      default: 'manual',
     },
     details: [ProductDetailSchema],
     image: {
@@ -217,7 +225,19 @@ ProductSchema.pre('save', async function (next) {
 
 // Virtual: available stock count
 ProductSchema.virtual('availableStock').get(function (this: IProductDocument) {
-  return this.details.filter((d) => !d.sold).length;
+  const details = Array.isArray(this.details) ? this.details : [];
+  const mode =
+    this.fulfillmentMode === 'manual'
+      ? 'manual'
+      : this.fulfillmentMode === 'preloaded'
+        ? details.length === 0 && this.stock > 0
+          ? 'manual'
+          : 'preloaded'
+        : details.length > 0
+          ? 'preloaded'
+          : 'manual';
+  if (mode === 'manual') return this.stock;
+  return details.filter((d) => !d.sold).length;
 });
 
 // Index for faster queries

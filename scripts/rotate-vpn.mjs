@@ -205,6 +205,7 @@ async function main() {
 }
 
 main().catch(console.error);
+/*
           if (code !== 0) return reject(new Error(`Command failed with code ${code}. Output: ${output}`));
           resolve(output);
         }).on('data', data => output += data).stderr.on('data', data => output += data);
@@ -392,3 +393,4 @@ async function rotateDatabase() {
 }
 
 rotateDatabase().catch(console.error);
+*/

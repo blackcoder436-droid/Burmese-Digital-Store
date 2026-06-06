@@ -6,6 +6,19 @@ import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
+interface MigrationOldKey {
+  token: string;
+  username: string;
+  devices: number;
+  expiryTime: number;
+  dataLimitGB: number;
+  protocol: string;
+  userId: string;
+  oldServerId?: string;
+  oldClientEmail?: string | null;
+  oldClientId?: string | null;
+}
+
 async function findStoredMigrationRecord(db: any, input: string) {
   const value = input.trim();
   if (!value) return null;
@@ -96,7 +109,7 @@ export async function POST(req: NextRequest) {
     }
 
 
-    let oldKey: Record<string, unknown> | null = null;
+    let oldKey: MigrationOldKey | null = null;
     let shouldRollbackClaim = false;
 
     if (!configLinkMatch) {
@@ -140,7 +153,7 @@ export async function POST(req: NextRequest) {
             userId,
             oldServerId: panelClient.serverId,
             oldClientEmail: panelClient.email || panelClient.clientId,
-            oldClientId: (panelClient.clientId || panelClient.id || panelClient.password || null),
+            oldClientId: panelClient.clientId || panelClient.clientPassword || null,
           };
     } else {
       const panelClient = await findClientByConfigLinkAcrossServers(oldKeyInput);
@@ -168,8 +181,12 @@ export async function POST(req: NextRequest) {
         userId,
         oldServerId: panelClient.serverId,
         oldClientEmail: panelClient.email || panelClient.clientId,
-        oldClientId: (panelClient.clientId || panelClient.id || panelClient.password || null),
+        oldClientId: panelClient.clientId || panelClient.clientPassword || null,
       };
+    }
+
+    if (!oldKey) {
+      return NextResponse.json({ error: 'Key not found.' }, { status: 404 });
     }
 
     // Check expiry
@@ -323,8 +340,8 @@ export async function POST(req: NextRequest) {
           if (!clients) continue;
 
           for (const c of clients) {
-            const cEmail = c.email || c.clientEmail || c.client || c.clientId || null;
-            const cId = (c.clientId || c.id || c.password || '').toString();
+            const cEmail = c.email || c.clientId || null;
+            const cId = (c.clientId || c.clientPassword || '').toString();
             const cSub = (c.subId || '').toString();
 
             // Match by any of: oldClientEmail, oldClientId, token/subId

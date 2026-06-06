@@ -156,8 +156,7 @@ export default function VpsPage() {
         return;
       }
 
-      const hasManualFulfillment = Array.isArray(product.details) && product.details.length === 0;
-      const effectiveStock = product.stock > 0 ? product.stock : hasManualFulfillment ? 10 : 0;
+      const effectiveStock = Math.max(0, Number(product.stock) || 0);
       
       if (effectiveStock <= 0) {
         toast.error(tr('This plan is currently out of stock. Please try another plan.', 'ဤ plan သည် ဈိုက်အားမရှိသေးပါ။ အခြား plan တစ်ခုကို ကြိုးစားပါ။'));

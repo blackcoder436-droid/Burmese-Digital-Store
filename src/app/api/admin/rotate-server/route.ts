@@ -16,6 +16,7 @@ export const maxDuration = 900;
 
 const PROCESS_STARTED_AT = new Date();
 const STALE_RUNNING_JOB_MS = 45 * 60 * 1000;
+const ROTATE_JOB_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
 
 type JobStatus = 'running' | 'success' | 'error';
 
@@ -67,7 +68,7 @@ async function startOneClickJob(serverId: string) {
     message: 'One-click rotation is starting...',
     startedAt: new Date(now),
     updatedAt: new Date(now),
-    expiresAt: new Date(now + 24 * 60 * 60 * 1000),
+    expiresAt: new Date(now + ROTATE_JOB_RETENTION_MS),
   });
 
   const progress = (message: string) => updateJob(job.jobId, { message });

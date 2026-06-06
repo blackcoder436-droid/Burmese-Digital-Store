@@ -6,6 +6,7 @@ import dbConnect from '@/lib/mongodb';
 import { createLogger } from '@/lib/logger';
 import { findClientByConfigLinkAcrossServers, findClientBySubIdAcrossServers, listServerClients, type XuiClientInfo } from '@/lib/xui';
 import { getEnabledServers } from '@/lib/vpn-servers';
+import { isMultiServerClientEmailMatch } from '@/lib/multi-server-key-match';
 
 const log = createLogger({ route: '/api/admin/multi-server-keys/details' });
 
@@ -40,11 +41,6 @@ function normalizeUrlToken(value?: string): string {
   return (match ? match[1] : raw).trim();
 }
 
-function isSameClientEmail(email: string, targetBaseName: string) {
-  const normalized = email.trim();
-  return normalized === targetBaseName || normalized.startsWith(`${targetBaseName} `) || normalized.startsWith(`${targetBaseName} Key`);
-}
-
 export async function GET(request: NextRequest) {
   const limited = await apiLimiter(request);
   if (limited) return limited;
@@ -72,10 +68,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Record not found' }, { status: 404 });
     }
 
-    const targetUsername = String(record.username || '').trim();
-    const targetDeviceLabel = `${record.devices || 1}D`;
-    const targetBaseName = targetUsername ? `${targetUsername} - ${targetDeviceLabel}` : '';
-
     const enabledServers = await getEnabledServers();
     const resolved = new Map<string, ResolvedClient>();
     const unresolvedLinks: string[] = [];
@@ -96,7 +88,7 @@ export async function GET(request: NextRequest) {
 
       const matched = clients.find((client: any) => {
         const email = String(client.email || '').trim();
-        return isSameClientEmail(email, targetBaseName);
+        return isMultiServerClientEmailMatch(email, record, server, Array.from(resolved.values()).map((item) => item.client));
       });
 
       if (matched) {
@@ -147,10 +139,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (targetBaseName) {
-      for (const server of enabledServers) {
-        await tryResolveByServerName(server.id);
-      }
+    for (const server of enabledServers) {
+      await tryResolveByServerName(server.id);
     }
 
     return NextResponse.json({

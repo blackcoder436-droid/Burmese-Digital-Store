@@ -6,6 +6,7 @@ import { apiLimiter } from '@/lib/rateLimit';
 import { sanitizeString, sanitizeUrlString } from '@/lib/security';
 import { logActivity } from '@/models/ActivityLog';
 import { normalizeImageSrc } from '@/lib/image';
+import { getStockForSave, normalizeStockQty, type ProductFulfillmentMode } from '@/lib/product-stock';
 
 const VALID_CATEGORIES = new Set(['vpn', 'streaming', 'gaming', 'software', 'gift-card', 'other']);
 
@@ -17,6 +18,8 @@ interface ParsedRow {
   image: string;
   featured: boolean;
   active: boolean;
+  stock: number;
+  fulfillmentMode: ProductFulfillmentMode;
   details: Array<{
     serialKey: string;
     loginEmail: string;
@@ -94,6 +97,21 @@ export async function POST(request: NextRequest) {
       const active = parseBoolean(getColumn(raw, headerMap, 'active'), true);
 
       const details = parseDetails(getColumn(raw, headerMap, 'keys'));
+      const rawMode = getColumn(raw, headerMap, 'fulfillmentMode').toLowerCase();
+      const rawStock = getColumn(raw, headerMap, 'stock');
+      const fulfillmentMode: ProductFulfillmentMode =
+        rawMode === 'manual'
+          ? 'manual'
+          : rawMode === 'preloaded'
+            ? 'preloaded'
+            : details.length > 0
+              ? 'preloaded'
+              : 'manual';
+      const stock = getStockForSave(
+        fulfillmentMode,
+        details,
+        rawStock ? normalizeStockQty(rawStock) : details.length
+      );
 
       rows.push({
         name,
@@ -103,6 +121,8 @@ export async function POST(request: NextRequest) {
         image,
         featured,
         active,
+        stock,
+        fulfillmentMode,
         details,
       });
     }
@@ -124,8 +144,9 @@ export async function POST(request: NextRequest) {
         image: row.image,
         featured: row.featured,
         active: row.active,
-        details: row.details,
-        stock: row.details.length,
+        fulfillmentMode: row.fulfillmentMode,
+        details: row.fulfillmentMode === 'preloaded' ? row.details : [],
+        stock: row.stock,
       });
       createdProducts.push(created);
     }

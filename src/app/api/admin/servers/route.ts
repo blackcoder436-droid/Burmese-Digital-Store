@@ -8,8 +8,32 @@ import { invalidateServerCache } from '@/lib/vpn-servers';
 import { createLogger } from '@/lib/logger';
 import { sanitizeString, sanitizeUrlString, validateExternalHttpUrl, validatePanelPath } from '@/lib/security';
 import { trackVpnServerChange } from '@/lib/monitoring';
+import { lookup } from 'dns/promises';
+import { isIP } from 'net';
 
 const log = createLogger({ route: '/api/admin/servers' });
+
+async function resolveServerIp(server: { url?: string; domain?: string }): Promise<string | null> {
+  const rawUrl = typeof server.url === 'string' ? server.url : '';
+  const fallbackDomain = typeof server.domain === 'string' ? server.domain : '';
+
+  let host = '';
+  try {
+    host = rawUrl ? new URL(rawUrl).hostname : fallbackDomain;
+  } catch {
+    host = fallbackDomain;
+  }
+
+  if (!host) return null;
+  if (isIP(host)) return host;
+
+  try {
+    const result = await lookup(host);
+    return result.address || null;
+  } catch {
+    return null;
+  }
+}
 
 // ==========================================
 // GET /api/admin/servers — List all servers
@@ -26,14 +50,20 @@ export async function GET(request: NextRequest) {
   try {
     await connectDB();
     const servers = await VpnServer.find().sort({ createdAt: 1 }).lean();
+    const serversWithResolvedIp = await Promise.all(
+      servers.map(async (server) => ({
+        ...server,
+        resolvedIp: await resolveServerIp(server as { url?: string; domain?: string }),
+      }))
+    );
 
     return NextResponse.json({
       success: true,
       data: {
-        servers,
-        total: servers.length,
-        enabled: servers.filter((s) => s.enabled).length,
-        disabled: servers.filter((s) => !s.enabled).length,
+        servers: serversWithResolvedIp,
+        total: serversWithResolvedIp.length,
+        enabled: serversWithResolvedIp.filter((s) => s.enabled).length,
+        disabled: serversWithResolvedIp.filter((s) => !s.enabled).length,
       },
     });
   } catch (err) {

@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
         image: '/images/vps-default.png',
         stock: 999,
         purchaseDisabled: false,
-        details: [], // Empty = manual fulfillment
+        fulfillmentMode: 'manual',
+        details: [], // Manual fulfillment after approval
         active: true,
         featured: false,
       },
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
         image: '/images/vps-default.png',
         stock: 999,
         purchaseDisabled: false,
+        fulfillmentMode: 'manual',
         details: [],
         active: true,
         featured: false,
@@ -61,6 +63,7 @@ export async function POST(request: NextRequest) {
         image: '/images/vps-default.png',
         stock: 999,
         purchaseDisabled: false,
+        fulfillmentMode: 'manual',
         details: [],
         active: true,
         featured: true,
@@ -74,6 +77,7 @@ export async function POST(request: NextRequest) {
         image: '/images/vps-default.png',
         stock: 999,
         purchaseDisabled: false,
+        fulfillmentMode: 'manual',
         details: [],
         active: true,
         featured: false,

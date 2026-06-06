@@ -6,6 +6,26 @@ import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
 import { sanitizeString, sanitizeUrlString } from '@/lib/security';
 import { normalizeImageSrc } from '@/lib/image';
+import { getStockForSave, normalizeStockQty, type ProductFulfillmentMode } from '@/lib/product-stock';
+
+function normalizeFulfillmentMode(value: unknown): ProductFulfillmentMode {
+  return value === 'preloaded' ? 'preloaded' : 'manual';
+}
+
+function normalizeProductDetails(details: unknown) {
+  if (!Array.isArray(details)) return [];
+
+  return details.map((detail) => {
+    const item = detail && typeof detail === 'object' ? detail as Record<string, unknown> : {};
+    return {
+      serialKey: sanitizeString(String(item.serialKey || '')).slice(0, 500),
+      loginEmail: sanitizeString(String(item.loginEmail || '')).slice(0, 200),
+      loginPassword: sanitizeString(String(item.loginPassword || '')).slice(0, 200),
+      additionalInfo: sanitizeString(String(item.additionalInfo || '')).slice(0, 1000),
+      sold: item.sold === true,
+    };
+  });
+}
 
 // PATCH /api/admin/products - Bulk update purchaseDisabled for all products
 export async function PATCH(request: NextRequest) {
@@ -34,8 +54,9 @@ export async function PATCH(request: NextRequest) {
     try {
       await logActivity({
         admin: admin.userId,
-        action: purchaseDisabled ? 'bulk_purchase_disabled' : 'bulk_purchase_enabled',
+        action: 'product_updated',
         target: `All active products (${result.modifiedCount} updated)`,
+        details: purchaseDisabled ? 'Bulk purchase disabled' : 'Bulk purchase enabled',
       });
     } catch { /* ignore */ }
 
@@ -108,7 +129,19 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { name, category, description, price, image, featured, details, allowedPaymentGateways } = body;
+    const {
+      name,
+      category,
+      description,
+      price,
+      image,
+      featured,
+      purchaseDisabled,
+      details,
+      stock,
+      fulfillmentMode,
+      allowedPaymentGateways,
+    } = body;
 
     if (!name || !category || !description || price === undefined) {
       return NextResponse.json(
@@ -122,6 +155,9 @@ export async function POST(request: NextRequest) {
     const safeCategory = sanitizeString(category);
     const safeDescription = sanitizeString(description);
     const safePrice = Math.max(0, Number(price) || 0);
+    const safeFulfillmentMode = normalizeFulfillmentMode(fulfillmentMode);
+    const safeDetails = normalizeProductDetails(details);
+    const safeStock = getStockForSave(safeFulfillmentMode, safeDetails, normalizeStockQty(stock));
 
     const validCategories = ['vpn', 'streaming', 'gaming', 'software', 'gift-card', 'other'];
     if (!validCategories.includes(safeCategory)) {
@@ -138,8 +174,10 @@ export async function POST(request: NextRequest) {
       price: safePrice,
       image: normalizeImageSrc(sanitizeUrlString(String(image || '')).slice(0, 500)) || '/images/default-product.png',
       featured: featured || false,
-      details: Array.isArray(details) ? details : [],
-      stock: Array.isArray(details) ? details.length : 0,
+      purchaseDisabled: purchaseDisabled === true,
+      fulfillmentMode: safeFulfillmentMode,
+      details: safeFulfillmentMode === 'preloaded' ? safeDetails : [],
+      stock: safeStock,
       allowedPaymentGateways: Array.isArray(allowedPaymentGateways) ? allowedPaymentGateways : [],
     });
 
@@ -148,7 +186,7 @@ export async function POST(request: NextRequest) {
         admin: admin.userId,
         action: 'product_created',
         target: `${name} (${category})`,
-        details: `Price: ${price} MMK, Keys: ${details?.length || 0}`,
+        details: `Price: ${price} MMK, Stock: ${safeStock}, Mode: ${safeFulfillmentMode}`,
         metadata: { productId: product._id },
       });
     } catch { /* ignore */ }

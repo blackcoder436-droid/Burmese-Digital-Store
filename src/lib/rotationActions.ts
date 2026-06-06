@@ -104,6 +104,115 @@ function cleanSecret(value?: string): string {
     .trim();
 }
 
+function splitConfigList(value?: string): string[] {
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseDropletImage(value?: string): string | number {
+  const raw = String(value || '').trim();
+  if (/^\d+$/.test(raw)) return Number(raw);
+  return raw || 'ubuntu-22-04-x64';
+}
+
+function parseDropletSshKeys(value?: string): Array<string | number> {
+  return splitConfigList(value).map((item) => (/^\d+$/.test(item) ? Number(item) : item));
+}
+
+function parseJsonObject(value?: string, label = 'JSON'): JsonObject | null {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(`${label} must be a JSON object.`);
+    }
+    return parsed as JsonObject;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${label} is invalid: ${message}`);
+  }
+}
+
+function getConfiguredDropletRegion(serverName: string, config: { dropletRegion?: string }): string {
+  const configuredRegion = String(config.dropletRegion || '').trim();
+  if (configuredRegion) return configuredRegion;
+  return serverName === 'sg4' ? 'nyc1' : 'sgp1';
+}
+
+function buildDropletUserData(config: { dropletUserData?: string }): string {
+  const baseUserData = `#cloud-config
+chpasswd:
+  list: |
+    root:Mka@2016Omk
+  expire: False
+ssh_pwauth: True
+`;
+  const customUserData = String(config.dropletUserData || '').trim();
+
+  return customUserData
+    ? `${baseUserData}\n# Admin custom cloud-init\n${customUserData}\n`
+    : baseUserData;
+}
+
+function buildDropletCreatePayload(
+  serverName: string,
+  config: {
+    dropletRegion?: string;
+    dropletSize?: string;
+    dropletImage?: string;
+    dropletBackups?: boolean;
+    dropletIpv6?: boolean;
+    dropletMonitoring?: boolean;
+    dropletPublicNetworking?: boolean;
+    dropletAgent?: boolean;
+    dropletSshKeys?: string;
+    dropletTags?: string;
+    dropletVpcUuid?: string;
+    dropletVolumes?: string;
+    dropletUserData?: string;
+    dropletBackupPolicy?: string;
+  }
+) {
+  const region = getConfiguredDropletRegion(serverName, config);
+  const payload: JsonObject = {
+    name: serverName,
+    region,
+    size: config.dropletSize || 's-1vcpu-1gb',
+    image: parseDropletImage(config.dropletImage),
+    backups: !!config.dropletBackups,
+    ipv6: !!config.dropletIpv6,
+    monitoring: config.dropletMonitoring !== false,
+    with_droplet_agent: config.dropletAgent !== false,
+    user_data: buildDropletUserData(config),
+  };
+
+  if (config.dropletPublicNetworking === false) {
+    payload.public_networking = false;
+    payload.ipv6 = false;
+  }
+
+  const sshKeys = parseDropletSshKeys(config.dropletSshKeys);
+  if (sshKeys.length > 0) payload.ssh_keys = sshKeys;
+
+  const tags = splitConfigList(config.dropletTags);
+  if (tags.length > 0) payload.tags = tags;
+
+  const volumes = splitConfigList(config.dropletVolumes);
+  if (volumes.length > 0) payload.volumes = volumes;
+
+  const vpcUuid = String(config.dropletVpcUuid || '').trim();
+  if (vpcUuid) payload.vpc_uuid = vpcUuid;
+
+  const backupPolicy = parseJsonObject(config.dropletBackupPolicy, 'Droplet backup policy');
+  if (backupPolicy) payload.backup_policy = backupPolicy;
+
+  return payload;
+}
+
 function normalizeServerName(value?: string): string {
   return (value || '').trim().toLowerCase();
 }
@@ -260,31 +369,51 @@ async function fetchCloudflareJson(
   return data;
 }
 
-async function resolveCloudflareZone(config: { cfToken?: string; cfEmail?: string }) {
+function getCloudflareZoneCandidates(domain?: string): string[] {
+  const labels = String(domain || 'burmesedigital.store')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .split('/')[0]
+    .split('.')
+    .filter(Boolean);
+
+  const candidates: string[] = [];
+  for (let index = 0; index <= labels.length - 2; index += 1) {
+    candidates.push(labels.slice(index).join('.'));
+  }
+
+  return candidates.length > 0 ? candidates : ['burmesedigital.store'];
+}
+
+async function resolveCloudflareZone(config: { cfToken?: string; cfEmail?: string }, domain?: string) {
   const candidates = getCloudflareAuthCandidates(config);
   const errors: string[] = [];
-  const zoneName = 'burmesedigital.store';
+  const zoneCandidates = getCloudflareZoneCandidates(domain);
 
   for (const candidate of candidates) {
-    try {
-      const zonesData = await fetchCloudflareJson(
-        `/zones?name=${encodeURIComponent(zoneName)}`,
-        { method: 'GET' },
-        candidate.headers,
-        `Cloudflare Zones (${candidate.label})`
-      );
+    for (const zoneName of zoneCandidates) {
+      try {
+        const zonesData = await fetchCloudflareJson(
+          `/zones?name=${encodeURIComponent(zoneName)}`,
+          { method: 'GET' },
+          candidate.headers,
+          `Cloudflare Zones (${candidate.label})`
+        );
 
-      if (!zonesData.result?.[0]?.id) {
-        throw new Error(`Cloudflare Zones (${candidate.label}): Zone ${zoneName} was not found or token lacks Zone Read permission`);
+        if (!zonesData.result?.[0]?.id) {
+          throw new Error(`Cloudflare Zones (${candidate.label}): Zone ${zoneName} was not found or token lacks Zone Read permission`);
+        }
+
+        return {
+          zoneId: zonesData.result[0].id as string,
+          zoneName,
+          headers: candidate.headers,
+          authLabel: candidate.label,
+        };
+      } catch (err) {
+        errors.push(err instanceof Error ? err.message : String(err));
       }
-
-      return {
-        zoneId: zonesData.result[0].id as string,
-        headers: candidate.headers,
-        authLabel: candidate.label,
-      };
-    } catch (err) {
-      errors.push(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -361,6 +490,7 @@ function sftpDownload(host: string, remotePath: string, localPath: string): Prom
 export async function actionBackupServer(serverName: string) {
   const config = await getRotateConfig();
   const doToken = getDoTokenForServer(serverName, config);
+  const panelTarget = await getPanelTarget(serverName);
   
   // 1. Get current IP from DO
   const res = await fetch(`${DO_API}/droplets`, {
@@ -452,23 +582,21 @@ fi
 
   await sendFileTg(tgToken, tgChatId, localDbPath, `🔄 Backup DB for [ ${serverName} ] before rotation\nTimestamp: ${new Date().toISOString()}`);
 
-  return { success: true, message: `Database downloaded and sent to Telegram! Old IP was ${oldIp}` };
+  return {
+    success: true,
+    message: `Database downloaded and sent to Telegram! Old IP was ${oldIp}`,
+    oldIp,
+    domain: panelTarget.domain,
+    panelUrl: `https://${panelTarget.domain}:${panelTarget.port}${getPanelUiPath(panelTarget.panelPath)}`,
+  };
 }
 
 // Step 3: Recreate VPS
 export async function actionRecreateServer(serverName: string) {
   const config = await getRotateConfig();
   const doToken = getDoTokenForServer(serverName, config);
-  const region = serverName === 'sg4' ? 'nyc1' : 'sgp1';
-  
-  // Custom Cloud-Init to force specific root password as requested
-  const userData = `#cloud-config
-chpasswd:
-  list: |
-    root:Mka@2016Omk
-  expire: False
-ssh_pwauth: True
-`;
+  const dropletPayload = buildDropletCreatePayload(serverName, config);
+  const region = dropletPayload.region;
 
   // 1. Fetch current droplets to find ID
   const listRes = await fetch(`${DO_API}/droplets`, {
@@ -476,6 +604,7 @@ ssh_pwauth: True
   });
   const listData = await listRes.json();
   const oldDroplet = listData.droplets?.find((d: any) => d.name === serverName);
+  const oldIp = oldDroplet?.networks?.v4?.find((n: any) => n.type === 'public')?.ip_address || null;
 
   // 2. Delete old droplet if exists
   if (oldDroplet) {
@@ -491,13 +620,7 @@ ssh_pwauth: True
   const createRes = await fetch(`${DO_API}/droplets`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${doToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: serverName,
-      region,
-      size: config.dropletSize,
-      image: config.dropletImage,
-      user_data: userData
-    })
+    body: JSON.stringify(dropletPayload)
   });
 
   const createData = await createRes.json();
@@ -505,14 +628,23 @@ ssh_pwauth: True
     throw new Error(createData.message || "Failed to create new droplet");
   }
 
-  return { success: true, message: `Droplet ${serverName} recreated successfully in ${region}` };
+  return {
+    success: true,
+    message: `Droplet ${serverName} recreated successfully in ${region}`,
+    oldIp,
+    region,
+    size: dropletPayload.size,
+    image: String(dropletPayload.image),
+    dropletId: createData.droplet?.id || null,
+  };
 }
 
 // Step 4: Update DNS
 export async function actionUpdateDNS(serverName: string) {
   const config = await getRotateConfig();
   const doToken = getDoTokenForServer(serverName, config);
-  const DOMAIN = `${serverName}.burmesedigital.store`;
+  const panelTarget = await getPanelTarget(serverName);
+  const DOMAIN = panelTarget.domain;
 
   // Get New IP
   let newIp: string;
@@ -522,7 +654,7 @@ export async function actionUpdateDNS(serverName: string) {
     throw new Error(`DigitalOcean Fetch Error: ${err.message}`);
   }
 
-  const { zoneId, headers: cfHeaders, authLabel } = await resolveCloudflareZone(config);
+  const { zoneId, headers: cfHeaders, authLabel } = await resolveCloudflareZone(config, DOMAIN);
 
   // Get DNS Record ID
   let record: any;
@@ -562,7 +694,13 @@ export async function actionUpdateDNS(serverName: string) {
     throw new Error(`Cloudflare Update DNS Error: ${err.message}`);
   }
 
-  return { success: true, message: `DNS updated successfully via ${authLabel}: ${DOMAIN} -> ${newIp}` };
+  return {
+    success: true,
+    message: `DNS updated successfully via ${authLabel}: ${DOMAIN} -> ${newIp}`,
+    newIp,
+    domain: DOMAIN,
+    panelUrl: `https://${DOMAIN}:${panelTarget.port}${getPanelUiPath(panelTarget.panelPath)}`,
+  };
 }
 
 // SSH execution helper 
@@ -600,7 +738,7 @@ function execSsh(host: string, command: string, timeoutMs = SSH_COMMAND_TIMEOUT_
           finish();
         }).on('data', appendOutput).stderr.on('data', appendOutput);
       });
-    }).on('error', (err) => finish(err)).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: 20000 });
+    }).on('error', (err: Error) => finish(err)).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: 20000 });
   });
 }
 
@@ -1128,7 +1266,15 @@ fi
       ? (protocol === 'https' ? '' : ' SSL certificate files were applied, but HTTPS did not respond after restart, so the panel URL is HTTP.')
       : ' SSL certificate files were not found in the backup, so the panel URL is HTTP.';
 
-    return { success: true, message: `3X-UI successfully restored ${inboundCount} inbound(s)! Panel: ${protocol}://${panelTarget.domain}:${panelTarget.port}${urlPath}${sslNote}` };
+    return {
+      success: true,
+      message: `3X-UI successfully restored ${inboundCount} inbound(s)! Panel: ${protocol}://${panelTarget.domain}:${panelTarget.port}${urlPath}${sslNote}`,
+      newIp,
+      domain: panelTarget.domain,
+      panelUrl: `${protocol}://${panelTarget.domain}:${panelTarget.port}${urlPath}`,
+      panelPort: panelTarget.port,
+      inboundCount,
+    };
   } else {
     throw new Error(`Backup file not found to restore! Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)} or ${path.join(backupsDir, `${serverName}_backup.db`)}`);
   }

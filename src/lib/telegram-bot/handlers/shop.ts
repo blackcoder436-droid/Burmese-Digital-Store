@@ -62,15 +62,7 @@ export async function handleShopCategory(chatId: number, category: string, messa
   // Handle VPN separately inside the main router or here if doing redirect
   if (category === 'vpn') {
     const { handleBuyKey } = await import('./purchase');
-    const ctx = {
-      update: {},
-      chatId: chatId,
-      session: {},
-      fromUser: { id: chatId, is_bot: false, first_name: 'User' },
-      answerCbQuery: async () => {},
-      messageId: messageId
-    } as any;
-    return handleBuyKey(ctx);
+    return handleBuyKey(chatId, chatId, messageId);
   }
 
   try {

@@ -1,5 +1,5 @@
 // src/lib/telegram-bot/handlers/vps.ts
-import { connectDB } from '@/lib/mongodb';
+import connectDB from '@/lib/mongodb';
 import Order from '@/models/Order';
 import { findOrCreateTelegramUser } from './commands';
 import { createLogger } from '@/lib/logger';
@@ -44,14 +44,13 @@ export async function handleVPSSelect(ctx: BotContext, vpsId: string) {
   const { vpsPlans } = await import('@/lib/vps-plans');
   const plan = vpsPlans.find(p => p.id === vpsId);
   if (!plan) {
-    if (ctx.answerCallbackQuery) await ctx.answerCallbackQuery('VPS Plan not found');
+    if (ctx.callbackQueryId) {
+      const { answerCallback } = await import('../api');
+      await answerCallback(ctx.callbackQueryId, 'VPS Plan not found');
+    }
     return;
   }
   
-  if (ctx.session) {
-    ctx.session.cart = { type: 'vps', items: [{ id: vpsId, name: plan.name, price: plan.price, quantity: 1}], total: plan.price };
-  }
-
   const specText = plan.specs.map(s => `▪️ <b>${s.label}:</b> ${s.value}`).join('\n');
 
   const text = `💻 <b>VPS: ${plan.name}</b>\n\n` +
@@ -77,12 +76,11 @@ export async function handleVPSBuy(ctx: BotContext, vpsId: string) {
   if (!plan) return;
 
   try {
-    const { default: mongoose } = await import('mongoose');
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(process.env.MONGODB_URI!);
-    }
+    await connectDB();
 
-    const { id: telegramId, first_name: firstName, username } = ctx.from;
+    const telegramId = ctx.userId;
+    const firstName = ctx.firstName;
+    const username = ctx.username;
     
     // Find or create the user
     const user = await findOrCreateTelegramUser(telegramId, firstName, undefined, username);

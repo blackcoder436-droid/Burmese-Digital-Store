@@ -27,6 +27,7 @@ import { releaseFromQuarantine, deleteFromQuarantine } from '@/lib/quarantine';
 import { logActivity, type ActivityAction } from '@/models/ActivityLog';
 import { createLogger } from '@/lib/logger';
 import { editTelegramCaption, editTelegramMessage } from '@/lib/telegram';
+import { getAvailableProductStock, getProductFulfillmentMode } from '@/lib/product-stock';
 import { Types } from 'mongoose';
 
 const log = createLogger({ module: 'order-actions' });
@@ -292,25 +293,23 @@ export async function approveOrder(
       }
 
       const manualDeliveryMessage = ctx.deliveryMessage?.trim();
+      const fulfillmentMode = getProductFulfillmentMode(product);
       const productDetails = Array.isArray(product.details) ? product.details : [];
       const availableKeys = productDetails
         .filter((d: { sold: boolean }) => !d.sold);
 
-      if (manualDeliveryMessage) {
-        const keysToMarkSold = availableKeys.slice(0, order.quantity);
-        if (keysToMarkSold.length > 0) {
-          for (const key of keysToMarkSold) {
-            key.sold = true;
-            key.soldTo = order.user;
-            key.soldAt = new Date();
-          }
-          await product.save();
-
-          await Product.findByIdAndUpdate(product._id, {
-            stock: productDetails.filter((d: { sold: boolean }) => !d.sold).length,
-          });
+      if (fulfillmentMode === 'manual') {
+        if (!manualDeliveryMessage) {
+          return { success: false, error: 'Delivery info is required for this manual-fulfillment product' };
         }
 
+        const availableStock = getAvailableProductStock(product);
+        if (availableStock < order.quantity) {
+          return { success: false, error: `Not enough stock (${availableStock}/${order.quantity})` };
+        }
+
+        product.stock = Math.max(0, availableStock - order.quantity);
+        await product.save();
         order.deliveredKeys = [{
           additionalInfo: manualDeliveryMessage,
         }];

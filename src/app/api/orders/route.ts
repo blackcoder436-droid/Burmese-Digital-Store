@@ -19,6 +19,7 @@ import { saveToQuarantine } from '@/lib/quarantine';
 import { sanitizeCustomerOrder } from '@/lib/order-sanitize';
 import { buildApproveRejectKeyboard, sendPaymentScreenshot, buildScreenshotCaption } from '@/lib/telegram';
 import { notifyBotUser } from '@/lib/order-actions';
+import { getAvailableProductStock } from '@/lib/product-stock';
 import User from '@/models/User';
 import { createNotification, notifyAdmins } from '@/models/Notification';
 import { Types } from 'mongoose';
@@ -217,12 +218,8 @@ export async function POST(request: NextRequest) {
     // Find product (already fetched above)
     const product = productDoc;
 
-    // Check stock only when product has detail items
-    const hasStockDetails = Array.isArray(product.details) && product.details.length > 0;
-    const availableStock = hasStockDetails
-      ? product.details.filter((d) => !d.sold).length
-      : null;
-    if (availableStock !== null && availableStock < quantity) {
+    const availableStock = getAvailableProductStock(product);
+    if (availableStock < quantity) {
       return NextResponse.json(
         { success: false, error: `Only ${availableStock} items in stock` },
         { status: 400 }
@@ -299,7 +296,7 @@ export async function POST(request: NextRequest) {
     const order = await Order.create({
       _id: new Types.ObjectId(),
       user: authUser.userId,
-      product: productId,
+      product: product._id,
       quantity,
       totalAmount,
       paymentMethod,

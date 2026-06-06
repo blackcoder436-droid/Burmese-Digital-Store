@@ -356,9 +356,9 @@ function ShopContent() {
                   })()}
                 </div>
                 {/* Desktop: grid */}
-                <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-stretch">
                   {products.map((product, i) => (
-                    <div key={product._id} className="scroll-fade" data-delay={`${i * 60}`}>
+                    <div key={product._id} className="scroll-fade h-full" data-delay={`${i * 60}`}>
                       <ProductCard product={product} />
                     </div>
                   ))}
@@ -366,9 +366,9 @@ function ShopContent() {
               </>
             ) : (
               /* Normal grid for all screens when few products or filters active */
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-stretch">
                 {products.map((product, i) => (
-                  <div key={product._id} className="scroll-fade" data-delay={`${i * 60}`}>
+                  <div key={product._id} className="scroll-fade h-full" data-delay={`${i * 60}`}>
                     <ProductCard product={product} />
                   </div>
                 ))}

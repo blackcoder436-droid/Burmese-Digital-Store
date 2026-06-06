@@ -32,6 +32,7 @@ export default function ProductCard({ product }: { product: Product }) {
   const liked = isWishlisted(product._id);
   const [showShare, setShowShare] = useState(false);
   const [imageAspect, setImageAspect] = useState<'square' | 'landscape'>('landscape');
+  const [imageError, setImageError] = useState(false);
 
   const handleLike = useCallback(async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -101,7 +102,7 @@ export default function ProductCard({ product }: { product: Product }) {
   const PlaceholderIcon = categoryIcon[product.category] || ShoppingBag;
 
   return (
-    <Link href={`/shop/${product.slug || product._id}`} className="block group">
+    <Link href={`/shop/${product.slug || product._id}`} className="block group h-full">
       <div className="game-card h-full flex flex-col relative overflow-hidden card-shimmer">
         {/* Hover Glow Effect */}
         <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 via-transparent to-cyan-500/0 group-hover:from-purple-500/5 group-hover:to-cyan-500/5 transition-all duration-500" />
@@ -110,21 +111,33 @@ export default function ProductCard({ product }: { product: Product }) {
         <div className="absolute top-0 left-0 w-0 group-hover:w-full h-[2px] bg-gradient-to-r from-purple-500 to-cyan-500 transition-all duration-500 ease-out" />
         
         {/* Product Image */}
-        <div className={`relative w-full overflow-hidden bg-dark-900 ${imageAspect === 'square' ? 'aspect-square' : 'aspect-[4/3]'}`}>
+        <div className="relative w-full overflow-hidden bg-dark-900 h-44 sm:h-44 md:h-48 lg:h-52 flex items-center justify-center">
           {hasImage ? (
             <>
-              <Image
-                src={normalizedImage!}
-                alt={product.name}
-                fill
-                className="object-contain p-2 group-hover:scale-105 transition-transform duration-500"
-                onLoadingComplete={(img) => {
-                  const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
-                  setImageAspect(ratio >= 0.9 && ratio <= 1.1 ? 'square' : 'landscape');
-                }}
-                unoptimized
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-dark-900/80" />
+              {/* decide whether this image is a logo/icon so we can use object-contain */}
+              {(() => {
+                const isLogo = !!normalizedImage && /\/(logo-|icon_|Color-logo|logotype|logotype-full|logotype-full-primary|logo-full)/i.test(normalizedImage);
+                const preferContain = isLogo || imageAspect === 'square';
+                const imgSrc = imageError ? '/uploads/gh-pack/logo-full-dark.png' : normalizedImage!;
+                const imgClass = `${preferContain ? 'object-contain' : 'object-cover'} group-hover:scale-105 transition-transform duration-500`;
+                return (
+                  <>
+                    <Image
+                      src={imgSrc}
+                      alt={product.name}
+                      fill
+                      className={imgClass}
+                      onLoadingComplete={(img) => {
+                        const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
+                        setImageAspect(ratio >= 0.9 && ratio <= 1.1 ? 'square' : 'landscape');
+                      }}
+                      onError={() => setImageError(true)}
+                      unoptimized
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-dark-900/80" />
+                  </>
+                );
+              })()}
             </>
           ) : (
             <>
