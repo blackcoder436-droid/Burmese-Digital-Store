@@ -118,7 +118,7 @@ export default function ProductCard({ product }: { product: Product }) {
               {(() => {
                 const isLogo = !!normalizedImage && /\/(logo-|icon_|Color-logo|logotype|logotype-full|logotype-full-primary|logo-full)/i.test(normalizedImage);
                 const preferContain = isLogo || imageAspect === 'square';
-                const imgSrc = imageError ? '/uploads/gh-pack/logo-full-dark.png' : normalizedImage!;
+                const imgSrc = imageError ? '/uploads/gh-pack/logo-full-dark.png' : `${normalizedImage}?v=2`;
                 const imgClass = `${preferContain ? 'object-contain' : 'object-cover'} group-hover:scale-105 transition-transform duration-500`;
                 return (
                   <>

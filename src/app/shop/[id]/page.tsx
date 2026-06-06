@@ -294,7 +294,7 @@ export default function ProductDetailPage() {
           {hasImage && normalizedImage && (
             <div className="relative w-full h-48 sm:h-64 bg-dark-900">
               <Image
-                src={normalizedImage}
+                src={`${normalizedImage}?v=2`}
                 alt={product.name}
                 fill
                 className="object-contain p-3"
