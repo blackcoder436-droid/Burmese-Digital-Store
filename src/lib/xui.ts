@@ -1161,19 +1161,23 @@ export async function findClientBySubIdAcrossServers(subId: string, fullUrlHint?
   }
 
   for (const server of servers) {
-    const clients = await listServerClients(server.id);
-    if (!clients) continue;
-    const client = clients.find((c) => {
-      const cSubId = (c.subId || '').toLowerCase().trim();
-      const cClientId = (c.clientId || '').toLowerCase().trim();
-      return cSubId === normSubId || cClientId === normSubId;
-    });
-    if (client) {
-      return {
-        ...client,
-        serverId: server.id,
-        serverName: server.name,
-      };
+    try {
+      const clients = await listServerClients(server.id);
+      if (!clients) continue;
+      const client = clients.find((c) => {
+        const cSubId = (c.subId || '').toLowerCase().trim();
+        const cClientId = (c.clientId || '').toLowerCase().trim();
+        return cSubId === normSubId || cClientId === normSubId;
+      });
+      if (client) {
+        return {
+          ...client,
+          serverId: server.id,
+          serverName: server.name,
+        };
+      }
+    } catch {
+      continue;
     }
   }
   return null;

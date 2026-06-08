@@ -83,24 +83,31 @@ export async function GET(request: NextRequest) {
       const server = enabledServers.find((s) => s.id === serverId);
       if (!server || resolved.has(server.id)) return;
 
-      const clients = await listServerClients(server.id);
-      if (!clients) return;
+      try {
+        const clients = await listServerClients(server.id);
+        if (!clients) return;
 
-      const matched = clients.find((client: any) => {
-        const email = String(client.email || '').trim();
-        return isMultiServerClientEmailMatch(email, record, server, Array.from(resolved.values()).map((item) => item.client));
-      });
+        const matched = clients.find((client: any) => {
+          const email = String(client.email || '').trim();
+          return isMultiServerClientEmailMatch(email, record, server, Array.from(resolved.values()).map((item) => item.client));
+        });
 
-      if (matched) {
-        pushResolved({
-          serverId: server.id,
-          serverName: server.name,
-          source: 'name',
-          client: {
-            ...matched,
+        if (matched) {
+          pushResolved({
             serverId: server.id,
             serverName: server.name,
-          } as XuiClientInfo,
+            source: 'name',
+            client: {
+              ...matched,
+              serverId: server.id,
+              serverName: server.name,
+            } as XuiClientInfo,
+          });
+        }
+      } catch (error) {
+        log.warn('Failed to resolve client by server name', {
+          serverId: server.id,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     };

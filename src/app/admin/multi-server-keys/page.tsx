@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle,
@@ -264,6 +264,7 @@ export default function AdminMultiServerKeysPage() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MultiServerKeyRecord | null>(null);
   const [selectedDetails, setSelectedDetails] = useState<MultiServerKeyDetailsResponse | null>(null);
+  const activeDetailRecordId = useRef<string | null>(null);
   const [reconciliation, setReconciliation] = useState<ReconciliationResponse | null>(null);
   const [reconcileLoading, setReconcileLoading] = useState(false);
   const [reconcileError, setReconcileError] = useState('');
@@ -366,9 +367,15 @@ export default function AdminMultiServerKeysPage() {
     setCleanupReport(null);
     setDetailsLoading(true);
     setShowDetailsModal(true);
+    const recordId = record._id;
+    activeDetailRecordId.current = recordId;
+
     try {
       const res = await fetch(`/api/admin/multi-server-keys/details?id=${encodeURIComponent(record._id)}`);
       const data = await res.json();
+      if (activeDetailRecordId.current !== recordId) {
+        return;
+      }
       if (data.success) {
         setSelectedDetails(data.data as MultiServerKeyDetailsResponse);
       } else {
@@ -381,7 +388,7 @@ export default function AdminMultiServerKeysPage() {
       setDetailsLoading(false);
     }
 
-    fetchReconciliation(record);
+    await fetchReconciliation(record);
   }
 
   async function fetchReconciliation(record: MultiServerKeyRecord) {
@@ -390,6 +397,9 @@ export default function AdminMultiServerKeysPage() {
     try {
       const res = await fetch(`/api/admin/multi-server-keys/reconcile?id=${encodeURIComponent(record._id)}`);
       const data = await res.json();
+      if (activeDetailRecordId.current !== record._id) {
+        return;
+      }
       if (data.success) {
         setReconciliation(data.data as ReconciliationResponse);
       } else {
@@ -404,13 +414,30 @@ export default function AdminMultiServerKeysPage() {
   }
 
   async function refreshDetails(record: MultiServerKeyRecord) {
+    const recordId = record._id;
     try {
       const res = await fetch(`/api/admin/multi-server-keys/details?id=${encodeURIComponent(record._id)}`);
+      if (activeDetailRecordId.current !== recordId) {
+        return;
+      }
+      if (!res.ok) {
+        const message = `Failed to refresh details (${res.status})`;
+        setDetailsError(message);
+        console.error(message);
+        return;
+      }
       const data = await res.json();
+      if (activeDetailRecordId.current !== recordId) {
+        return;
+      }
       if (data.success) {
         setSelectedDetails(data.data as MultiServerKeyDetailsResponse);
+      } else {
+        setDetailsError(data.error || 'Failed to refresh details');
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Network error while refreshing details';
+      setDetailsError(message);
       console.error(err);
     }
   }
@@ -626,7 +653,7 @@ export default function AdminMultiServerKeysPage() {
         setReconciliation(refreshed);
       }
       window.alert(data.message || 'Live 3xUI refresh complete.');
-      await Promise.all([fetchKeys(), refreshDetails(record)]);
+      await Promise.all([fetchKeys(), refreshDetails(record), fetchReconciliation(record)]);
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to refresh live 3xUI state');
       console.error(err);
@@ -714,7 +741,7 @@ export default function AdminMultiServerKeysPage() {
       setRepairResult(repairData);
       setRepairMessage(data2.message || 'Repair applied.');
       setReconciliation({ record, report: repairData.after });
-      await Promise.all([fetchKeys(), refreshDetails(record)]);
+      await Promise.all([fetchKeys(), refreshDetails(record), fetchReconciliation(record)]);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to repair record';
       setRepairError(message);
@@ -1237,6 +1264,7 @@ export default function AdminMultiServerKeysPage() {
                 <button
                   onClick={() => {
                     setShowDetailsModal(false);
+                    activeDetailRecordId.current = null;
                     setSelectedRecord(null);
                     setSelectedDetails(null);
                     setReconciliation(null);
