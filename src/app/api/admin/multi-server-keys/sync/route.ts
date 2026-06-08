@@ -5,6 +5,7 @@ import { apiLimiter } from '@/lib/rateLimit';
 import dbConnect from '@/lib/mongodb';
 import { createLogger } from '@/lib/logger';
 import { reconcileMultiServerKey } from '@/lib/vpn-reconciliation';
+import { syncMultiServerKeyRecord } from '@/lib/multi-server-key-sync';
 
 const log = createLogger({ route: '/api/admin/multi-server-keys/sync' });
 
@@ -43,24 +44,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Record not found' }, { status: 404 });
     }
 
-    const report = await reconcileMultiServerKey(record);
+    const report = await syncMultiServerKeyRecord(record, {
+      provisionMissing: true,
+      persistLinks: async (links) => {
+        await db.collection('vpn_keys').updateOne(
+          { _id: objectId },
+          { $set: { serverSubLinks: links.serverSubLinks, serverConfigLinks: links.serverConfigLinks } }
+        );
+      },
+    });
 
-    log.info('Live 3xUI refresh completed', {
+    log.info('Live 3xUI sync completed', {
       recordId: id,
       summary: report.summary,
-      webDbKeyFieldsChanged: false,
+      linksChanged: report.linksChanged,
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Live 3xUI refresh complete. No WEB DB key fields were changed.',
-      data: {
-        record: {
-          ...record,
-          _id: String(record._id),
-        },
-        report,
-      },
+      message: 'Live 3xUI sync complete.',
+      data: report,
     });
   } catch (error) {
     log.error('Admin live 3xUI refresh error', { error: error instanceof Error ? error.message : String(error) });

@@ -10,7 +10,7 @@ import {
   type ReconciliationClientSnapshot,
   type ReconciliationIssue,
 } from '@/lib/vpn-reconciliation';
-import { updateVpnClient } from '@/lib/xui';
+import { provisionVpnKey, updateVpnClient } from '@/lib/xui';
 
 const log = createLogger({ route: '/api/admin/multi-server-keys/repair' });
 
@@ -81,6 +81,72 @@ function existingSubLinks(record: Record<string, unknown>) {
 function buildServerSubLink(server: { domain: string; subPort: number }, client: ReconciliationClientSnapshot) {
   if (!client.subId) return '';
   return `https://${server.domain}:${server.subPort}/sub/${client.subId}`;
+}
+
+function daysUntilExpiry(value: unknown): number {
+  const expiry = numberValue(value, 0);
+  if (expiry <= 0) return 0;
+  const msRemaining = expiry - Date.now();
+  return msRemaining > 0 ? Math.max(1, Math.ceil(msRemaining / (24 * 60 * 60 * 1000))) : 1;
+}
+
+function buildProvisionUsername(record: Record<string, unknown>, server: { name: string }) {
+  const rawName = String(record.username ?? record.token ?? 'user');
+  const sanitizedName = rawName
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^A-Za-z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 24) || 'user';
+  const serverName = server.name
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^A-Za-z0-9._-]/g, '-')
+    .slice(0, 18);
+  return `auto_${Math.random().toString(36).slice(2, 6)}_${sanitizedName}_${serverName}`.slice(0, 40);
+}
+
+async function provisionMissingServerClient(
+  server: { id: string; name: string; domain: string; subPort: number },
+  record: Record<string, unknown>,
+  includeEnable: boolean
+) {
+  const expectedEnable = String(record.status ?? 'active') === 'active';
+  if (!expectedEnable) {
+    return { ok: false, message: 'Record is disabled; missing server clients are not provisioned' };
+  }
+
+  const expiryDays = daysUntilExpiry(record.expiryTime);
+  const username = buildProvisionUsername(record, server);
+  const keyData = await provisionVpnKey({
+    serverId: server.id,
+    userId: String(record.userId ?? 'admin_repair'),
+    devices: Math.max(1, Math.trunc(numberValue(record.devices, 1))),
+    expiryDays,
+    dataLimitGB: numberValue(record.dataLimitGB, 0),
+    protocol: String(record.protocol ?? 'trojan'),
+    username,
+  });
+
+  if (!keyData) {
+    return { ok: false, message: 'Failed to provision missing server client' };
+  }
+
+  const clientEmail = String(keyData.clientEmail || '');
+  if (!clientEmail) {
+    return { ok: false, message: 'Provisioned client has no email/client identifier' };
+  }
+
+  const updated = await updateVpnClient(server.id, clientEmail, buildPanelUpdates(record, includeEnable));
+
+  return {
+    ok: updated,
+    email: clientEmail,
+    subLink: String(keyData.subLink || ''),
+    configLink: String(keyData.configLink || ''),
+    message: updated ? 'Provisioned missing server client and synced DB values' : 'Failed to update provisioned client settings',
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -207,13 +273,63 @@ export async function POST(request: NextRequest) {
       }
 
       if (!includeOrphans || serverResult.orphanCandidates.length === 0) {
-        actions.push({
-          serverId: serverResult.serverId,
-          serverName: serverResult.serverName,
-          type: 'missing_server',
-          status: 'skipped',
-          message: 'No linked client found. Use Sync to provision a missing server client.',
-        });
+        if (dryRun) {
+          actions.push({
+            serverId: serverResult.serverId,
+            serverName: serverResult.serverName,
+            type: 'missing_server',
+            status: 'skipped',
+            message: 'Dry-run: would provision missing server client or relink an unlinked server client.',
+          });
+        } else {
+          if (!server) {
+            actions.push({
+              serverId: serverResult.serverId,
+              serverName: serverResult.serverName,
+              type: 'missing_server',
+              status: 'failed',
+              message: 'Missing server configuration for this record.',
+            });
+          } else if (String(record.status ?? 'active') !== 'active') {
+            actions.push({
+              serverId: serverResult.serverId,
+              serverName: serverResult.serverName,
+              type: 'missing_server',
+              status: 'skipped',
+              message: 'Record is disabled; missing server clients are not provisioned.',
+            });
+          } else {
+            const provisionResult = await provisionMissingServerClient(server, record, true);
+            const status = provisionResult.ok ? (provisionResult.subLink ? 'linked' : 'updated') : 'failed';
+            actions.push({
+              serverId: serverResult.serverId,
+              serverName: serverResult.serverName,
+              type: 'missing_server',
+              status,
+              email: provisionResult.email,
+              message: provisionResult.message,
+            });
+
+            if (provisionResult.ok && provisionResult.subLink) {
+              if (!nextSubLinks.includes(provisionResult.subLink)) {
+                nextSubLinks.push(provisionResult.subLink);
+                subLinksChanged = true;
+              }
+            }
+
+            if (provisionResult.ok && provisionResult.configLink) {
+              const currentConfigLinks = Array.isArray(record.serverConfigLinks)
+                ? record.serverConfigLinks.map(String).filter(Boolean)
+                : [];
+              if (!currentConfigLinks.includes(provisionResult.configLink)) {
+                await db.collection('vpn_keys').updateOne(
+                  { _id: objectId },
+                  { $set: { serverConfigLinks: [...currentConfigLinks, provisionResult.configLink] } }
+                );
+              }
+            }
+          }
+        }
         continue;
       }
 

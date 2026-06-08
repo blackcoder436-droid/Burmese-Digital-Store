@@ -278,6 +278,7 @@ export default function AdminMultiServerKeysPage() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkResult, setBulkResult] = useState<any>(null);
   const [bulkDryRunResult, setBulkDryRunResult] = useState<any>(null);
+  const [bulkError, setBulkError] = useState('');
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -423,25 +424,44 @@ export default function AdminMultiServerKeysPage() {
     return data.data as MultiServerKeyDetailsResponse;
   }
 
+  const MMT_OFFSET_MS = 6 * 60 * 60 * 1000 + 30 * 60 * 1000;
+  const MMT_SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function pad2(value: number) {
+    return String(value).padStart(2, '0');
+  }
+
   function formatDate(ms?: number) {
     if (!ms || ms <= 0) return 'Unlimited';
-    return new Date(ms).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    const date = new Date(ms + MMT_OFFSET_MS);
+    return `${pad2(date.getUTCDate())} ${MMT_SHORT_MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
   }
 
   function formatDateTime(ms?: number) {
     if (!ms || ms <= 0) return 'Unlimited';
-    return new Date(ms).toLocaleString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+    const date = new Date(ms + MMT_OFFSET_MS);
+    return `${pad2(date.getUTCDate())} ${MMT_SHORT_MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()} ${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}:${pad2(date.getUTCSeconds())}`;
+  }
+
+  function getDriftWarningBadge(reconciliation?: ReconciliationResponse | null, recordId?: string) {
+    if (!reconciliation || reconciliation.record._id !== recordId) return null;
+    const { drift, missing, orphanCandidates, unlinked, error } = reconciliation.report.summary;
+    if (error > 0) {
+      return { label: 'Panel errors detected', variant: 'border-red-500/20 bg-red-500/10 text-red-300' };
+    }
+    if (missing > 0) {
+      return { label: 'Missing panel clients', variant: 'border-red-500/20 bg-red-500/10 text-red-300' };
+    }
+    if (unlinked > 0) {
+      return { label: 'Unlinked server(s) detected', variant: 'border-orange-500/20 bg-orange-500/10 text-orange-200' };
+    }
+    if (orphanCandidates > 0) {
+      return { label: 'Potential orphan client(s)', variant: 'border-amber-500/20 bg-amber-500/10 text-amber-300' };
+    }
+    if (drift > 0) {
+      return { label: 'Panel drift detected', variant: 'border-amber-500/20 bg-amber-500/10 text-amber-300' };
+    }
+    return null;
   }
 
   function formatGb(bytes?: number) {
@@ -736,6 +756,9 @@ export default function AdminMultiServerKeysPage() {
   async function handleBulkRepair() {
     if (selectedIds.length === 0) return;
     setBulkLoading(true);
+    setBulkError('');
+    setBulkResult(null);
+    setBulkDryRunResult(null);
     try {
       // Dry-run first
       const res = await fetch('/api/admin/multi-server-keys/repair-bulk', {
@@ -758,11 +781,14 @@ export default function AdminMultiServerKeysPage() {
       const data2 = await res2.json();
       if (!data2.success) throw new Error(data2.error || 'Bulk repair failed');
       setBulkResult(data2.data || []);
+      setBulkDryRunResult(null);
       window.alert('Bulk repair applied.');
       await fetchKeys();
       setSelectedIds([]);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setBulkError(message);
+      window.alert(message);
       console.error(err);
     } finally {
       setBulkLoading(false);
@@ -845,6 +871,8 @@ export default function AdminMultiServerKeysPage() {
     }
   }
 
+  const driftBadge = getDriftWarningBadge(reconciliation, selectedRecord?._id);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -897,6 +925,51 @@ export default function AdminMultiServerKeysPage() {
           </select>
         </div>
       </div>
+
+      {(bulkError || bulkDryRunResult || bulkResult) && (
+        <div
+          className={`rounded-3xl border p-4 text-sm space-y-3 mt-3 ${bulkError ? 'border-red-500/20 bg-red-500/10 text-red-200' : bulkResult ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100' : 'border-amber-500/20 bg-amber-500/10 text-amber-100'}`}>
+          {bulkError ? (
+            <div>
+              <div className="font-semibold">Bulk repair error</div>
+              <div className="text-gray-200 mt-1">{bulkError}</div>
+            </div>
+          ) : null}
+
+          {bulkDryRunResult && !bulkResult ? (
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold">Bulk repair dry-run completed</div>
+                  <div className="text-gray-300">Selected records: {selectedIds.length}</div>
+                </div>
+                <div className="text-xs uppercase tracking-[0.2em] text-gray-400">Preview only</div>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                  <div className="text-xs text-gray-400">Records</div>
+                  <div className="mt-1 text-xl font-semibold text-white">{bulkDryRunResult.length}</div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                  <div className="text-xs text-gray-400">Actions</div>
+                  <div className="mt-1 text-xl font-semibold text-emerald-300">{bulkDryRunResult.reduce((sum: number, item: any) => sum + ((item?.data?.actions?.length ?? 0)), 0)}</div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                  <div className="text-xs text-gray-400">Failed</div>
+                  <div className="mt-1 text-xl font-semibold text-red-300">{bulkDryRunResult.reduce((sum: number, item: any) => sum + (item?.data?.actions?.filter((action: any) => action.status === 'failed').length ?? 0), 0)}</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {bulkResult ? (
+            <div>
+              <div className="font-semibold">Bulk repair applied successfully</div>
+              <div className="text-gray-300 mt-1">Updated {bulkResult.length} record(s).</div>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       <div className="game-card p-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
@@ -1118,6 +1191,11 @@ export default function AdminMultiServerKeysPage() {
                 <p className="text-sm text-gray-400 mt-1 truncate">
                   {selectedRecord?.username || 'Selected key'} · {selectedRecord?.token?.slice(0, 10)}…
                 </p>
+                {driftBadge && (
+                  <div className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium ${driftBadge.variant}`}>
+                    {driftBadge.label}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {selectedRecord && (

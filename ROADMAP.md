@@ -29,13 +29,13 @@ Latest note:
 - [x] SG1 May-Zin case ကို DB + panel read-only audit လုပ်ပြီး current state မှတ်ထား။
 - [x] VPN reconciliation API/report ထည့်ရန်: DB `vpn_keys` vs panel clients expiry/status/subId compare.
 - [x] Reconciliation result ကို admin UI မှာပြရန်: OK, drift, missing, orphan/unlinked.
-- [ ] Bulk repair action ထည့်ရန်: selected records ကို expiry/devices/data/status resync.
+- [x] Bulk repair action ထည့်ထား: selected records ကို expiry/devices/data/status resync.
 - [x] Orphan cleanup dry-run API/UI ထည့်ထား: delete/disable/update မလုပ်ခင် affected clients list + recommendation ပြရန်.
 - [x] Invalid legacy client email handling ပိုခိုင်အောင်လုပ်ရန်: update မရသော old email rows အတွက် safe rename/delete fallback.
 - [x] Live Refresh/Reconcile response ကို detailed ဖြစ်အောင်လုပ်ထား: OK, drift, missing, orphan, error ကို server-wise ပြ.
-- [ ] Expiry date policy သတ်မှတ်ရန်: admin date picker မှ local day end သုံးမလား UTC midnight သုံးမလား တစ်မျိုးတည်းဖြစ်စေရန်.
+- [x] Expiry date policy သတ်မှတ်ထားပြီး: admin date picker/display ကို Myanmar local day end (MMT) အရပြောင်းထားသည်.
 - [ ] 3x-ui panel API tests/mock tests ထည့်ရန်: config link resolve fail, sub link stale, name fallback, duplicate prevention.
-- [ ] Admin multi-server details modal ထဲမှာ panel drift warning badge ထည့်ရန်.
+- [x] Admin multi-server details modal ထဲမှာ panel drift warning badge ထည့်ထားသည်.
 
 Recommended order:
 1. Reconciliation report API.
@@ -126,7 +126,7 @@ Day 3:
 
 Day 4:
 - [ ] Tests: multi-server sync fallback + duplicate prevention.
-- [ ] `npm run test`, `npx tsc --noEmit`, build check.
+- [x] `npm run test`, `npx tsc --noEmit`, build check. (passed)
 
 Day 5:
 - [ ] Customer VPN key page polish: expiry countdown, QR, traffic, server list.
