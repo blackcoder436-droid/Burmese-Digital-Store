@@ -12,6 +12,7 @@ const XUI_READY_WAIT_MS = 5 * 60 * 1000;
 const XUI_READY_POLL_MS = 10000;
 const SSH_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 const XUI_INSTALL_TIMEOUT_MS = 12 * 60 * 1000;
+const XUI_INSTALL_VERSION = 'v3.2.8';
 
 // ================= Helpers =================
 
@@ -21,7 +22,7 @@ type ProgressReporter = (message: string) => void | Promise<void>;
 type PanelProtocol = 'https' | 'http';
 type BackupDatabaseKind = 'sqlite' | 'postgres';
 type BackupCandidate = {
-  kind: 'archive' | 'sqlite';
+  kind: 'archive' | 'sqlite' | 'postgres';
   localPath: string;
   remotePath: string;
 };
@@ -43,6 +44,37 @@ function shellQuote(value: string): string {
   return `'${escaped}'`;
 }
 
+// Shell snippet to wait for apt/dpkg locks to clear on remote hosts. Insert
+// `${aptWaitShell}` at the top of remote command templates that run
+// `apt-get` so the script will wait (with timeout) for package manager locks.
+const aptWaitShell = `
+wait_for_apt() {
+  tries=0
+  while :; do
+    if command -v fuser >/dev/null 2>&1; then
+      if ! fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+         && ! fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
+         && ! fuser /var/lib/apt/lists/lock >/dev/null 2>&1 \
+         && ! fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+        if ! pgrep -x apt >/dev/null 2>&1 && ! pgrep -x apt-get >/dev/null 2>&1 && ! pgrep -f unattended-upgrades >/dev/null 2>&1; then
+          return 0
+        fi
+      fi
+    else
+      if ! pgrep -x apt >/dev/null 2>&1 && ! pgrep -x apt-get >/dev/null 2>&1 && ! pgrep -f unattended-upgrades >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+    tries=$((tries+1))
+    if [ "$tries" -ge 120 ]; then
+      echo "APT_LOCK_TIMEOUT"
+      return 1
+    fi
+    sleep 2
+  done
+}
+`;
+
 function normalizePanelPath(value?: string): string {
   const raw = (value || '/mka').trim();
   if (!raw || raw === '/') return '/';
@@ -56,13 +88,14 @@ function getPanelBasePath(panelPath: string): string {
 
 function getPanelUiPath(panelPath: string): string {
   const basePath = getPanelBasePath(panelPath);
-  return `${basePath}/panel`;
+  return basePath ? `${basePath}/` : '/';
 }
 
 function getBackupCandidates(backupsDir: string, serverName: string): BackupCandidate[] {
   const candidates: BackupCandidate[] = [];
   const archivePath = path.join(backupsDir, `${serverName}_backup.tar.gz`);
   const sqlitePath = path.join(backupsDir, `${serverName}_backup.db`);
+  const postgresDumpPath = path.join(backupsDir, `${serverName}_backup.dump`);
 
   if (fs.existsSync(archivePath)) {
     candidates.push({
@@ -78,6 +111,44 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
       localPath: sqlitePath,
       remotePath: '/root/backup.db',
     });
+  }
+
+  if (fs.existsSync(postgresDumpPath)) {
+    candidates.push({
+      kind: 'postgres',
+      localPath: postgresDumpPath,
+      remotePath: `/root/${serverName}_backup.dump`,
+    });
+  }
+
+  if (fs.existsSync(backupsDir)) {
+    const extraArchiveFiles = fs.readdirSync(backupsDir)
+      .filter((file) => file.toLowerCase().endsWith('.tar.gz'))
+      .map((file) => ({
+        kind: 'archive' as const,
+        localPath: path.join(backupsDir, file),
+        remotePath: `/root/${file}`,
+      }));
+
+    for (const candidate of extraArchiveFiles) {
+      if (!candidates.some((existing) => existing.localPath === candidate.localPath)) {
+        candidates.push(candidate);
+      }
+    }
+
+    const extraDumpFiles = fs.readdirSync(backupsDir)
+      .filter((file) => file.toLowerCase().endsWith('.dump'))
+      .map((file) => ({
+        kind: 'postgres' as const,
+        localPath: path.join(backupsDir, file),
+        remotePath: `/root/${file}`,
+      }));
+
+    for (const candidate of extraDumpFiles) {
+      if (!candidates.some((existing) => existing.localPath === candidate.localPath)) {
+        candidates.push(candidate);
+      }
+    }
   }
 
   return candidates;
@@ -757,8 +828,12 @@ async function installFail2BanIpLimit(host: string, progress?: ProgressReporter)
 set -e
 export DEBIAN_FRONTEND=noninteractive
 
+${aptWaitShell}
+
 if command -v apt-get >/dev/null 2>&1; then
+  wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
   apt-get update
+  wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
   apt-get install -y fail2ban nftables iptables python3-pip
   python3 -m pip install pyasynchat --break-system-packages >/dev/null 2>&1 || true
 elif command -v dnf >/dev/null 2>&1; then
@@ -932,8 +1007,58 @@ print(f"INBOUND_COUNT:{len(data['obj'])}")
   return Number(match[1]);
 }
 
+async function getRestoredDatabaseInboundCount(host: string): Promise<number> {
+  const command = `
+set -e
+[ -f /etc/default/x-ui ] || { echo "XUI_ENV_MISSING"; exit 1; }
+set -a
+. /etc/default/x-ui
+set +a
+[ "\${XUI_DB_TYPE:-}" = "postgres" ] || { echo "XUI_DB_TYPE_NOT_POSTGRES"; exit 1; }
+[ -n "\${XUI_DB_DSN:-}" ] || { echo "XUI_DB_DSN_MISSING"; exit 1; }
+psql "$XUI_DB_DSN" -tAc "select 'INBOUND_COUNT:' || count(*) from inbounds;"
+`;
+  const output = await execSsh(host, command, 30000);
+  const match = output.match(/INBOUND_COUNT:(\d+)/);
+  if (!match) {
+    throw new Error(`PostgreSQL did not return an inbound count after restore: ${output.slice(0, 300) || '(empty)'}`);
+  }
+
+  return Number(match[1]);
+}
+
 async function inspectRemoteBackup(host: string, backup: BackupCandidate): Promise<{ databaseKind: BackupDatabaseKind; inboundCount: number }> {
-  const archivePrepare = backup.kind === 'archive'
+  let command: string;
+
+  if (backup.kind === 'postgres') {
+    command = `
+set -e
+backup=${shellQuote(backup.remotePath)}
+[ -s "$backup" ] || { echo "BACKUP_DB_MISSING"; exit 1; }
+if ! command -v pg_restore >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  export NEEDRESTART_MODE=a
+  ${aptWaitShell}
+  wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+  apt-get update -qq
+  wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+  apt-get install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
+fi
+pg_restore --data-only --table=inbounds --file=- "$backup" 2>/dev/null | python3 -c 'import sys
+count = 0
+in_copy = False
+for line in sys.stdin:
+    if line.startswith("COPY ") and "inbounds" in line:
+        in_copy = True
+        continue
+    if in_copy:
+        if line.strip() == "\\\\.":
+            break
+        count += 1
+print(f"BACKUP_KIND:postgres\\nINBOUND_COUNT:{count}")'
+`;
+  } else {
+    const archivePrepare = backup.kind === 'archive'
     ? `
 workdir=$(mktemp -d)
 cleanup() { rm -rf "$workdir"; }
@@ -946,8 +1071,11 @@ if grep -qx 'x-ui-postgres.dump' "$workdir/list.txt"; then
   if ! command -v pg_restore >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     export NEEDRESTART_MODE=a
-    apt-get update -qq
-    apt-get install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
+      ${aptWaitShell}
+      wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+      apt-get update -qq
+      wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+      apt-get install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
   fi
   pg_restore --data-only --table=inbounds --file=- "$workdir/x-ui-postgres.dump" 2>/dev/null | python3 -c 'import sys
 count = 0
@@ -972,7 +1100,7 @@ db="$workdir/etc/x-ui/x-ui.db"
     : `
 db=${shellQuote(backup.remotePath)}
 `;
-  const command = `
+    command = `
 set -e
 ${archivePrepare}
 [ -s "$db" ] || { echo "BACKUP_DB_MISSING"; exit 1; }
@@ -997,6 +1125,8 @@ finally:
     conn.close()
 PY
 `;
+  }
+
   const output = await execSsh(host, command, 30000);
   const kindMatch = output.match(/BACKUP_KIND:(sqlite|postgres)/);
   const match = output.match(/INBOUND_COUNT:(\d+)/);
@@ -1052,7 +1182,7 @@ export async function actionInstall3xUI(serverName: string, progress?: ProgressR
 set -e
 export DEBIAN_FRONTEND=noninteractive
 curl -fsSL https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh -o /tmp/3x-ui-install.sh
-printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.2.5
+printf '2\\n1\\ny\\n8080\\n4\\n' | bash /tmp/3x-ui-install.sh ${XUI_INSTALL_VERSION}
 `;
     const installCmd = `timeout 12m bash -lc ${shellQuote(installScript)}`;
 
@@ -1116,7 +1246,8 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.2.5
     await reportProgress(progress, 'Restoring x-ui database and SSL certificate files...');
     const postgresDbName = `xui_${serverName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
     const extractCmd = selectedBackup.databaseKind === 'postgres'
-      ? `
+      ? selectedBackup.kind === 'archive'
+        ? `
 set -e
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
@@ -1133,7 +1264,10 @@ tar -xzf "$backup" -C "$workdir" x-ui-default.env 2>/dev/null || true
 tar -xzf "$backup" -C / root/cert 2>/dev/null || true
 tar -xzf "$backup" -C / root/.acme.sh 2>/dev/null || true
 [ -s "$workdir/x-ui-postgres.dump" ] || { echo "Restored PostgreSQL dump is missing or empty"; exit 1; }
+${aptWaitShell}
+wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
 apt-get update -qq
+wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
 apt-get install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
 systemctl enable --now postgresql >/dev/null
 if [ -s "$pass_file" ]; then
@@ -1159,6 +1293,51 @@ if [ -f "$workdir/x-ui-default.env" ]; then
 else
   : > /etc/default/x-ui
 fi
+{
+  echo 'XUI_DB_TYPE=postgres'
+  echo "XUI_DB_DSN=$dsn"
+} >> /etc/default/x-ui
+chmod 600 /etc/default/x-ui
+rm -f "$backup"
+PGPASSWORD="$db_pass" psql -h 127.0.0.1 -U "$db_user" -d "$db_name" -tAc "select 'RESTORED_PG_INBOUNDS=' || count(*) from inbounds;"
+`
+        : `
+set -e
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+backup=${shellQuote(selectedBackup.remotePath)}
+db_name=${shellQuote(postgresDbName)}
+db_user=${shellQuote(postgresDbName)}
+pass_file="/root/.${postgresDbName}_pg_password"
+workdir=$(mktemp -d)
+cleanup() { rm -rf "$workdir"; }
+trap cleanup EXIT
+[ -s "$backup" ] || { echo "Restored PostgreSQL dump is missing or empty"; exit 1; }
+${aptWaitShell}
+wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+apt-get update -qq
+wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+apt-get install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
+systemctl enable --now postgresql >/dev/null
+if [ -s "$pass_file" ]; then
+  db_pass=$(cat "$pass_file")
+else
+  db_pass=$(openssl rand -hex 24)
+  umask 077
+  printf '%s' "$db_pass" > "$pass_file"
+fi
+if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$db_user'" | grep -q 1; then
+  runuser -u postgres -- psql -v ON_ERROR_STOP=1 -c "CREATE ROLE $db_user LOGIN PASSWORD '$db_pass';" >/dev/null
+else
+  runuser -u postgres -- psql -v ON_ERROR_STOP=1 -c "ALTER ROLE $db_user WITH LOGIN PASSWORD '$db_pass';" >/dev/null
+fi
+if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname='$db_name'" | grep -q 1; then
+  runuser -u postgres -- createdb -O "$db_user" "$db_name"
+fi
+runuser -u postgres -- psql -v ON_ERROR_STOP=1 -d "$db_name" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION $db_user;" >/dev/null
+PGPASSWORD="$db_pass" pg_restore -h 127.0.0.1 -U "$db_user" -d "$db_name" --no-owner --no-privileges "$backup"
+dsn="postgres://$db_user:$db_pass@127.0.0.1:5432/$db_name?sslmode=disable"
+: > /etc/default/x-ui
 {
   echo 'XUI_DB_TYPE=postgres'
   echo "XUI_DB_DSN=$dsn"
@@ -1248,14 +1427,22 @@ fi
     await reportProgress(progress, 'Checking whether the restored panel is serving HTTPS...');
     const protocol = await detectPanelProtocol(newIp, panelTarget.port, panelTarget.panelPath);
     await reportProgress(progress, 'Verifying restored database through the panel API...');
-    const inboundCount = await getRestoredInboundCount(
-      newIp,
-      protocol,
-      panelTarget.port,
-      panelTarget.panelPath,
-      config.xuiUsername || 'admin',
-      config.xuiPassword || 'admin'
-    );
+    let inboundCount: number;
+    try {
+      inboundCount = await getRestoredInboundCount(
+        newIp,
+        protocol,
+        panelTarget.port,
+        panelTarget.panelPath,
+        config.xuiUsername || 'admin',
+        config.xuiPassword || 'admin'
+      );
+    } catch (err) {
+      if (selectedBackup.databaseKind !== 'postgres') throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      await reportProgress(progress, `Panel API verification failed (${message.slice(0, 180)}). Checking restored PostgreSQL database directly...`);
+      inboundCount = await getRestoredDatabaseInboundCount(newIp);
+    }
 
     if (inboundCount < 1) {
       throw new Error(`Database restore completed from ${path.basename(selectedBackup.localPath)}, but the panel API still shows 0 inbounds. Restore a valid ${serverName}_backup.tar.gz or legacy ${serverName}_backup.db from Telegram/backups.`);
