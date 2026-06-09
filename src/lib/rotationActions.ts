@@ -45,32 +45,50 @@ function shellQuote(value: string): string {
 }
 
 // Shell snippet to wait for apt/dpkg locks to clear on remote hosts. Insert
-// `${aptWaitShell}` at the top of remote command templates that run
+// ${aptWaitShell} at the top of remote command templates that run
 // `apt-get` so the script will wait (with timeout) for package manager locks.
+// This version waits longer and prints diagnostics (ps/lsof) when timing out.
 const aptWaitShell = `
 wait_for_apt() {
+  max_tries=\${MAX_APT_WAIT_TRIES:-600}
   tries=0
+  delay=2
   while :; do
-    if command -v fuser >/dev/null 2>&1; then
-      if ! fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
-         && ! fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
-         && ! fuser /var/lib/apt/lists/lock >/dev/null 2>&1 \
-         && ! fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
-        if ! pgrep -x apt >/dev/null 2>&1 && ! pgrep -x apt-get >/dev/null 2>&1 && ! pgrep -f unattended-upgrades >/dev/null 2>&1; then
-          return 0
+    lock_info=""
+    for f in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+      if [ -e "$f" ]; then
+        holders=$(fuser "$f" 2>/dev/null || true)
+        if [ -n "$holders" ]; then
+          lock_info="${lock_info}\n$f: $holders"
         fi
       fi
-    else
-      if ! pgrep -x apt >/dev/null 2>&1 && ! pgrep -x apt-get >/dev/null 2>&1 && ! pgrep -f unattended-upgrades >/dev/null 2>&1; then
-        return 0
-      fi
+    done
+    apt_pids=$(pgrep -f "apt|apt-get|unattended-upgrade|unattended-upgrades|dpkg" || true)
+    if [ -z "$lock_info" ] && [ -z "$apt_pids" ]; then
+      return 0
     fi
     tries=$((tries+1))
-    if [ "$tries" -ge 120 ]; then
+    if [ "$tries" -ge "$max_tries" ]; then
       echo "APT_LOCK_TIMEOUT"
+      if [ -n "$lock_info" ]; then
+        echo -e "Lock files held by:$lock_info"
+      fi
+      if [ -n "$apt_pids" ]; then
+        echo "Apt/dpkg processes:"
+        ps -o pid,etime,cmd -p $apt_pids 2>/dev/null || true
+      fi
+      if command -v lsof >/dev/null 2>&1; then
+        echo "lsof on known lock files:"
+        lsof /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock 2>/dev/null || true
+      fi
+      echo "If these are system unattended-upgrades, wait for them to finish, or run:"
+      echo "  sudo kill -TERM <pid> && sudo dpkg --configure -a"
       return 1
     fi
-    sleep 2
+    sleep $delay
+    if [ "$delay" -lt 10 ]; then
+      delay=$((delay+1))
+    fi
   done
 }
 `;
