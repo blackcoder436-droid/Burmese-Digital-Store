@@ -905,7 +905,7 @@ ${aptWaitShell}
 
 if command -v apt-get >/dev/null 2>&1; then
   export NEEDRESTART_MODE=a
-  export MAX_APT_WAIT_SECS=900
+  export MAX_APT_WAIT_SECS=120
   export APT_KILL_OLD_SEC=900
   wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
   run_apt update
@@ -993,7 +993,7 @@ fi
 sleep 2
 fail2ban-client status 3x-ipl
 `;
-  await execSsh(host, `timeout 16m bash -lc ${shellQuote(script)}`, 17 * 60 * 1000);
+  await execSsh(host, `timeout 3m bash -lc ${shellQuote(script)}`, 4 * 60 * 1000);
   await reportProgress(progress, 'Fail2Ban IP Limit jail is active.');
 }
 
@@ -1115,10 +1115,11 @@ if ! command -v pg_restore >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
   export NEEDRESTART_MODE=a
   ${aptWaitShell}
+  export MAX_APT_WAIT_SECS=300
   wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-  apt-get update -qq
+  run_apt update -qq
   wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-  apt-get install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
+  run_apt install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
 fi
 pg_restore --data-only --table=inbounds --file=- "$backup" 2>/dev/null | python3 -c 'import sys
 count = 0
@@ -1148,10 +1149,11 @@ if grep -qx 'x-ui-postgres.dump' "$workdir/list.txt"; then
     export DEBIAN_FRONTEND=noninteractive
     export NEEDRESTART_MODE=a
       ${aptWaitShell}
+      export MAX_APT_WAIT_SECS=300
       wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-      apt-get update -qq
+      run_apt update -qq
       wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-      apt-get install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
+      run_apt install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
   fi
   pg_restore --data-only --table=inbounds --file=- "$workdir/x-ui-postgres.dump" 2>/dev/null | python3 -c 'import sys
 count = 0
@@ -1293,13 +1295,6 @@ printf '2\\n1\\ny\\n8080\\n4\\n' | bash /tmp/3x-ui-install.sh ${xuiInstallVersio
 
   if (!installed) throw new Error("Failed to connect via SSH and install 3x-ui. VPS might still be booting.");
 
-  try {
-    await installFail2BanIpLimit(newIp, progress);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await reportProgress(progress, `Fail2Ban IP Limit setup did not complete: ${message.slice(0, 500)}. Continuing with 3x-ui restore so rotation can finish.`);
-  }
-
   // Restore DB and SSL Certificates
   if (backupCandidates.length > 0) {
     let selectedBackup: ValidatedBackup | null = null;
@@ -1323,7 +1318,7 @@ printf '2\\n1\\ny\\n8080\\n4\\n' | bash /tmp/3x-ui-install.sh ${xuiInstallVersio
     }
 
     if (!selectedBackup) {
-      throw new Error(`No usable x-ui backup found for ${serverName}. ${validationErrors.join(' | ')}. Put a valid ${serverName}_backup.tar.gz or ${serverName}_backup.db in the backups folder and rerun Panel.`);
+      throw new Error(`No usable x-ui backup found for ${serverName}. ${validationErrors.join(' | ')}. Put a valid ${serverName}_backup.tar.gz, ${serverName}_backup.dump, or ${serverName}_backup.db in the backups folder and rerun Panel.`);
     }
 
     await reportProgress(progress, 'Stopping 3x-ui before database and certificate restore...');
@@ -1352,10 +1347,11 @@ tar -xzf "$backup" -C / root/cert 2>/dev/null || true
 tar -xzf "$backup" -C / root/.acme.sh 2>/dev/null || true
 [ -s "$workdir/x-ui-postgres.dump" ] || { echo "Restored PostgreSQL dump is missing or empty"; exit 1; }
 ${aptWaitShell}
+export MAX_APT_WAIT_SECS=300
 wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-apt-get update -qq
+run_apt update -qq
 wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-apt-get install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
+run_apt install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
 systemctl enable --now postgresql >/dev/null
 if [ -s "$pass_file" ]; then
   db_pass=$(cat "$pass_file")
@@ -1401,10 +1397,11 @@ cleanup() { rm -rf "$workdir"; }
 trap cleanup EXIT
 [ -s "$backup" ] || { echo "Restored PostgreSQL dump is missing or empty"; exit 1; }
 ${aptWaitShell}
+export MAX_APT_WAIT_SECS=300
 wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-apt-get update -qq
+run_apt update -qq
 wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-apt-get install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
+run_apt install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
 systemctl enable --now postgresql >/dev/null
 if [ -s "$pass_file" ]; then
   db_pass=$(cat "$pass_file")
@@ -1532,13 +1529,20 @@ fi
     }
 
     if (inboundCount < 1) {
-      throw new Error(`Database restore completed from ${path.basename(selectedBackup.localPath)}, but the panel API still shows 0 inbounds. Restore a valid ${serverName}_backup.tar.gz or legacy ${serverName}_backup.db from Telegram/backups.`);
+      throw new Error(`Database restore completed from ${path.basename(selectedBackup.localPath)}, but the panel API still shows 0 inbounds. Restore a valid ${serverName}_backup.tar.gz, ${serverName}_backup.dump, or legacy ${serverName}_backup.db from Telegram/backups.`);
     }
 
     const urlPath = getPanelUiPath(panelTarget.panelPath);
     const sslNote = sslApplied
       ? (protocol === 'https' ? '' : ' SSL certificate files were applied, but HTTPS did not respond after restart, so the panel URL is HTTP.')
       : ' SSL certificate files were not found in the backup, so the panel URL is HTTP.';
+
+    try {
+      await installFail2BanIpLimit(newIp, progress);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await reportProgress(progress, `Fail2Ban IP Limit setup did not complete: ${message.slice(0, 500)}. Panel restore already succeeded; you can rerun Fail2Ban setup later.`);
+    }
 
     return {
       success: true,
@@ -1550,6 +1554,6 @@ fi
       inboundCount,
     };
   } else {
-    throw new Error(`Backup file not found to restore! Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)} or ${path.join(backupsDir, `${serverName}_backup.db`)}`);
+    throw new Error(`Backup file not found to restore! Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)}, ${path.join(backupsDir, `${serverName}_backup.dump`)}, or ${path.join(backupsDir, `${serverName}_backup.db`)}`);
   }
 }
