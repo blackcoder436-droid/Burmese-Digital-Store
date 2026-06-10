@@ -47,50 +47,56 @@ function shellQuote(value: string): string {
 // Shell snippet to wait for apt/dpkg locks to clear on remote hosts. Insert
 // ${aptWaitShell} at the top of remote command templates that run
 // `apt-get` so the script will wait (with timeout) for package manager locks.
-// This version waits longer and prints diagnostics (ps/lsof) when timing out.
+// This version will optionally kill stale apt processes (after a threshold)
+// and performs basic recovery (`dpkg --configure -a`) to avoid blocking
+// rotation. It prints diagnostics on timeout.
 const aptWaitShell = `
-wait_for_apt() {
-  max_tries=\${MAX_APT_WAIT_TRIES:-600}
-  tries=0
-  delay=2
+prepare_apt() {
+  max_wait=\${MAX_APT_WAIT_SECS:-600}
+  kill_threshold=\${APT_KILL_OLD_SEC:-600}
+  waited=0
+  interval=5
   while :; do
-    lock_info=""
-    for f in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
-      if [ -e "$f" ]; then
-        holders=$(fuser "$f" 2>/dev/null || true)
-        if [ -n "$holders" ]; then
-          lock_info="${lock_info}\n$f: $holders"
-        fi
-      fi
-    done
     apt_pids=$(pgrep -f "apt|apt-get|unattended-upgrade|unattended-upgrades|dpkg" || true)
-    if [ -z "$lock_info" ] && [ -z "$apt_pids" ]; then
+    if [ -z "$apt_pids" ]; then
       return 0
     fi
-    tries=$((tries+1))
-    if [ "$tries" -ge "$max_tries" ]; then
+    kill_list=""
+    for pid in $apt_pids; do
+      etimes=$(ps -o etimes= -p "$pid" 2>/dev/null || echo 0)
+      if [ -n "$etimes" ] && [ "$etimes" -ge "$kill_threshold" ]; then
+        kill_list="$kill_list $pid"
+      fi
+    done
+    if [ -n "$kill_list" ]; then
+      echo "KILL_OLD_APT:$kill_list"
+      kill -TERM $kill_list 2>/dev/null || true
+      sleep 5
+      for pid in $kill_list; do
+        if kill -0 "$pid" >/dev/null 2>&1; then
+          kill -KILL "$pid" 2>/dev/null || true
+        fi
+      done
+      dpkg --configure -a || true
+      apt-get update -qq || true
+      return 0
+    fi
+    if [ "$waited" -ge "$max_wait" ]; then
       echo "APT_LOCK_TIMEOUT"
-      if [ -n "$lock_info" ]; then
-        echo -e "Lock files held by:$lock_info"
-      fi
-      if [ -n "$apt_pids" ]; then
-        echo "Apt/dpkg processes:"
-        ps -o pid,etime,cmd -p $apt_pids 2>/dev/null || true
-      fi
+      echo "Held by pids: $apt_pids"
+      ps -o pid,etime,cmd -p $apt_pids 2>/dev/null || true
       if command -v lsof >/dev/null 2>&1; then
-        echo "lsof on known lock files:"
         lsof /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock 2>/dev/null || true
       fi
-      echo "If these are system unattended-upgrades, wait for them to finish, or run:"
-      echo "  sudo kill -TERM <pid> && sudo dpkg --configure -a"
       return 1
     fi
-    sleep $delay
-    if [ "$delay" -lt 10 ]; then
-      delay=$((delay+1))
-    fi
+    sleep $interval
+    waited=$((waited+interval))
   done
 }
+
+# Backwards-compatible wrapper
+wait_for_apt() { prepare_apt "$@"; }
 `;
 
 function normalizePanelPath(value?: string): string {

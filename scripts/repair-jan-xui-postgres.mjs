@@ -20,6 +20,57 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, "'\\''")}'`;
 }
 
+// Shell snippet to prepare/clear apt locks on remote hosts. Defines
+// prepare_apt() and a wait_for_apt() wrapper for compatibility.
+const aptWaitShell = `
+prepare_apt() {
+  max_wait=\${MAX_APT_WAIT_SECS:-600}
+  kill_threshold=\${APT_KILL_OLD_SEC:-600}
+  waited=0
+  interval=5
+  while :; do
+    apt_pids=$(pgrep -f "apt|apt-get|unattended-upgrade|unattended-upgrades|dpkg" || true)
+    if [ -z "$apt_pids" ]; then
+      return 0
+    fi
+    kill_list=""
+    for pid in $apt_pids; do
+      etimes=$(ps -o etimes= -p "$pid" 2>/dev/null || echo 0)
+      if [ -n "$etimes" ] && [ "$etimes" -ge "$kill_threshold" ]; then
+        kill_list="$kill_list $pid"
+      fi
+    done
+    if [ -n "$kill_list" ]; then
+      echo "KILL_OLD_APT:$kill_list"
+      kill -TERM $kill_list 2>/dev/null || true
+      sleep 5
+      for pid in $kill_list; do
+        if kill -0 "$pid" >/dev/null 2>&1; then
+          kill -KILL "$pid" 2>/dev/null || true
+        fi
+      done
+      dpkg --configure -a || true
+      apt-get update -qq || true
+      return 0
+    fi
+    if [ "$waited" -ge "$max_wait" ]; then
+      echo "APT_LOCK_TIMEOUT"
+      echo "Held by pids: $apt_pids"
+      ps -o pid,etime,cmd -p $apt_pids 2>/dev/null || true
+      if command -v lsof >/dev/null 2>&1; then
+        lsof /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock 2>/dev/null || true
+      fi
+      return 1
+    fi
+    sleep $interval
+    waited=$((waited+interval))
+  done
+}
+
+# Backwards-compatible wrapper
+wait_for_apt() { prepare_apt "$@"; }
+`;
+
 function connect() {
   const conn = new Client();
   return new Promise((resolve, reject) => {
