@@ -12,7 +12,7 @@ const XUI_READY_WAIT_MS = 5 * 60 * 1000;
 const XUI_READY_POLL_MS = 10000;
 const SSH_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 const XUI_INSTALL_TIMEOUT_MS = 12 * 60 * 1000;
-const XUI_INSTALL_VERSION = 'v3.2.8';
+const DEFAULT_XUI_INSTALL_VERSION = 'v3.2.8';
 
 // ================= Helpers =================
 
@@ -42,6 +42,22 @@ async function reportProgress(progress: ProgressReporter | undefined, message: s
 function shellQuote(value: string): string {
   const escaped = value.replace(/'/g, "'\\''");
   return `'${escaped}'`;
+}
+
+function getXuiInstallVersion(): string {
+  const version = (process.env.XUI_INSTALL_VERSION || DEFAULT_XUI_INSTALL_VERSION).trim();
+  if (!/^v\d+\.\d+\.\d+$/.test(version)) {
+    throw new Error(`Invalid XUI_INSTALL_VERSION "${version}". Expected a pinned tag like v3.2.8.`);
+  }
+  return version;
+}
+
+function hasNonEmptyFile(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).size > 0;
+  } catch {
+    return false;
+  }
 }
 
 // Shell snippet to wait for apt/dpkg locks to clear on remote hosts. Insert
@@ -154,7 +170,7 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
   const sqlitePath = path.join(backupsDir, `${serverName}_backup.db`);
   const postgresDumpPath = path.join(backupsDir, `${serverName}_backup.dump`);
 
-  if (fs.existsSync(archivePath)) {
+  if (hasNonEmptyFile(archivePath)) {
     candidates.push({
       kind: 'archive',
       localPath: archivePath,
@@ -162,7 +178,7 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
     });
   }
 
-  if (fs.existsSync(sqlitePath)) {
+  if (hasNonEmptyFile(sqlitePath)) {
     candidates.push({
       kind: 'sqlite',
       localPath: sqlitePath,
@@ -170,7 +186,7 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
     });
   }
 
-  if (fs.existsSync(postgresDumpPath)) {
+  if (hasNonEmptyFile(postgresDumpPath)) {
     candidates.push({
       kind: 'postgres',
       localPath: postgresDumpPath,
@@ -1224,6 +1240,15 @@ export async function actionInstall3xUI(serverName: string, progress?: ProgressR
   const config = await getRotateConfig();
   const doToken = getDoTokenForServer(serverName, config);
   const panelTarget = await getPanelTarget(serverName);
+  const xuiInstallVersion = getXuiInstallVersion();
+  const backupsDir = path.join(process.cwd(), 'backups');
+  const backupCandidates = getBackupCandidates(backupsDir, serverName);
+
+  if (backupCandidates.length < 1) {
+    throw new Error(`Backup file not found or empty before install. Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)}, ${path.join(backupsDir, `${serverName}_backup.dump`)}, or ${path.join(backupsDir, `${serverName}_backup.db`)}.`);
+  }
+
+  await reportProgress(progress, `Using 3x-ui ${xuiInstallVersion} and ${backupCandidates.length} backup candidate(s) for ${serverName}.`);
 
   // Get New IP
   await reportProgress(progress, 'Finding the new DigitalOcean public IP...');
@@ -1242,7 +1267,7 @@ export async function actionInstall3xUI(serverName: string, progress?: ProgressR
 set -e
 export DEBIAN_FRONTEND=noninteractive
 curl -fsSL https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh -o /tmp/3x-ui-install.sh
-printf '2\\n1\\ny\\n8080\\n4\\n' | bash /tmp/3x-ui-install.sh ${XUI_INSTALL_VERSION}
+printf '2\\n1\\ny\\n8080\\n4\\n' | bash /tmp/3x-ui-install.sh ${xuiInstallVersion}
 `;
     const installCmd = `timeout 12m bash -lc ${shellQuote(installScript)}`;
 
@@ -1276,9 +1301,6 @@ printf '2\\n1\\ny\\n8080\\n4\\n' | bash /tmp/3x-ui-install.sh ${XUI_INSTALL_VERS
   }
 
   // Restore DB and SSL Certificates
-  const backupsDir = path.join(process.cwd(), 'backups');
-  const backupCandidates = getBackupCandidates(backupsDir, serverName);
-
   if (backupCandidates.length > 0) {
     let selectedBackup: ValidatedBackup | null = null;
     const validationErrors: string[] = [];
