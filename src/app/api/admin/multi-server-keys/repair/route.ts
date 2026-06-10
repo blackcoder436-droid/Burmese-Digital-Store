@@ -5,7 +5,9 @@ import { apiLimiter } from '@/lib/rateLimit';
 import dbConnect from '@/lib/mongodb';
 import { createLogger } from '@/lib/logger';
 import { getEnabledServers } from '@/lib/vpn-servers';
+import { syncMultiServerKeyRecord, type MultiServerKeyAutoSyncReport } from '@/lib/multi-server-key-sync';
 import {
+  invalidateReconciliationClientCache,
   reconcileMultiServerKey,
   type ReconciliationClientSnapshot,
   type ReconciliationIssue,
@@ -184,6 +186,7 @@ export async function POST(request: NextRequest) {
     const actions: RepairAction[] = [];
     let nextSubLinks = existingSubLinks(record);
     let subLinksChanged = false;
+    let syncReport: MultiServerKeyAutoSyncReport | null = null;
 
     for (const serverResult of beforeReport.servers) {
       const server = serverById.get(serverResult.serverId);
@@ -391,9 +394,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!dryRun) {
+      const recordForSync = await db.collection('vpn_keys').findOne({ _id: objectId }) || record;
+      syncReport = await syncMultiServerKeyRecord(recordForSync, {
+        provisionMissing: true,
+        persistLinks: async (links) => {
+          await db.collection('vpn_keys').updateOne(
+            { _id: objectId },
+            { $set: { serverSubLinks: links.serverSubLinks, serverConfigLinks: links.serverConfigLinks } }
+          );
+        },
+      });
+      invalidateReconciliationClientCache();
+    }
+
     const updatedRecord = !dryRun ? await db.collection('vpn_keys').findOne({ _id: objectId }) : record;
     const afterReport = await reconcileMultiServerKey(updatedRecord || record);
-    const updatedCount = actions.filter((action) => action.status === 'updated' || action.status === 'linked').length;
+    const directUpdatedCount = actions.filter((action) => action.status === 'updated' || action.status === 'linked').length;
+    const syncUpdatedCount = syncReport
+      ? syncReport.summary.updated + syncReport.summary.linked + syncReport.summary.created
+      : 0;
+    const updatedCount = directUpdatedCount + syncUpdatedCount;
     const failedCount = actions.filter((action) => action.status === 'failed').length;
 
     // If we applied changes, sync DB expiryTime to the panel's actual expiryTime to avoid small mismatches.
@@ -437,6 +458,7 @@ export async function POST(request: NextRequest) {
         before: beforeReport,
         after: afterReport,
         subLinksChanged,
+        syncReport,
         dryRun,
         dbExpiryUpdated,
       },

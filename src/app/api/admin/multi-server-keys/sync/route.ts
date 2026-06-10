@@ -4,7 +4,7 @@ import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import dbConnect from '@/lib/mongodb';
 import { createLogger } from '@/lib/logger';
-import { reconcileMultiServerKey } from '@/lib/vpn-reconciliation';
+import { invalidateReconciliationClientCache } from '@/lib/vpn-reconciliation';
 import { syncMultiServerKeyRecord } from '@/lib/multi-server-key-sync';
 
 const log = createLogger({ route: '/api/admin/multi-server-keys/sync' });
@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
         );
       },
     });
+    invalidateReconciliationClientCache();
 
     log.info('Live 3xUI sync completed', {
       recordId: id,

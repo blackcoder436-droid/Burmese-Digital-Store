@@ -229,6 +229,17 @@ const SERVER_CLIENT_LIST_CACHE_TTL_MS = 30_000; // 30s
 const DEFAULT_CLIENT_LIST_CONCURRENCY = 4;
 const serverClientsCache = new Map<string, { ts: number; clients: ListedClient[] | null }>();
 
+export function invalidateReconciliationClientCache(serverIds?: string[]) {
+  if (!serverIds || serverIds.length === 0) {
+    serverClientsCache.clear();
+    return;
+  }
+
+  for (const serverId of serverIds) {
+    serverClientsCache.delete(serverId);
+  }
+}
+
 async function getServerClientsCached(serverId: string): Promise<ListedClient[] | null> {
   const now = Date.now();
   const cached = serverClientsCache.get(serverId);
