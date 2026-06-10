@@ -30,6 +30,7 @@ import {
 	ShieldCheck,
 	Terminal,
 	Trash2,
+	Upload,
 	XCircle,
 } from 'lucide-react';
 
@@ -503,6 +504,7 @@ async function copyText(value: string) {
 export default function RotateWizardPage() {
 	const [loading, setLoading] = useState(true);
 	const [actionLoading, setActionLoading] = useState(false);
+	const [backupUploading, setBackupUploading] = useState(false);
 	const [currentStep, setCurrentStep] = useState(1);
 	const [targetServer, setTargetServer] = useState('sg1');
 	const [config, setConfig] = useState(DEFAULT_CONFIG);
@@ -1132,6 +1134,50 @@ export default function RotateWizardPage() {
 		} finally {
 			setActionLoading(false);
 			void loadHistory(true);
+		}
+	}
+
+	async function uploadRestoreBackup(event: ChangeEvent<HTMLInputElement>) {
+		const file = event.target.files?.[0];
+		event.target.value = '';
+		if (!file) return;
+
+		const lowerName = file.name.toLowerCase();
+		if (!lowerName.endsWith('.tar.gz') && !lowerName.endsWith('.dump') && !lowerName.endsWith('.db')) {
+			toast.error('Upload .tar.gz, .dump, or .db backup files only.');
+			return;
+		}
+
+		setBackupUploading(true);
+		try {
+			const form = new FormData();
+			form.append('serverId', targetServer);
+			form.append('file', file);
+
+			const response = await fetch('/api/admin/rotate-backup', {
+				method: 'POST',
+				body: form,
+			});
+			const data = await readApiJson(response);
+			if (!data?.success) {
+				throw new Error(data?.error || 'Backup upload failed');
+			}
+
+			const message = data.message || 'Backup uploaded. Run Step 5 to restore it.';
+			setStepResults((prev) => ({
+				...prev,
+				5: { status: 'success', message },
+			}));
+			toast.success(message);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Backup upload failed';
+			setStepResults((prev) => ({
+				...prev,
+				5: { status: 'error', message },
+			}));
+			toast.error(message);
+		} finally {
+			setBackupUploading(false);
 		}
 	}
 
@@ -2082,6 +2128,20 @@ export default function RotateWizardPage() {
 									</div>
 
 									<div className="mt-6 flex flex-wrap gap-3">
+										{currentStep === 5 ? (
+											<label className={`inline-flex cursor-pointer items-center justify-center rounded-full border border-sky-400/30 bg-sky-400/10 px-6 py-3 text-sm font-semibold text-sky-100 transition-all hover:bg-sky-400/20 ${backupUploading || actionLoading ? 'pointer-events-none opacity-60' : ''}`}>
+												{backupUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+												Upload restore backup
+												<input
+													type="file"
+													accept=".dump,.db,.gz,application/gzip,application/x-gzip,application/octet-stream"
+													className="hidden"
+													disabled={backupUploading || actionLoading}
+													onChange={uploadRestoreBackup}
+												/>
+											</label>
+										) : null}
+
 										<button
 											type="button"
 											onClick={() => {
