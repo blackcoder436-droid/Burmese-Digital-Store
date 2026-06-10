@@ -51,14 +51,31 @@ function shellQuote(value: string): string {
 // and performs basic recovery (`dpkg --configure -a`) to avoid blocking
 // rotation. It prints diagnostics on timeout.
 const aptWaitShell = `
+apt_lock_holders() {
+  lock_files="/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock"
+  holders=""
+  if command -v fuser >/dev/null 2>&1; then
+    holders=$(fuser $lock_files 2>/dev/null | tr ' ' '\\n' | awk 'NF' | sort -u || true)
+  fi
+  if [ -z "$holders" ]; then
+    holders=$(pgrep -x "apt|apt-get|aptitude|dpkg|unattended-upgrade|unattended-upgrades" 2>/dev/null | sort -u || true)
+  fi
+  for pid in $holders; do
+    [ "$pid" = "$$" ] && continue
+    [ "$pid" = "$PPID" ] && continue
+    printf '%s\\n' "$pid"
+  done
+}
+
 prepare_apt() {
-  max_wait=\${MAX_APT_WAIT_SECS:-600}
-  kill_threshold=\${APT_KILL_OLD_SEC:-600}
+  max_wait=\${MAX_APT_WAIT_SECS:-900}
+  kill_threshold=\${APT_KILL_OLD_SEC:-900}
   waited=0
   interval=5
   while :; do
-    apt_pids=$(pgrep -f "apt|apt-get|unattended-upgrade|unattended-upgrades|dpkg" || true)
+    apt_pids=$(apt_lock_holders || true)
     if [ -z "$apt_pids" ]; then
+      dpkg --configure -a || true
       return 0
     fi
     kill_list=""
@@ -78,7 +95,6 @@ prepare_apt() {
         fi
       done
       dpkg --configure -a || true
-      apt-get update -qq || true
       return 0
     fi
     if [ "$waited" -ge "$max_wait" ]; then
@@ -93,6 +109,23 @@ prepare_apt() {
     sleep $interval
     waited=$((waited+interval))
   done
+}
+
+run_apt() {
+  tries=\${APT_RETRIES:-3}
+  attempt=1
+  while [ "$attempt" -le "$tries" ]; do
+    wait_for_apt || return 1
+    if apt-get -o DPkg::Lock::Timeout=120 "$@"; then
+      return 0
+    fi
+    rc=$?
+    echo "APT_COMMAND_FAILED attempt=$attempt rc=$rc: apt-get $*"
+    dpkg --configure -a || true
+    sleep $((attempt * 10))
+    attempt=$((attempt+1))
+  done
+  return "$rc"
 }
 
 # Backwards-compatible wrapper
@@ -855,10 +888,13 @@ export DEBIAN_FRONTEND=noninteractive
 ${aptWaitShell}
 
 if command -v apt-get >/dev/null 2>&1; then
+  export NEEDRESTART_MODE=a
+  export MAX_APT_WAIT_SECS=900
+  export APT_KILL_OLD_SEC=900
   wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-  apt-get update
+  run_apt update
   wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-  apt-get install -y fail2ban nftables iptables python3-pip
+  run_apt install -y fail2ban nftables iptables python3-pip
   python3 -m pip install pyasynchat --break-system-packages >/dev/null 2>&1 || true
 elif command -v dnf >/dev/null 2>&1; then
   dnf -y install fail2ban nftables iptables
@@ -941,7 +977,7 @@ fi
 sleep 2
 fail2ban-client status 3x-ipl
 `;
-  await execSsh(host, `timeout 8m bash -lc ${shellQuote(script)}`, 9 * 60 * 1000);
+  await execSsh(host, `timeout 16m bash -lc ${shellQuote(script)}`, 17 * 60 * 1000);
   await reportProgress(progress, 'Fail2Ban IP Limit jail is active.');
 }
 
@@ -1232,7 +1268,12 @@ printf '2\\n1\\ny\\n8080\\n4\\n' | bash /tmp/3x-ui-install.sh ${XUI_INSTALL_VERS
 
   if (!installed) throw new Error("Failed to connect via SSH and install 3x-ui. VPS might still be booting.");
 
-  await installFail2BanIpLimit(newIp, progress);
+  try {
+    await installFail2BanIpLimit(newIp, progress);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await reportProgress(progress, `Fail2Ban IP Limit setup did not complete: ${message.slice(0, 500)}. Continuing with 3x-ui restore so rotation can finish.`);
+  }
 
   // Restore DB and SSL Certificates
   const backupsDir = path.join(process.cwd(), 'backups');
