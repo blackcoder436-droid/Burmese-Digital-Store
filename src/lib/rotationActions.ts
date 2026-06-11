@@ -164,11 +164,23 @@ function getPanelUiPath(panelPath: string): string {
   return basePath ? `${basePath}/` : '/';
 }
 
+function isBackupFileForServer(fileName: string, serverName: string): boolean {
+  const normalizedFile = fileName.toLowerCase();
+  const normalizedServer = serverName.toLowerCase();
+  return (
+    normalizedFile === `${normalizedServer}.dump` ||
+    normalizedFile === `${normalizedServer}.db` ||
+    normalizedFile === `${normalizedServer}.tar.gz` ||
+    normalizedFile.startsWith(`${normalizedServer}_`)
+  );
+}
+
 function getBackupCandidates(backupsDir: string, serverName: string): BackupCandidate[] {
   const candidates: BackupCandidate[] = [];
   const archivePath = path.join(backupsDir, `${serverName}_backup.tar.gz`);
   const sqlitePath = path.join(backupsDir, `${serverName}_backup.db`);
   const postgresDumpPath = path.join(backupsDir, `${serverName}_backup.dump`);
+  const postgresShortDumpPath = path.join(backupsDir, `${serverName}.dump`);
 
   if (hasNonEmptyFile(archivePath)) {
     candidates.push({
@@ -194,14 +206,24 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
     });
   }
 
+  if (hasNonEmptyFile(postgresShortDumpPath)) {
+    candidates.push({
+      kind: 'postgres',
+      localPath: postgresShortDumpPath,
+      remotePath: `/root/${serverName}.dump`,
+    });
+  }
+
   if (fs.existsSync(backupsDir)) {
     const extraArchiveFiles = fs.readdirSync(backupsDir)
       .filter((file) => file.toLowerCase().endsWith('.tar.gz'))
+      .filter((file) => isBackupFileForServer(file, serverName))
       .map((file) => ({
         kind: 'archive' as const,
         localPath: path.join(backupsDir, file),
         remotePath: `/root/${file}`,
-      }));
+      }))
+      .filter((candidate) => hasNonEmptyFile(candidate.localPath));
 
     for (const candidate of extraArchiveFiles) {
       if (!candidates.some((existing) => existing.localPath === candidate.localPath)) {
@@ -211,11 +233,13 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
 
     const extraDumpFiles = fs.readdirSync(backupsDir)
       .filter((file) => file.toLowerCase().endsWith('.dump'))
+      .filter((file) => isBackupFileForServer(file, serverName))
       .map((file) => ({
         kind: 'postgres' as const,
         localPath: path.join(backupsDir, file),
         remotePath: `/root/${file}`,
-      }));
+      }))
+      .filter((candidate) => hasNonEmptyFile(candidate.localPath));
 
     for (const candidate of extraDumpFiles) {
       if (!candidates.some((existing) => existing.localPath === candidate.localPath)) {
@@ -226,6 +250,30 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
 
   return candidates;
 }
+
+const ensurePostgresRestoreToolsShell = `
+ensure_pg_restore_tools() {
+  if command -v pg_restore >/dev/null 2>&1; then
+    pg_major=$(pg_restore --version | awk '{print $3}' | cut -d. -f1)
+    if [ -n "$pg_major" ] && [ "$pg_major" -ge 16 ] 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  run_apt update -qq
+  run_apt install -y -qq ca-certificates curl gnupg lsb-release >/tmp/bds-pgdg-prep.log 2>&1 || { tail -80 /tmp/bds-pgdg-prep.log; exit 1; }
+  install -d /usr/share/postgresql-common/pgdg
+  if [ ! -s /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg ]; then
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+  fi
+  . /etc/os-release
+  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt \${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+  run_apt update -qq
+  run_apt install -y -qq postgresql-client-16 >/tmp/bds-pg-client-install.log 2>&1 || { tail -120 /tmp/bds-pg-client-install.log; exit 1; }
+  ln -sf /usr/lib/postgresql/16/bin/pg_restore /usr/local/bin/pg_restore
+  ln -sf /usr/lib/postgresql/16/bin/pg_dump /usr/local/bin/pg_dump
+}
+`;
 
 function getRotationPanelPort(serverName: string): number {
   return serverName === 'sg4' ? 2053 : 8080;
@@ -1111,16 +1159,13 @@ async function inspectRemoteBackup(host: string, backup: BackupCandidate): Promi
 set -e
 backup=${shellQuote(backup.remotePath)}
 [ -s "$backup" ] || { echo "BACKUP_DB_MISSING"; exit 1; }
-if ! command -v pg_restore >/dev/null 2>&1; then
-  export DEBIAN_FRONTEND=noninteractive
-  export NEEDRESTART_MODE=a
-  ${aptWaitShell}
-  export MAX_APT_WAIT_SECS=300
-  wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-  run_apt update -qq
-  wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-  run_apt install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
-fi
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+${aptWaitShell}
+${ensurePostgresRestoreToolsShell}
+export MAX_APT_WAIT_SECS=300
+wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+ensure_pg_restore_tools
 pg_restore --data-only --table=inbounds --file=- "$backup" 2>/dev/null | python3 -c 'import sys
 count = 0
 in_copy = False
@@ -1145,16 +1190,13 @@ tar -tzf ${shellQuote(backup.remotePath)} > "$workdir/list.txt"
 if grep -qx 'x-ui-postgres.dump' "$workdir/list.txt"; then
   tar -xzf ${shellQuote(backup.remotePath)} -C "$workdir" x-ui-postgres.dump
   [ -s "$workdir/x-ui-postgres.dump" ] || { echo "BACKUP_DB_MISSING"; exit 1; }
-  if ! command -v pg_restore >/dev/null 2>&1; then
-    export DEBIAN_FRONTEND=noninteractive
-    export NEEDRESTART_MODE=a
-      ${aptWaitShell}
-      export MAX_APT_WAIT_SECS=300
-      wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-      run_apt update -qq
-      wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
-      run_apt install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
-  fi
+  export DEBIAN_FRONTEND=noninteractive
+  export NEEDRESTART_MODE=a
+  ${aptWaitShell}
+  ${ensurePostgresRestoreToolsShell}
+  export MAX_APT_WAIT_SECS=300
+  wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+  ensure_pg_restore_tools
   pg_restore --data-only --table=inbounds --file=- "$workdir/x-ui-postgres.dump" 2>/dev/null | python3 -c 'import sys
 count = 0
 in_copy = False
@@ -1247,7 +1289,7 @@ export async function actionInstall3xUI(serverName: string, progress?: ProgressR
   const backupCandidates = getBackupCandidates(backupsDir, serverName);
 
   if (backupCandidates.length < 1) {
-    throw new Error(`Backup file not found or empty before install. Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)}, ${path.join(backupsDir, `${serverName}_backup.dump`)}, or ${path.join(backupsDir, `${serverName}_backup.db`)}.`);
+    throw new Error(`Backup file not found or empty before install. Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)}, ${path.join(backupsDir, `${serverName}_backup.dump`)}, ${path.join(backupsDir, `${serverName}.dump`)}, or ${path.join(backupsDir, `${serverName}_backup.db`)}.`);
   }
 
   await reportProgress(progress, `Using 3x-ui ${xuiInstallVersion} and ${backupCandidates.length} backup candidate(s) for ${serverName}.`);
@@ -1318,7 +1360,7 @@ printf '2\\n1\\ny\\n8080\\n4\\n' | bash /tmp/3x-ui-install.sh ${xuiInstallVersio
     }
 
     if (!selectedBackup) {
-      throw new Error(`No usable x-ui backup found for ${serverName}. ${validationErrors.join(' | ')}. Put a valid ${serverName}_backup.tar.gz, ${serverName}_backup.dump, or ${serverName}_backup.db in the backups folder and rerun Panel.`);
+      throw new Error(`No usable x-ui backup found for ${serverName}. ${validationErrors.join(' | ')}. Put a valid ${serverName}_backup.tar.gz, ${serverName}_backup.dump, ${serverName}.dump, or ${serverName}_backup.db in the backups folder and rerun Panel.`);
     }
 
     await reportProgress(progress, 'Stopping 3x-ui before database and certificate restore...');
@@ -1347,11 +1389,13 @@ tar -xzf "$backup" -C / root/cert 2>/dev/null || true
 tar -xzf "$backup" -C / root/.acme.sh 2>/dev/null || true
 [ -s "$workdir/x-ui-postgres.dump" ] || { echo "Restored PostgreSQL dump is missing or empty"; exit 1; }
 ${aptWaitShell}
+${ensurePostgresRestoreToolsShell}
 export MAX_APT_WAIT_SECS=300
 wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
 run_apt update -qq
 wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
 run_apt install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
+ensure_pg_restore_tools
 systemctl enable --now postgresql >/dev/null
 if [ -s "$pass_file" ]; then
   db_pass=$(cat "$pass_file")
@@ -1397,11 +1441,13 @@ cleanup() { rm -rf "$workdir"; }
 trap cleanup EXIT
 [ -s "$backup" ] || { echo "Restored PostgreSQL dump is missing or empty"; exit 1; }
 ${aptWaitShell}
+${ensurePostgresRestoreToolsShell}
 export MAX_APT_WAIT_SECS=300
 wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
 run_apt update -qq
 wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
 run_apt install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
+ensure_pg_restore_tools
 systemctl enable --now postgresql >/dev/null
 if [ -s "$pass_file" ]; then
   db_pass=$(cat "$pass_file")
@@ -1554,6 +1600,6 @@ fi
       inboundCount,
     };
   } else {
-    throw new Error(`Backup file not found to restore! Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)}, ${path.join(backupsDir, `${serverName}_backup.dump`)}, or ${path.join(backupsDir, `${serverName}_backup.db`)}`);
+    throw new Error(`Backup file not found to restore! Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)}, ${path.join(backupsDir, `${serverName}_backup.dump`)}, ${path.join(backupsDir, `${serverName}.dump`)}, or ${path.join(backupsDir, `${serverName}_backup.db`)}`);
   }
 }
