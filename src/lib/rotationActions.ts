@@ -1348,7 +1348,7 @@ export async function actionInstall3xUI(serverName: string, progress?: ProgressR
 set -e
 export DEBIAN_FRONTEND=noninteractive
 curl -fsSL https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh -o /tmp/3x-ui-install.sh
-printf '2\\n1\\ny\\n8080\\n4\\n' | bash /tmp/3x-ui-install.sh ${xuiInstallVersion}
+printf '2\\n1\\ny\\n${panelTarget.port}\\n4\\n' | bash /tmp/3x-ui-install.sh ${xuiInstallVersion}
 `;
     const installCmd = `timeout 12m bash -lc ${shellQuote(installScript)}`;
 
