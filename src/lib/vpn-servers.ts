@@ -96,7 +96,7 @@ const STATIC_SERVERS: Record<string, VpnServer> = {
     apiKey: '',
     domain: 'sg4.burmesedigital.store',
     subPort: 2096,
-    protocolPorts: { trojan: 24439, vless: 29338, vmess: 19266 },
+    protocolPorts: { trojan: 443, vless: 2083, vmess: 2087 },
     protocol: 'trojan',
     enabledProtocols: ['trojan', 'vless', 'vmess'],
     online: true,
@@ -242,4 +242,3 @@ export function getAllServersSync(): Record<string, VpnServer> {
   if (Object.keys(cacheServers).length === 0) return { ...STATIC_SERVERS };
   return cacheServers;
 }
-

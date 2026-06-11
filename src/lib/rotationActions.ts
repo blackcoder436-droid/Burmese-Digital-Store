@@ -30,6 +30,13 @@ type ValidatedBackup = BackupCandidate & {
   databaseKind: BackupDatabaseKind;
   inboundCount: number;
 };
+type PanelTarget = {
+  domain: string;
+  port: number;
+  panelPath: string;
+  subPort?: number;
+  protocolPorts?: Record<string, number | null | undefined>;
+};
 
 export async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -279,13 +286,42 @@ function getRotationPanelPort(serverName: string): number {
   return serverName === 'sg4' ? 2053 : 8080;
 }
 
-async function getPanelTarget(serverName: string) {
+async function getPanelTarget(serverName: string): Promise<PanelTarget> {
   const server = await VpnServer.findOne({ serverId: serverName }).lean().catch(() => null);
   return {
     domain: (server?.domain || `${serverName}.burmesedigital.store`).trim(),
     port: getRotationPanelPort(serverName),
     panelPath: normalizePanelPath(server?.panelPath),
+    subPort: typeof server?.subPort === 'number' ? server.subPort : undefined,
+    protocolPorts: server?.protocolPorts || undefined,
   };
+}
+
+function getFirewallPortsForServer(serverName: string, target: PanelTarget): number[] {
+  const ports = new Set<number>();
+  const addPort = (value?: number | null) => {
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 65535) {
+      ports.add(value);
+    }
+  };
+
+  addPort(target.port);
+  addPort(target.subPort);
+
+  for (const port of Object.values(target.protocolPorts || {})) {
+    addPort(port);
+  }
+
+  if (normalizeServerName(serverName) === 'sg4') {
+    // Cloudflare orange-cloud HTTPS proxy ports used for sg4 panel, sub links, and inbounds.
+    [443, 2053, 2083, 2087, 2096, 8443].forEach(addPort);
+  }
+
+  return [...ports].sort((a, b) => a - b);
+}
+
+function shouldProxyDnsForServer(serverName: string): boolean {
+  return normalizeServerName(serverName) === 'sg4';
 }
 
 function cleanSecret(value?: string): string {
@@ -863,7 +899,8 @@ export async function actionUpdateDNS(serverName: string) {
     throw new Error(`Cloudflare DNS Records Error: ${err.message}`);
   }
 
-  const body = JSON.stringify({ type: 'A', name: DOMAIN, content: newIp, proxied: false, ttl: 60 });
+  const proxied = shouldProxyDnsForServer(serverName);
+  const body = JSON.stringify({ type: 'A', name: DOMAIN, content: newIp, proxied, ttl: proxied ? 1 : 60 });
 
   // Update or Create
   try {
@@ -888,7 +925,7 @@ export async function actionUpdateDNS(serverName: string) {
 
   return {
     success: true,
-    message: `DNS updated successfully via ${authLabel}: ${DOMAIN} -> ${newIp}`,
+    message: `DNS updated successfully via ${authLabel}: ${DOMAIN} -> ${newIp}${proxied ? ' (Cloudflare proxied)' : ''}`,
     newIp,
     domain: DOMAIN,
     panelUrl: `https://${DOMAIN}:${panelTarget.port}${getPanelUiPath(panelTarget.panelPath)}`,
@@ -1532,8 +1569,12 @@ fi
     const sslOutput = await execSsh(newIp, sslCmd);
     const sslApplied = sslOutput.includes('SSL_APPLIED');
 
-    await reportProgress(progress, `Opening panel port ${panelTarget.port} on the VPS firewall...`);
-    await execSsh(newIp, `ufw allow ${panelTarget.port}/tcp || true`);
+    const firewallPorts = getFirewallPortsForServer(serverName, panelTarget);
+    await reportProgress(progress, `Opening VPS firewall ports: ${firewallPorts.join(', ')}...`);
+    const firewallCmd = firewallPorts
+      .map((port) => `ufw allow ${port}/tcp || true`)
+      .join('\n');
+    await execSsh(newIp, firewallCmd);
 
     await restartPanelAndXray(newIp, progress);
 

@@ -793,7 +793,7 @@ When the admin requests an action, include a structured command block:
 - sg1: Singapore 1 (jan.burmesedigital.store) - Main server
 - sg2: Singapore 2 (sg2.burmesedigital.store)
 - sg3: Singapore 3 (sg3.burmesedigital.store)
-- sg4: Singapore 4 (sg4.burmesedigital.store) - Trojan:24439, VLESS:29338, VMess:19266
+- sg4: Singapore 4 (sg4.burmesedigital.store) - Trojan:443, VLESS:2083, VMess:2087
 - us1: United States (us.burmesedigital.store)
 - ny: New York (ny.burmesedigital.store) - Trojan:25491, VLESS:27314, VMess:21784
 

@@ -7,6 +7,11 @@ export const dynamic = 'force-dynamic';
 
 const subLimiter = rateLimit({ windowMs: 60000, maxRequests: 30, prefix: 'sub' });
 const CONFIG_URI_RE = /^(?:vless|vmess|trojan|ss|hysteria|hysteria2|hy2|tuic):\/\//i;
+const LEGACY_SG4_BAD_SUB_PORT_RE = /^(https:\/\/sg4\.burmesedigital\.store):209(\/sub\/)/i;
+
+function normalizeSubscriptionLink(subLink: string): string {
+  return subLink.replace(LEGACY_SG4_BAD_SUB_PORT_RE, '$1:2096$2');
+}
 
 function extractConfigLines(body: string): string[] {
   if (!body || !body.trim()) return [];
@@ -28,20 +33,21 @@ function extractConfigLines(body: string): string[] {
 
 async function fetchSubscriptionConfigs(subLink: string): Promise<string[]> {
   if (!subLink) return [];
+  const normalizedSubLink = normalizeSubscriptionLink(subLink);
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(subLink, { signal: controller.signal, next: { revalidate: 60 } });
+    const res = await fetch(normalizedSubLink, { signal: controller.signal, next: { revalidate: 60 } });
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      console.warn('[api/vpn/sub] subLink fetch non-ok', { subLink, status: res.status });
+      console.warn('[api/vpn/sub] subLink fetch non-ok', { subLink: normalizedSubLink, status: res.status });
       return [];
     }
 
     return extractConfigLines(await res.text());
   } catch (err) {
-    console.warn('[api/vpn/sub] failed to fetch subLink', { subLink, err: String(err) });
+    console.warn('[api/vpn/sub] failed to fetch subLink', { subLink: normalizedSubLink, err: String(err) });
     return [];
   }
 }
@@ -108,6 +114,9 @@ async function appendSavedFallbackConfigs(
     }
 
     if (value.includes('/sub/')) {
+      const hostKey = endpointKeyFromSubLink(value);
+      if (hostKey && liveHostKeys.has(hostKey)) continue;
+
       const fallbackLines = await fetchSubscriptionConfigs(value);
       for (const line of fallbackLines) {
         const endpointKey = endpointKeyFromConfig(line);
