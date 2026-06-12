@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { ShoppingBag, Shield, Tv, Gamepad2, MonitorSmartphone, Gift, Box, Star, Heart, Share2, MessageSquare } from 'lucide-react';
 import { useLanguage } from '@/lib/language';
 import { useWishlist } from '@/lib/wishlist';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { appendImageVersion, hasCustomProductImage, normalizeImageSrc } from '@/lib/image';
 
@@ -30,6 +30,27 @@ export default function ProductCard({ product }: { product: Product }) {
   const normalizedImage = normalizeImageSrc(product.image);
   const imageUrl = appendImageVersion(product.image);
   const hasImage = hasCustomProductImage(product.image);
+  const isTelegramImage = typeof normalizedImage === 'string' && (normalizedImage.startsWith('telegram://') || normalizedImage.startsWith('telegram:'));
+  const [resolvedTelegramSrc, setResolvedTelegramSrc] = useState<string | null>(null);
+  const [resolvingTelegram, setResolvingTelegram] = useState(false);
+
+  // Resolve telegram:// URIs to a downloadable URL via the storage resolver endpoint.
+  // We intentionally do this on client-side to avoid blocking SSR and because Telegram URLs expire.
+  useEffect(() => {
+    let active = true;
+    if (!isTelegramImage) return;
+    setResolvedTelegramSrc(null);
+    setResolvingTelegram(true);
+    fetch(`/api/storage/resolve?url=${encodeURIComponent(normalizedImage as string)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!active) return;
+        if (data?.success && data?.url) setResolvedTelegramSrc(data.url);
+      })
+      .catch(() => {})
+      .finally(() => { if (active) setResolvingTelegram(false); });
+    return () => { active = false; };
+  }, [isTelegramImage, normalizedImage]);
   const liked = isWishlisted(product._id);
   const [showShare, setShowShare] = useState(false);
   const [imageAspect, setImageAspect] = useState<'square' | 'landscape'>('landscape');
@@ -119,26 +140,47 @@ export default function ProductCard({ product }: { product: Product }) {
               {(() => {
                 const isLogo = !!normalizedImage && /\/(logo-|icon_|Color-logo|logotype|logotype-full|logotype-full-primary|logo-full)/i.test(normalizedImage);
                 const preferContain = isLogo || imageAspect === 'square';
-                const imgSrc = imageError ? '/images/default-product.png' : imageUrl || '/images/default-product.png';
+                // If image is a Telegram storage URI, resolve it at runtime via the storage resolver endpoint
+                const imgSrc = imageError ? '/images/default-product.png' : (isTelegramImage ? normalizedImage : (imageUrl || '/images/default-product.png'));
                 const imgClass = `${preferContain ? 'object-contain' : 'object-cover'} group-hover:scale-105 transition-transform duration-500`;
+
+                // Use a standard <img> for external/resolved URIs to allow runtime src switching
                 return (
                   <>
-                    <Image
-                      src={imgSrc}
-                      alt={product.name}
-                      fill
-                      className={imgClass}
-                      onLoadingComplete={(img) => {
-                        const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
-                        setImageAspect(ratio >= 0.9 && ratio <= 1.1 ? 'square' : 'landscape');
-                      }}
-                      onError={() => setImageError(true)}
-                      unoptimized
-                    />
+                        {isTelegramImage ? (
+                          <img
+                            src={resolvedTelegramSrc || '/images/default-product.png'}
+                            alt={product.name}
+                            className={`w-full h-full ${imgClass}`}
+                            onLoad={(e) => {
+                              const el = e.currentTarget as HTMLImageElement;
+                              const ratio = el.naturalWidth / Math.max(1, el.naturalHeight);
+                              setImageAspect(ratio >= 0.9 && ratio <= 1.1 ? 'square' : 'landscape');
+                            }}
+                            onError={() => setImageError(true)}
+                          />
+                        ) : (
+                      <Image
+                        src={imgSrc}
+                        alt={product.name}
+                        fill
+                        className={imgClass}
+                        onLoadingComplete={(img) => {
+                          const ratio = img.naturalWidth / Math.max(1, img.naturalHeight);
+                          setImageAspect(ratio >= 0.9 && ratio <= 1.1 ? 'square' : 'landscape');
+                        }}
+                        onError={() => setImageError(true)}
+                        unoptimized
+                      />
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-dark-900/80" />
                   </>
                 );
               })()}
+              {
+                // Resolve telegram image URL on client
+                // (do this outside of the immediate render closure so hooks run at top-level)
+              }
             </>
           ) : (
             <>

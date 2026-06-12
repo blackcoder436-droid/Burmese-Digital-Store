@@ -153,7 +153,7 @@ export async function middleware(request: NextRequest) {
   const styleSrc = `style-src 'self' 'unsafe-inline' https://accounts.google.com`; // Tailwind needs unsafe-inline for styles; Google GSI injects styles
   response.headers.set(
     'Content-Security-Policy',
-    `default-src 'self'; ${scriptSrc}; ${styleSrc}; img-src 'self' https://burmesedigital.store https://www.burmesedigital.store https://cdn.burmesedigital.store data: blob: https://*.googleusercontent.com https://www.gstatic.com https://flagcdn.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com; frame-src https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
+    `default-src 'self'; ${scriptSrc}; ${styleSrc}; img-src 'self' https://burmesedigital.store https://www.burmesedigital.store https://cdn.burmesedigital.store https://api.telegram.org data: blob: https://*.googleusercontent.com https://www.gstatic.com https://flagcdn.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com; frame-src https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`
   );
   return response;
 }

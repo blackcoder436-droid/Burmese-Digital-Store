@@ -89,6 +89,8 @@ export default function AdminOrdersPage() {
   const [rejectReasonInput, setRejectReasonInput] = useState('');
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [deliveryMessageInput, setDeliveryMessageInput] = useState('');
+  const [resolvedScreenshotUrl, setResolvedScreenshotUrl] = useState<string | null>(null);
+  const [screenshotResolving, setScreenshotResolving] = useState(false);
   const [checklist, setChecklist] = useState({
     amountVerified: false,
     timeVerified: false,
@@ -185,6 +187,48 @@ export default function AdminOrdersPage() {
     } else {
       setDeliveryMessageInput('');
     }
+  }, [selectedOrder]);
+
+  useEffect(() => {
+    if (!selectedOrder?.paymentScreenshot) {
+      setResolvedScreenshotUrl(null);
+      setScreenshotResolving(false);
+      return;
+    }
+
+    const screenshotUrl = selectedOrder.paymentScreenshot;
+    const isTelegramScreenshot = screenshotUrl.startsWith('telegram://') || screenshotUrl.startsWith('telegram:');
+
+    if (!isTelegramScreenshot) {
+      setResolvedScreenshotUrl(screenshotUrl);
+      setScreenshotResolving(false);
+      return;
+    }
+
+    let active = true;
+    setScreenshotResolving(true);
+    setResolvedScreenshotUrl(null);
+
+    fetch(`/api/storage/resolve?url=${encodeURIComponent(screenshotUrl)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!active) return;
+        if (data?.success && data?.url) {
+          setResolvedScreenshotUrl(data.url);
+        } else {
+          setResolvedScreenshotUrl(null);
+        }
+      })
+      .catch(() => {
+        if (active) setResolvedScreenshotUrl(null);
+      })
+      .finally(() => {
+        if (active) setScreenshotResolving(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [selectedOrder]);
 
   async function fetchOcrStatus() {
@@ -446,6 +490,11 @@ export default function AdminOrdersPage() {
                       ? `VPN ${selectedOrder.vpnPlan.devices}D / ${selectedOrder.vpnPlan.months}M — ${selectedOrder.vpnPlan.serverId.toUpperCase()}`
                       : selectedOrder.product?.name || 'Product'}
                   </p>
+                  {selectedOrder.orderType !== 'vpn' && selectedOrder.quantity > 1 && (
+                    <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded text-[10px] font-bold bg-white/5 text-gray-300 border border-white/10">
+                      Qty {selectedOrder.quantity}
+                    </span>
+                  )}
                   {selectedOrder.orderType === 'vpn' && (
                     <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">VPN</span>
                   )}
@@ -501,11 +550,21 @@ export default function AdminOrdersPage() {
                   <p className="text-gray-500 text-sm mb-2">
                     {t('admin.ordersPage.paymentScreenshot')}
                   </p>
-                  <img
-                    src={selectedOrder.paymentScreenshot}
-                    alt="Payment screenshot"
-                    className="max-h-64 rounded-xl border border-dark-700"
-                  />
+                  {screenshotResolving ? (
+                    <div className="rounded-xl border border-dark-700 bg-dark-900 px-4 py-16 text-center text-sm text-gray-400">
+                      Resolving screenshot...
+                    </div>
+                  ) : resolvedScreenshotUrl ? (
+                    <img
+                      src={resolvedScreenshotUrl}
+                      alt="Payment screenshot"
+                      className="max-h-64 rounded-xl border border-dark-700"
+                    />
+                  ) : (
+                    <div className="rounded-xl border border-dark-700 bg-dark-900 px-4 py-16 text-center text-sm text-gray-400">
+                      Screenshot not available
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -810,8 +869,8 @@ export default function AdminOrdersPage() {
         </div>
       ) : (
         <div className="game-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto overscroll-x-contain scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
+            <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="text-left text-xs text-gray-400 uppercase border-b border-dark-700 bg-dark-800/50">
                   <th className="p-4 w-10">
@@ -857,7 +916,14 @@ export default function AdminOrdersPage() {
                           {order.vpnPlan.devices}D / {order.vpnPlan.months}M
                         </div>
                       ) : (
-                        order.product?.name || 'Product'
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span>{order.product?.name || 'Product'}</span>
+                          {order.quantity > 1 && (
+                            <span className="inline-flex items-center rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-gray-300 border border-white/10">
+                              ×{order.quantity}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="p-4 font-bold text-purple-400">

@@ -93,7 +93,8 @@ export default function MobileCarousel({ children, interval = 3000, className = 
     if (!c) return;
     isDragging.current = true;
     hasDragged.current = false;
-    dragStartX.current = e.pageX - c.offsetLeft;
+    const rect = c.getBoundingClientRect();
+    dragStartX.current = e.clientX - rect.left;
     dragScrollLeft.current = c.scrollLeft;
     c.style.cursor = 'grabbing';
     c.style.scrollSnapType = 'none';
@@ -105,7 +106,8 @@ export default function MobileCarousel({ children, interval = 3000, className = 
     e.preventDefault();
     const c = scrollRef.current;
     if (!c) return;
-    const walk = ((e.pageX - c.offsetLeft) - dragStartX.current) * 1.5;
+    const rect = c.getBoundingClientRect();
+    const walk = ((e.clientX - rect.left) - dragStartX.current) * 1.5;
     if (Math.abs(walk) > 5) hasDragged.current = true;
     c.scrollLeft = dragScrollLeft.current - walk;
   }, []);
@@ -197,7 +199,7 @@ export default function MobileCarousel({ children, interval = 3000, className = 
       <div
         ref={scrollRef}
         className={`flex overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2 select-none ${className}`}
-        style={{ WebkitOverflowScrolling: 'touch', cursor: 'grab', gap: `${gap}px` } as React.CSSProperties}
+        style={{ WebkitOverflowScrolling: 'touch', cursor: 'grab', gap: `${gap}px`, touchAction: 'pan-x' } as React.CSSProperties}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onMouseDown={onMouseDown}

@@ -15,6 +15,11 @@ export function normalizeImageSrc(image?: string | null): string | undefined {
   const trimmed = decoded.trim();
   if (!trimmed) return undefined;
 
+  // Preserve Telegram storage URIs as-is so they can be resolved later
+  if (trimmed.startsWith('telegram://') || trimmed.startsWith('telegram:')) {
+    return trimmed;
+  }
+
   if (
     /^https?:\/\//i.test(trimmed) ||
     trimmed.startsWith('data:') ||
@@ -39,6 +44,11 @@ export function hasCustomProductImage(image?: string | null): boolean {
 export function appendImageVersion(image?: string | null, version = '2'): string | undefined {
   const normalized = normalizeImageSrc(image);
   if (!normalized) return undefined;
+
+  // Do not attempt to append query params for Telegram URIs - return as-is
+  if (normalized.startsWith('telegram://') || normalized.startsWith('telegram:')) {
+    return normalized;
+  }
 
   try {
     const url = new URL(normalized, 'http://localhost');
