@@ -14,6 +14,7 @@ const SSH_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 // Allow more time for SSH to accept connections on slow hosts or cloud providers
 const SSH_READY_TIMEOUT_MS = Number(process.env.SSH_READY_TIMEOUT_MS || String(60 * 1000));
 const XUI_INSTALL_TIMEOUT_MS = 12 * 60 * 1000;
+const BACKUP_INSPECT_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_XUI_INSTALL_VERSION = 'v3.2.8';
 
 // ================= Helpers =================
@@ -180,6 +181,7 @@ function isBackupFileForServer(fileName: string, serverName: string): boolean {
     normalizedFile === `${normalizedServer}.dump` ||
     normalizedFile === `${normalizedServer}.db` ||
     normalizedFile === `${normalizedServer}.tar.gz` ||
+    normalizedFile === `${normalizedServer}.tgz` ||
     normalizedFile.startsWith(`${normalizedServer}_`)
   );
 }
@@ -187,15 +189,26 @@ function isBackupFileForServer(fileName: string, serverName: string): boolean {
 function getBackupCandidates(backupsDir: string, serverName: string): BackupCandidate[] {
   const candidates: BackupCandidate[] = [];
   const archivePath = path.join(backupsDir, `${serverName}_backup.tar.gz`);
+  const tgzArchivePath = path.join(backupsDir, `${serverName}_backup.tgz`);
   const sqlitePath = path.join(backupsDir, `${serverName}_backup.db`);
   const postgresDumpPath = path.join(backupsDir, `${serverName}_backup.dump`);
   const postgresShortDumpPath = path.join(backupsDir, `${serverName}.dump`);
+  const sqliteShortPath = path.join(backupsDir, `${serverName}.db`);
+  const tgzShortArchivePath = path.join(backupsDir, `${serverName}.tgz`);
 
   if (hasNonEmptyFile(archivePath)) {
     candidates.push({
       kind: 'archive',
       localPath: archivePath,
       remotePath: '/root/backup.tar.gz',
+    });
+  }
+
+  if (hasNonEmptyFile(tgzArchivePath)) {
+    candidates.push({
+      kind: 'archive',
+      localPath: tgzArchivePath,
+      remotePath: '/root/backup.tgz',
     });
   }
 
@@ -223,9 +236,28 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
     });
   }
 
+  if (hasNonEmptyFile(sqliteShortPath)) {
+    candidates.push({
+      kind: 'sqlite',
+      localPath: sqliteShortPath,
+      remotePath: `/root/${serverName}.db`,
+    });
+  }
+
+  if (hasNonEmptyFile(tgzShortArchivePath)) {
+    candidates.push({
+      kind: 'archive',
+      localPath: tgzShortArchivePath,
+      remotePath: `/root/${serverName}.tgz`,
+    });
+  }
+
   if (fs.existsSync(backupsDir)) {
     const extraArchiveFiles = fs.readdirSync(backupsDir)
-      .filter((file) => file.toLowerCase().endsWith('.tar.gz'))
+      .filter((file) => {
+        const normalizedFile = file.toLowerCase();
+        return normalizedFile.endsWith('.tar.gz') || normalizedFile.endsWith('.tgz');
+      })
       .filter((file) => isBackupFileForServer(file, serverName))
       .map((file) => ({
         kind: 'archive' as const,
@@ -1181,7 +1213,7 @@ set +a
 [ -n "\${XUI_DB_DSN:-}" ] || { echo "XUI_DB_DSN_MISSING"; exit 1; }
 psql "$XUI_DB_DSN" -tAc "select 'INBOUND_COUNT:' || count(*) from inbounds;"
 `;
-  const output = await execSsh(host, command, 30000);
+  const output = await execSsh(host, command, BACKUP_INSPECT_TIMEOUT_MS);
   const match = output.match(/INBOUND_COUNT:(\d+)/);
   if (!match) {
     throw new Error(`PostgreSQL did not return an inbound count after restore: ${output.slice(0, 300) || '(empty)'}`);
@@ -1326,9 +1358,10 @@ export async function actionInstall3xUI(serverName: string, progress?: ProgressR
   const xuiInstallVersion = getXuiInstallVersion();
   const backupsDir = path.join(process.cwd(), 'backups');
   const backupCandidates = getBackupCandidates(backupsDir, serverName);
+  const expectedBackupNames = `${serverName}_backup.tar.gz, ${serverName}_backup.tgz, ${serverName}_backup.dump, ${serverName}.dump, ${serverName}_backup.db, or ${serverName}.db`;
 
   if (backupCandidates.length < 1) {
-    throw new Error(`Backup file not found or empty before install. Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)}, ${path.join(backupsDir, `${serverName}_backup.dump`)}, ${path.join(backupsDir, `${serverName}.dump`)}, or ${path.join(backupsDir, `${serverName}_backup.db`)}.`);
+    throw new Error(`Backup file not found or empty before install. Put one of these files in ${backupsDir}: ${expectedBackupNames}.`);
   }
 
   await reportProgress(progress, `Using 3x-ui ${xuiInstallVersion} and ${backupCandidates.length} backup candidate(s) for ${serverName}.`);
@@ -1399,7 +1432,7 @@ printf '2\\n1\\ny\\n${panelTarget.port}\\n4\\n' | bash /tmp/3x-ui-install.sh ${x
     }
 
     if (!selectedBackup) {
-      throw new Error(`No usable x-ui backup found for ${serverName}. ${validationErrors.join(' | ')}. Put a valid ${serverName}_backup.tar.gz, ${serverName}_backup.dump, ${serverName}.dump, or ${serverName}_backup.db in the backups folder and rerun Panel.`);
+      throw new Error(`No usable x-ui backup found for ${serverName}. ${validationErrors.join(' | ')}. Put a valid ${expectedBackupNames} in the backups folder and rerun Panel.`);
     }
 
     await reportProgress(progress, 'Stopping 3x-ui before database and certificate restore...');
@@ -1618,7 +1651,7 @@ fi
     }
 
     if (inboundCount < 1) {
-      throw new Error(`Database restore completed from ${path.basename(selectedBackup.localPath)}, but the panel API still shows 0 inbounds. Restore a valid ${serverName}_backup.tar.gz, ${serverName}_backup.dump, or legacy ${serverName}_backup.db from Telegram/backups.`);
+      throw new Error(`Database restore completed from ${path.basename(selectedBackup.localPath)}, but the panel API still shows 0 inbounds. Restore a valid ${expectedBackupNames} from Telegram/backups.`);
     }
 
     const urlPath = getPanelUiPath(panelTarget.panelPath);
@@ -1643,6 +1676,6 @@ fi
       inboundCount,
     };
   } else {
-    throw new Error(`Backup file not found to restore! Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)}, ${path.join(backupsDir, `${serverName}_backup.dump`)}, ${path.join(backupsDir, `${serverName}.dump`)}, or ${path.join(backupsDir, `${serverName}_backup.db`)}`);
+    throw new Error(`Backup file not found to restore! Put one of these files in ${backupsDir}: ${expectedBackupNames}.`);
   }
 }
