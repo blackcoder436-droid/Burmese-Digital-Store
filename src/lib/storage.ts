@@ -220,6 +220,9 @@ class TelegramStorage implements StorageProvider {
     if (uri.startsWith('telegram://')) {
       return uri.slice('telegram://'.length);
     }
+    if (uri.startsWith('telegram:')) {
+      return uri.slice('telegram:'.length);
+    }
     return uri;
   }
 }

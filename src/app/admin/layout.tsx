@@ -98,7 +98,9 @@ export default function AdminLayout({
 
   // Lock body scroll when drawer is open on mobile
   useEffect(() => {
-    if (drawerOpen) {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 1023px)');
+    if (drawerOpen && mq.matches) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -167,8 +169,17 @@ export default function AdminLayout({
             </div>
 
             {/* Desktop: horizontal nav links */}
-            <div className="hidden lg:flex flex-1 justify-center overflow-x-auto overscroll-x-contain pb-1.5 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-purple-500/30 hover:[&::-webkit-scrollbar-thumb]:bg-purple-500/60 [&::-webkit-scrollbar-thumb]:rounded-full transition-colors">
-              <div className="flex min-w-max items-center gap-1">
+            <div
+              className="hidden lg:flex flex-1 justify-start overflow-x-auto overscroll-x-contain pb-1.5 px-4 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-purple-500/30 hover:[&::-webkit-scrollbar-thumb]:bg-purple-500/60 [&::-webkit-scrollbar-thumb]:rounded-full transition-colors"
+              onWheel={(e) => {
+                // Convert vertical wheel to horizontal scroll for the nav
+                if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+                e.currentTarget.scrollLeft += e.deltaY;
+                e.preventDefault();
+              }}
+              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+            >
+              <div className="flex min-w-max items-center gap-1 pl-2">
                 {allNavItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href;
