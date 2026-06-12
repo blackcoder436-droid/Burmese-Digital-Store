@@ -70,6 +70,21 @@ function hasNonEmptyFile(filePath: string): boolean {
   }
 }
 
+function preserveExistingBackup(filePath: string): string | null {
+  if (!hasNonEmptyFile(filePath)) return null;
+
+  const parsed = path.parse(filePath);
+  const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  const suffix = parsed.base.toLowerCase().endsWith('.tar.gz') ? '.tar.gz' : parsed.ext;
+  const baseName = parsed.base.toLowerCase().endsWith('.tar.gz')
+    ? parsed.base.slice(0, -'.tar.gz'.length)
+    : parsed.name;
+  const preservedPath = path.join(parsed.dir, `${baseName}_${timestamp}${suffix || '.bak'}`);
+
+  fs.copyFileSync(filePath, preservedPath);
+  return path.basename(preservedPath);
+}
+
 // Shell snippet to wait for apt/dpkg locks to clear on remote hosts. Insert
 // ${aptWaitShell} at the top of remote command templates that run
 // `apt-get` so the script will wait (with timeout) for package manager locks.
@@ -832,6 +847,7 @@ fi
     throw new Error("Backup process failed to create the tar.gz file. The x-ui database may be missing on the server.");
   }
   
+  const preservedBackupName = preserveExistingBackup(localDbPath);
   await sftpDownload(oldIp, `/root/${serverName}_backup.tar.gz`, localDbPath);
   
   // Clean up remote tar
@@ -850,6 +866,7 @@ fi
     oldIp,
     domain: panelTarget.domain,
     panelUrl: `https://${panelTarget.domain}:${panelTarget.port}${getPanelUiPath(panelTarget.panelPath)}`,
+    preservedBackup: preservedBackupName,
   };
 }
 
