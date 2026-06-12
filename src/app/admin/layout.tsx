@@ -167,8 +167,8 @@ export default function AdminLayout({
             </div>
 
             {/* Desktop: horizontal nav links */}
-            <div className="hidden lg:flex flex-1 justify-center overflow-x-auto pb-1.5 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-purple-500/30 hover:[&::-webkit-scrollbar-thumb]:bg-purple-500/60 [&::-webkit-scrollbar-thumb]:rounded-full transition-colors">
-              <div className="mx-auto flex w-max items-center gap-1">
+            <div className="hidden lg:flex flex-1 justify-center overflow-x-auto overscroll-x-contain pb-1.5 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-purple-500/30 hover:[&::-webkit-scrollbar-thumb]:bg-purple-500/60 [&::-webkit-scrollbar-thumb]:rounded-full transition-colors">
+              <div className="flex min-w-max items-center gap-1">
                 {allNavItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href;
@@ -257,7 +257,7 @@ export default function AdminLayout({
         </div>
       )}
 
-      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
+      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-16 lg:pb-20">
         {children}
       </div>
     </div>

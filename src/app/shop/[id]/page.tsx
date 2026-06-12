@@ -30,7 +30,7 @@ import { useLanguage } from '@/lib/language';
 import { useCart } from '@/lib/cart';
 import { useWishlist } from '@/lib/wishlist';
 import { useScrollFade } from '@/hooks/useScrollFade';
-import { hasCustomProductImage, normalizeImageSrc } from '@/lib/image';
+import { appendImageVersion, hasCustomProductImage, normalizeImageSrc } from '@/lib/image';
 
 interface Product {
   _id: string;
@@ -270,6 +270,7 @@ export default function ProductDetailPage() {
   const alreadyInCart = isInCart(product._id);
   const cartItem = getItem(product._id);
   const normalizedImage = normalizeImageSrc(product.image);
+  const imageUrl = appendImageVersion(product.image);
   const hasImage = hasCustomProductImage(product.image);
   const normalizedDescription = product.description
     .replace(/\r\n?/g, '\n')
@@ -291,10 +292,10 @@ export default function ProductDetailPage() {
         {/* Product Info */}
         <div className="scroll-fade game-card overflow-hidden mb-6" data-delay="100">
           {/* Product Image */}
-          {hasImage && normalizedImage && (
+          {hasImage && imageUrl && (
             <div className="relative w-full h-48 sm:h-64 bg-dark-900">
               <Image
-                src={`${normalizedImage}?v=2`}
+                src={imageUrl}
                 alt={product.name}
                 fill
                 className="object-contain p-3"

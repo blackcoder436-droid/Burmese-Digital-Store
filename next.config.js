@@ -17,6 +17,10 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'www.burmesedigital.store',
+      },
+      {
+        protocol: 'https',
         hostname: 'cdn.burmesedigital.store',
       },
       {

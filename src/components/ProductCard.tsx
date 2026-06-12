@@ -7,7 +7,7 @@ import { useLanguage } from '@/lib/language';
 import { useWishlist } from '@/lib/wishlist';
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { hasCustomProductImage, normalizeImageSrc } from '@/lib/image';
+import { appendImageVersion, hasCustomProductImage, normalizeImageSrc } from '@/lib/image';
 
 interface Product {
   _id: string;
@@ -28,6 +28,7 @@ export default function ProductCard({ product }: { product: Product }) {
   const { isWishlisted, toggleWishlist } = useWishlist();
   const inStock = product.stock > 0;
   const normalizedImage = normalizeImageSrc(product.image);
+  const imageUrl = appendImageVersion(product.image);
   const hasImage = hasCustomProductImage(product.image);
   const liked = isWishlisted(product._id);
   const [showShare, setShowShare] = useState(false);
@@ -118,7 +119,7 @@ export default function ProductCard({ product }: { product: Product }) {
               {(() => {
                 const isLogo = !!normalizedImage && /\/(logo-|icon_|Color-logo|logotype|logotype-full|logotype-full-primary|logo-full)/i.test(normalizedImage);
                 const preferContain = isLogo || imageAspect === 'square';
-                const imgSrc = imageError ? '/uploads/gh-pack/logo-full-dark.png' : `${normalizedImage}?v=2`;
+                const imgSrc = imageError ? '/images/default-product.png' : imageUrl || '/images/default-product.png';
                 const imgClass = `${preferContain ? 'object-contain' : 'object-cover'} group-hover:scale-105 transition-transform duration-500`;
                 return (
                   <>

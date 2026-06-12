@@ -17,7 +17,7 @@ export function LayoutShell({ navbar, footer, children }: LayoutShellProps) {
   return (
     <>
       {!isAdmin && navbar}
-      <main className={`flex-1 ${isAdmin ? 'pt-16' : 'pt-16'} relative z-10`}>
+      <main className={`flex-1 ${isAdmin ? 'pt-[64px]' : 'pt-16'} relative z-10`}>
         {children}
       </main>
       {!isAdmin && footer}

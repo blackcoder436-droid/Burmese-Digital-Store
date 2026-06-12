@@ -134,7 +134,10 @@ function ShopContent() {
       const data = await res.json();
 
       if (data.success) {
-        setProducts(data.data.products);
+        const uniqueProducts = Array.from(
+          new Map(data.data.products.map((product: Product) => [product._id, product])).values()
+        );
+        setProducts(uniqueProducts);
         setTotalPages(data.data.pagination.pages);
         setTotalProducts(data.data.pagination.total);
         if (data.data.categories) {

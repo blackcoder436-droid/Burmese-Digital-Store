@@ -35,3 +35,16 @@ export function hasCustomProductImage(image?: string | null): boolean {
   const normalized = normalizeImageSrc(image);
   return !!normalized && normalized !== '/images/default-product.png';
 }
+
+export function appendImageVersion(image?: string | null, version = '2'): string | undefined {
+  const normalized = normalizeImageSrc(image);
+  if (!normalized) return undefined;
+
+  try {
+    const url = new URL(normalized, 'http://localhost');
+    url.searchParams.set('v', version);
+    return normalized.startsWith('http') ? url.toString() : `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return normalized;
+  }
+}
