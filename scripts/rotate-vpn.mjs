@@ -48,6 +48,7 @@ const DOMAIN = `${serverName}.burmesedigital.store`;
 let config;
 let doToken = '';
 let dropletRegion = 'sgp1';
+const shouldProxyDns = serverName === 'sg4';
 
 
 // ============== HELPER FUNCTIONS ==============
@@ -330,8 +331,8 @@ async function rotateDatabase() {
         type: 'A',
         name: DOMAIN,
         content: newIp,
-        proxied: false, // VPN shouldn't be Cloudflare proxied via orange cloud
-        ttl: 60
+        proxied: shouldProxyDns,
+        ttl: shouldProxyDns ? 1 : 60
       })
     });
     console.log(`✅ DNS Record updated to point to ${newIp}`);
@@ -342,8 +343,8 @@ async function rotateDatabase() {
         type: 'A',
         name: DOMAIN,
         content: newIp,
-        proxied: false,
-        ttl: 60
+        proxied: shouldProxyDns,
+        ttl: shouldProxyDns ? 1 : 60
       })
     });
     console.log(`✅ DNS Record created for ${DOMAIN} to ${newIp}`);

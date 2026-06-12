@@ -11,6 +11,8 @@ const DROPLET_IP_POLL_MS = 15000;
 const XUI_READY_WAIT_MS = 5 * 60 * 1000;
 const XUI_READY_POLL_MS = 10000;
 const SSH_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+// Allow more time for SSH to accept connections on slow hosts or cloud providers
+const SSH_READY_TIMEOUT_MS = Number(process.env.SSH_READY_TIMEOUT_MS || String(60 * 1000));
 const XUI_INSTALL_TIMEOUT_MS = 12 * 60 * 1000;
 const DEFAULT_XUI_INSTALL_VERSION = 'v3.2.8';
 
@@ -703,11 +705,11 @@ function sftpDownload(host: string, remotePath: string, localPath: string): Prom
         });
       });
     }).on('error', reject).connect({
-      host, 
-      port: 22, 
+      host,
+      port: 22,
       username: 'root',
       password: 'Mka@2016Omk', // Hardcoded universal password as requested
-      readyTimeout: 20000
+      readyTimeout: SSH_READY_TIMEOUT_MS,
     });
   });
 }
@@ -967,7 +969,7 @@ function execSsh(host: string, command: string, timeoutMs = SSH_COMMAND_TIMEOUT_
           finish();
         }).on('data', appendOutput).stderr.on('data', appendOutput);
       });
-    }).on('error', (err: Error) => finish(err)).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: 20000 });
+    }).on('error', (err: Error) => finish(err)).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: SSH_READY_TIMEOUT_MS });
   });
 }
 
@@ -1159,7 +1161,7 @@ if not data.get("success") or not isinstance(data.get("obj"), list):
 print(f"INBOUND_COUNT:{len(data['obj'])}")
 `)}
 `;
-  const output = await execSsh(host, command, 30000);
+  const output = await execSsh(host, command);
   const match = output.match(/INBOUND_COUNT:(\d+)/);
   if (!match) {
     throw new Error(`Panel API did not return an inbound count after restore: ${output.slice(0, 300) || '(empty)'}`);
@@ -1312,7 +1314,7 @@ function sftpUpload(host: string, localPath: string, remotePath: string): Promis
           else resolve();
         });
       });
-    }).on('error', reject).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: 20000 });
+    }).on('error', reject).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: SSH_READY_TIMEOUT_MS });
   });
 }
 
