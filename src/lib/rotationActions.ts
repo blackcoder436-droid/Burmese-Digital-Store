@@ -309,9 +309,10 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
 
 const ensurePostgresRestoreToolsShell = `
 ensure_pg_restore_tools() {
+  target_major=\${PG_RESTORE_MAJOR:-18}
   if command -v pg_restore >/dev/null 2>&1; then
     pg_major=$(pg_restore --version | awk '{print $3}' | cut -d. -f1)
-    if [ -n "$pg_major" ] && [ "$pg_major" -ge 16 ] 2>/dev/null; then
+    if [ -n "$pg_major" ] && [ "$pg_major" -ge "$target_major" ] 2>/dev/null; then
       return 0
     fi
   fi
@@ -325,9 +326,9 @@ ensure_pg_restore_tools() {
   . /etc/os-release
   echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt \${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list
   run_apt update -qq
-  run_apt install -y -qq postgresql-client-16 >/tmp/bds-pg-client-install.log 2>&1 || { tail -120 /tmp/bds-pg-client-install.log; exit 1; }
-  ln -sf /usr/lib/postgresql/16/bin/pg_restore /usr/local/bin/pg_restore
-  ln -sf /usr/lib/postgresql/16/bin/pg_dump /usr/local/bin/pg_dump
+  run_apt install -y -qq postgresql-client-\${target_major} >/tmp/bds-pg-client-install.log 2>&1 || { tail -120 /tmp/bds-pg-client-install.log; exit 1; }
+  ln -sf /usr/lib/postgresql/\${target_major}/bin/pg_restore /usr/local/bin/pg_restore
+  ln -sf /usr/lib/postgresql/\${target_major}/bin/pg_dump /usr/local/bin/pg_dump
 }
 `;
 
@@ -723,8 +724,33 @@ async function getDropletPublicIp(doToken: string, serverName: string): Promise<
     headers: { 'Authorization': `Bearer ${doToken}`, 'Content-Type': 'application/json' }
   });
   const data = await res.json();
-  const droplet = data.droplets?.find((d: any) => d.name === serverName);
+  const droplets = Array.isArray(data.droplets) ? data.droplets : [];
+  const droplet = findDropletForServer(droplets, serverName);
   return droplet?.networks?.v4?.find((n: any) => n.type === 'public')?.ip_address || null;
+}
+
+function findDropletForServer(droplets: any[], serverName: string) {
+  const normalized = String(serverName || '').trim().toLowerCase();
+  if (!Array.isArray(droplets) || droplets.length === 0) return undefined;
+
+  // Preferred exact matches first
+  for (const d of droplets) {
+    const name = String(d?.name || '').toLowerCase();
+    if (!name) continue;
+    if (name === normalized) return d;
+    if (name === `${normalized}.burmesedigital.store`) return d;
+  }
+
+  // Next, try tag-based or contains/starts-with heuristics
+  for (const d of droplets) {
+    const name = String(d?.name || '').toLowerCase();
+    const tags = Array.isArray(d?.tags) ? d.tags.map(String) : [];
+    if (!name) continue;
+    if (tags.includes(normalized) || tags.includes(`server:${normalized}`)) return d;
+    if (name.startsWith(normalized) || name.includes(normalized)) return d;
+  }
+
+  return undefined;
 }
 
 async function waitForDropletPublicIp(doToken: string, serverName: string): Promise<string> {
@@ -769,16 +795,9 @@ export async function actionBackupServer(serverName: string) {
   const doToken = getDoTokenForServer(serverName, config);
   const panelTarget = await getPanelTarget(serverName);
   
-  // 1. Get current IP from DO
-  const res = await fetch(`${DO_API}/droplets`, {
-    headers: { 'Authorization': `Bearer ${doToken}`, 'Content-Type': 'application/json' }
-  });
-  const data = await res.json();
-  const droplet = data.droplets?.find((d: any) => d.name === serverName);
-  
-  if (!droplet) throw new Error(`Droplet ${serverName} not found in DigitalOcean account.`);
-  const oldIp = droplet.networks.v4.find((n: any) => n.type === 'public')?.ip_address;
-  if (!oldIp) throw new Error("Could not find public IP for current droplet.");
+  // 1. Get current IP from DO (use flexible droplet matching)
+  const oldIp = await getDropletPublicIp(doToken, serverName);
+  if (!oldIp) throw new Error(`Droplet ${serverName} not found in DigitalOcean account or it has no public IP.`);
 
   // 2. Backup DB and SSL Certs via SSH into a tar.gz
   const backupsDir = path.join(process.cwd(), 'backups');
@@ -839,7 +858,56 @@ else
   tar -tzf "$backup" | grep -qx 'etc/x-ui/x-ui.db'
 fi
 `;
-  await execSsh(oldIp, tarCmd);
+  try {
+    await execSsh(oldIp, tarCmd);
+  } catch (err: any) {
+    const msg = err instanceof Error ? err.message : String(err || '');
+    // Detect Postgres client/server version mismatch and attempt to install a compatible client
+    const versionMatch = msg.match(/server version:\s*([0-9]+)\./i);
+    if (versionMatch) {
+      const major = Number(versionMatch[1]);
+      try {
+        const installScript = `
+set -e
+export DEBIAN_FRONTEND=noninteractive
+${aptWaitShell}
+ensure_pg_client() {
+  if command -v pg_dump >/dev/null 2>&1; then
+    pg_major=$(pg_dump --version | awk '{print $3}' | cut -d. -f1)
+    if [ -n "$pg_major" ] && [ "$pg_major" -ge ${major} ] 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  run_apt update -qq
+  run_apt install -y -qq ca-certificates curl gnupg lsb-release >/tmp/bds-pgdg-prep.log 2>&1 || { tail -80 /tmp/bds-pgdg-prep.log; exit 1; }
+  install -d /usr/share/postgresql-common/pgdg
+  if [ ! -s /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg ]; then
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+  fi
+  . /etc/os-release
+  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt \${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+  run_apt update -qq
+  run_apt install -y -qq postgresql-client-${major} >/tmp/bds-pg-client-install.log 2>&1 || { tail -120 /tmp/bds-pg-client-install.log; exit 1; }
+  ln -sf /usr/lib/postgresql/${major}/bin/pg_restore /usr/local/bin/pg_restore || true
+  ln -sf /usr/lib/postgresql/${major}/bin/pg_dump /usr/local/bin/pg_dump || true
+}
+ensure_pg_client
+`;
+
+        await execSsh(oldIp, `timeout 15m bash -lc ${shellQuote(installScript)}`, 15 * 60 * 1000);
+        // Retry the original backup command after installing matching client
+        await execSsh(oldIp, tarCmd);
+      } catch (installErr: any) {
+        const installMsg = installErr instanceof Error ? installErr.message : String(installErr || '');
+        throw new Error(`PostgreSQL ${major} client install/retry failed after pg_dump version mismatch. Original error: ${msg}. Install/retry error: ${installMsg}`);
+      }
+
+      // proceed normally if retry succeeded
+    } else {
+      throw err;
+    }
+  }
   
   // Verify the file was created
   const checkTar = await execSsh(oldIp, `ls -l /root/${serverName}_backup.tar.gz || echo "NOT_FOUND"`);
@@ -853,20 +921,30 @@ fi
   // Clean up remote tar
   await execSsh(oldIp, `rm -f /root/${serverName}_backup.tar.gz`);
 
-  // 3. Send to Telegram
+  // 3. Optionally send to Telegram (do not fail backup if Telegram not configured)
   const tgToken = process.env.TELEGRAM_BOT_TOKEN;
   const tgChatId = process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_CHAT_ID;
-  if (!tgToken || !tgChatId) throw new Error("Telegram Bot Token or Chat ID not found in .env");
-
-  await sendFileTg(tgToken, tgChatId, localDbPath, `🔄 Backup DB for [ ${serverName} ] before rotation\nTimestamp: ${new Date().toISOString()}`);
+  let tgSent = false;
+  if (tgToken && tgChatId) {
+    try {
+      await sendFileTg(tgToken, tgChatId, localDbPath, `🔄 Backup DB for [ ${serverName} ] before rotation\nTimestamp: ${new Date().toISOString()}`);
+      tgSent = true;
+    } catch (err) {
+      // Do not fail the whole backup just because Telegram upload failed
+      console.error('Telegram send failed for backup:', err instanceof Error ? err.message : String(err));
+    }
+  }
 
   return {
     success: true,
-    message: `Database downloaded and sent to Telegram! Old IP was ${oldIp}`,
+    message: tgSent
+      ? `Database downloaded and sent to Telegram! Old IP was ${oldIp}`
+      : `Database downloaded to backups folder: ${localDbPath}. Telegram not configured or upload failed. Old IP was ${oldIp}`,
     oldIp,
     domain: panelTarget.domain,
     panelUrl: `https://${panelTarget.domain}:${panelTarget.port}${getPanelUiPath(panelTarget.panelPath)}`,
     preservedBackup: preservedBackupName,
+    telegramSent: tgSent,
   };
 }
 
@@ -877,12 +955,13 @@ export async function actionRecreateServer(serverName: string) {
   const dropletPayload = buildDropletCreatePayload(serverName, config);
   const region = dropletPayload.region;
 
-  // 1. Fetch current droplets to find ID
+  // 1. Fetch current droplets to find ID (use flexible droplet matching)
   const listRes = await fetch(`${DO_API}/droplets`, {
     headers: { 'Authorization': `Bearer ${doToken}`, 'Content-Type': 'application/json' }
   });
   const listData = await listRes.json();
-  const oldDroplet = listData.droplets?.find((d: any) => d.name === serverName);
+  const droplets = Array.isArray(listData.droplets) ? listData.droplets : [];
+  const oldDroplet = findDropletForServer(droplets, serverName);
   const oldIp = oldDroplet?.networks?.v4?.find((n: any) => n.type === 'public')?.ip_address || null;
 
   // 2. Delete old droplet if exists
@@ -1335,7 +1414,7 @@ PY
 `;
   }
 
-  const output = await execSsh(host, command, 30000);
+  const output = await execSsh(host, command, BACKUP_INSPECT_TIMEOUT_MS);
   const kindMatch = output.match(/BACKUP_KIND:(sqlite|postgres)/);
   const match = output.match(/INBOUND_COUNT:(\d+)/);
   if (!kindMatch || !match) {
@@ -1502,7 +1581,10 @@ if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname='
   runuser -u postgres -- createdb -O "$db_user" "$db_name"
 fi
 runuser -u postgres -- psql -v ON_ERROR_STOP=1 -d "$db_name" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION $db_user;" >/dev/null
-PGPASSWORD="$db_pass" pg_restore -h 127.0.0.1 -U "$db_user" -d "$db_name" --no-owner --no-privileges "$workdir/x-ui-postgres.dump"
+restore_sql="$workdir/x-ui-postgres.sql"
+pg_restore --no-owner --no-privileges --file="$restore_sql" "$workdir/x-ui-postgres.dump"
+sed -i '/^SET transaction_timeout = 0;$/d' "$restore_sql"
+PGPASSWORD="$db_pass" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$db_user" -d "$db_name" -f "$restore_sql"
 dsn="postgres://$db_user:$db_pass@127.0.0.1:5432/$db_name?sslmode=disable"
 if [ -f "$workdir/x-ui-default.env" ]; then
   grep -v -E '^(XUI_DB_TYPE|XUI_DB_DSN)=' "$workdir/x-ui-default.env" > /etc/default/x-ui || true
@@ -1554,7 +1636,10 @@ if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname='
   runuser -u postgres -- createdb -O "$db_user" "$db_name"
 fi
 runuser -u postgres -- psql -v ON_ERROR_STOP=1 -d "$db_name" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION $db_user;" >/dev/null
-PGPASSWORD="$db_pass" pg_restore -h 127.0.0.1 -U "$db_user" -d "$db_name" --no-owner --no-privileges "$backup"
+restore_sql="$workdir/x-ui-postgres.sql"
+pg_restore --no-owner --no-privileges --file="$restore_sql" "$backup"
+sed -i '/^SET transaction_timeout = 0;$/d' "$restore_sql"
+PGPASSWORD="$db_pass" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$db_user" -d "$db_name" -f "$restore_sql"
 dsn="postgres://$db_user:$db_pass@127.0.0.1:5432/$db_name?sslmode=disable"
 : > /etc/default/x-ui
 {
