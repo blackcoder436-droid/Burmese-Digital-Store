@@ -1,6 +1,6 @@
 # Burmese Digital Store Roadmap
 
-Updated: 2026-06-06
+Updated: 2026-06-13
 
 ဒီ file ကို project ရဲ့ living todo/roadmap အဖြစ်သုံးပါ။ အလုပ်တစ်ခုစလုပ်ရင် `[ ]` ကနေ `[~]` ပြောင်း၊ ပြီးသွားရင် `[x]` ပြောင်းပါ။
 
@@ -10,158 +10,273 @@ Status legend:
 - `[x]` ပြီးပြီ
 - `[!]` blocker/risk ရှိ
 
-## Current Focus
+---
 
-အခုအရင်ဆုံး focus က VPN multi-server reliability ပါ။ Customer key တစ်ခု date ပြောင်းတဲ့အခါ DB, master sub link, 3x-ui panels အားလုံး တစ်သံတည်းဖြစ်ရမယ်။
+## Project Overview
 
-Latest note:
-- Architecture decision: 3xUI live data is the key source for expiry/devices/data/status. WEB DB is for order/history/index/mapping only.
-- May-Zin migrated record DB expiry: `2026-09-05T03:59:59.999Z`.
-- Linked SG1 active client က expiry မှန်နေပြီး old SG1 disabled orphan row တစ်ခုကျန်နေတယ်။
-- Legacy invalid-email rows တွေအတွက် clients API reject ဖြစ်ရင် safe rename + UUID/password legacy update/delete fallback ထည့်ပြီးပြီ။
+**Burmese Digital Store** is a full-stack Next.js 15 e-commerce platform selling digital products (VPN, streaming, gaming credits, software, gift cards) in Myanmar. It features OCR-based payment verification, multi-server 3x-UI VPN provisioning, admin dashboard, Telegram bot integration, AI chat support, and fraud detection.
 
-## Phase 0 - VPN Stability And Repair
+### Tech Stack
 
-- [x] Manual repair button ထည့်ထား: linked client drift ကို DB values နဲ့ပြင်၊ single orphan candidate ကို safe link လုပ်.
-- [x] 3xUI live-source actions ထည့်ထား: WEB edit/disable/delete က live 3xUI clients ကိုပဲ mutate လုပ်ပြီး WEB DB key fields ကို source of truth မလုပ်.
-- [x] Cron VPN drift audit ကို read-only ထား: API token နဲ့ 3xUI live state ဖတ်ပြီး drift report ပဲထုတ်၊ WEB DB overwrite/panel auto-repair မလုပ်.
-- [x] Multi-server key edit/sync fallback matching ကို sanitized/migration/per-server names တွေအတွက်ပြင်ထား။
-- [x] SG1 May-Zin case ကို DB + panel read-only audit လုပ်ပြီး current state မှတ်ထား။
-- [x] VPN reconciliation API/report ထည့်ရန်: DB `vpn_keys` vs panel clients expiry/status/subId compare.
-- [x] Reconciliation result ကို admin UI မှာပြရန်: OK, drift, missing, orphan/unlinked.
-- [x] Bulk repair action ထည့်ထား: selected records ကို expiry/devices/data/status resync.
-- [x] Orphan cleanup dry-run API/UI ထည့်ထား: delete/disable/update မလုပ်ခင် affected clients list + recommendation ပြရန်.
-- [x] Invalid legacy client email handling ပိုခိုင်အောင်လုပ်ရန်: update မရသော old email rows အတွက် safe rename/delete fallback.
-- [x] Live Refresh/Reconcile response ကို detailed ဖြစ်အောင်လုပ်ထား: OK, drift, missing, orphan, error ကို server-wise ပြ.
-- [x] Expiry date policy သတ်မှတ်ထားပြီး: admin date picker/display ကို Myanmar local day end (MMT) အရပြောင်းထားသည်.
-- [ ] 3x-ui panel API tests/mock tests ထည့်ရန်: config link resolve fail, sub link stale, name fallback, duplicate prevention.
-- [x] Admin multi-server details modal ထဲမှာ panel drift warning badge ထည့်ထားသည်.
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 15 App Router, React 18, Tailwind CSS (dark cyberpunk theme) |
+| Backend | Next.js API Routes |
+| Database | MongoDB + Mongoose |
+| Auth | JWT (HttpOnly cookies) |
+| OCR | Tesseract.js |
+| Rate Limiting | Upstash Redis |
+| Storage | Local / S3 / Telegram |
+| VPN Control | 3x-UI Panel API |
+| Bot | Telegram Bot (order notifications + user-facing VPN bot) |
+| AI | GitHub Models API (GPT-4.1) |
+| Testing | Vitest + Playwright |
+| CI/Quality | Husky + lint-staged + ESLint |
 
-Recommended order:
-1. Reconciliation report API.
-2. Admin UI drift table.
-3. Manual repair button.
-4. Orphan cleanup dry-run.
-5. Automated nightly drift audit.
+### Project Structure (src/)
 
-## Phase 1 - Admin Operations Dashboard
+```
+src/
+├── app/                    # Next.js App Router pages + API routes
+│   ├── page.tsx            # Home with hero, categories, how-it-works
+│   ├── layout.tsx          # Root layout + fonts + PWA + JSON-LD
+│   ├── shop/               # Product browsing
+│   ├── vpn/                # VPN plans page + order flow
+│   ├── account/            # User dashboard: orders, vpn-keys, support, wishlist, subs
+│   ├── admin/              # Full admin panel: 13+ sections
+│   ├── api/                # 20+ API route groups
+│   └── cart/ checkout/ contact/ domains/ login/ register/ migrate/ etc.
+├── components/             # Reusable UI (15+ components)
+├── lib/                    # Core: auth, mongodb, xui, vpn-sync, ocr, rate-limit, security, etc.
+├── models/                 # 20+ Mongoose schemas (User, Order, Product, VpnServer, etc.)
+├── types/                  # TypeScript interfaces
+├── hooks/                  # Custom hooks
+├── modules/                # Feature modules (ai-ops/)
+└── middleware.ts           # Route protection + security headers
+```
 
-- [ ] Server health dashboard ကိုပိုခိုင်အောင်လုပ်ရန်: latency, login/API status, enabled protocols, inbound port mismatch.
-- [ ] Server issue alert ထည့်ရန်: Telegram/admin notification when panel down or drift found.
-- [ ] VPN server CRUD မှာ validation ပိုတင်းရန်: domain allowlist, panel path, sub port, protocol ports.
-- [ ] Rotate/replace server workflow ကို checklist UI နဲ့ပြရန်: backup, restore, DNS, health check, test key.
-- [ ] Backup restore drill မှတ်တမ်းထားရန်: last backup time, last restore test time, backup file size.
-- [ ] Admin activity logs ကို high-risk actions အတွက်ပိုပြီး detail မှတ်ရန်: VPN repair, deletion, server changes.
-- [ ] Admin bulk actions ထည့်ရန်: disable expired, sync selected, export selected, notify customers.
-- [ ] Rate-limit monitor page ထည့်ရန်: blocked IPs, route hit counts, fail-closed status.
+### Key Architecture Decisions
 
-## Phase 2 - Customer VPN Experience
+1. **VPN: 3xUI live data is the source of truth** for expiry/devices/data/status. WEB DB stores order/history/index/mapping only.
+2. **Expiry policy**: Myanmar local day end (`23:59:59 MMT`) for display/picking. UTC for canonical storage.
+3. **Multi-server VPN keys**: single customer token aggregates sub-links from multiple 3xUI panels into one subscription endpoint.
+4. **Payment verification**: OCR-based with manual review fallback. Auto-approve for verified payments.
+5. **Security-first**: rate limiting, CSP nonces, input validation, SSRF hardening (VPN_SERVER_ALLOWED_HOSTS).
 
-- [ ] `/account/vpn-keys` ကိုပိုကောင်းအောင်လုပ်ရန်: server status, expiry countdown, traffic used, data limit.
-- [ ] QR code per config and master sub link ထည့်ရန်.
-- [ ] One-tap import buttons ထည့်ရန်: v2rayN, Clash, NekoBox compatible hints.
-- [ ] Renewal/extend flow ထည့်ရန်: existing key ကို date extend လုပ်ပြီး panels sync.
-- [ ] VPN expiry reminders ထည့်/စစ်ရန်: 7 days, 3 days, 1 day, expired.
-- [ ] Free test anti-abuse ပိုခိုင်အောင်လုပ်ရန်: user/device/IP/payment fingerprint checks.
-- [ ] Customer-facing key status checker ထည့်ရန်: token/sub link ဖြင့် status check.
-- [ ] Migration page ကို safety ပိုတင်းရန်: old key revoke confirmation, duplicate/orphan detection.
+---
 
-## Phase 3 - Store, Orders, And Payments
+## Phase 0 - VPN Stability & Reliability [≈90% complete]
 
-- [ ] Order approve flow ကိုပိုမြန်အောင်လုပ်ရန်: checklist, OCR, fraud flags, payment proof preview တစ်နေရာတည်း.
-- [ ] Payment method config UI ကိုစစ်ပြီး active/inactive, QR/account copy, limits ထည့်ရန်.
-- [ ] Fraud review queue ကိုလုပ်ရန်: duplicate txid/screenshot, suspicious amount, first-time user.
-- [ ] Product stock management ကိုပိုခိုင်အောင်လုပ်ရန်: low-stock alert, back-in-stock notification.
-- [ ] Digital product delivery audit ထည့်ရန်: delivered key history, who approved, retry delivery.
-- [ ] Cart abandoned analytics ထည့်ရန်: cart created but not paid, recovery campaign.
-- [ ] Coupon campaign tools ထည့်ရန်: usage cap, first-order only, expiry, per-category.
-- [ ] Invoice/receipt PDF ကို customer/admin UI မှ download လုပ်နိုင်အောင်စစ်ရန်.
-- [ ] Refund/partial refund workflow ထည့်ရန်.
+- [x] Manual repair button: linked client drift fix, safe orphan linking
+- [x] 3xUI live-source actions: WEB edit/disable/delete mutates live panel, not DB
+- [x] Cron VPN drift audit: read-only, report only, no auto-repair
+- [x] Multi-server key edit/sync fallback matching
+- [x] VPN reconciliation API + report: DB vpn_keys vs panel clients compare
+- [x] Reconciliation UI in admin: OK, drift, missing, orphan status
+- [x] Bulk repair action: selected records resync expiry/devices/data/status
+- [x] Orphan cleanup dry-run API/UI: shows impact before action
+- [x] Invalid legacy client email handling: safe rename → UUID/password fallback
+- [x] Live Refresh/Reconcile detailed response: per-server OK/drift/missing/orphan/error
+- [x] Expiry date policy: MMT day-end settled
+- [x] Admin multi-server details modal with panel drift warning badge
+- [ ] **3x-UI panel API tests/mock tests**: config link resolve fail, sub link stale, name fallback, duplicate prevention (partially done, needs more coverage)
+- [ ] **Nightly automated drift audit cron**: Telegram/email report on schedule
+- [ ] **Reconciliation pagination**: handle 500+ keys without timeout
+- [ ] **Sub-link health monitoring**: proactive detection of stale/404 sub links across servers
 
-## Phase 4 - AI Ops, Facebook, And Social Tools
+---
 
-- [ ] AI support assistant knowledge base ကို clean source files နဲ့ပြန်စီရန်.
-- [ ] AI chat handoff flow ထည့်ရန်: bot cannot answer -> admin queue.
-- [ ] Facebook Messenger bot replies ကို production-safe ဖြစ်အောင်လုပ်ရန်: rate limits, logging, fallback answers.
-- [ ] Social post scheduler ကို finish/polish လုပ်ရန်: draft, approve, schedule, publish status.
-- [ ] Product/order knowledge sync ထည့်ရန်: AI က current products/prices/promos သိအောင်.
-- [ ] Admin AI Ops dashboard မှာ unresolved customer questions list ထည့်ရန်.
-- [ ] Auto FAQ generator ထည့်ရန်: repeated support questions -> FAQ suggestions.
+## Phase 1 - Admin Operations Dashboard [≈40% complete]
 
-## Phase 5 - Security, Quality, And Maintainability
+- [x] Basic admin dashboard with orders, users, products, servers pages
+- [x] VPN keys management UI (multi-server view)
+- [x] Order approval/rejection workflow with OCR preview
+- [x] Admin activity logging (20+ action types)
+- [ ] **Server health dashboard**: latency, login/API status, enabled protocols, inbound port mismatch
+- [ ] **Server issue alert system**: Telegram/admin notification when panel down or drift found
+- [ ] **VPN server CRUD validation**: domain allowlist, panel path validation, sub port ranges, protocol port constraints
+- [ ] **Rotate/replace server workflow** with checklist UI: backup → restore → DNS → health check → test key
+- [ ] **Backup restore drill tracking**: last backup time, last restore test time, backup file size
+- [ ] **Admin activity log enrichment**: high-risk actions (VPN repair, deletion, server changes) get extra detail
+- [ ] **Admin bulk actions**: disable expired, sync selected, export selected, notify customers
+- [ ] **Rate-limit monitor page**: blocked IPs, route hit counts, fail-closed status
+- [ ] **Admin notification center UI**: in-app bell with order alerts, system messages, drift warnings
+- [ ] **Audit trail export**: CSV/JSON export of activity logs with filters
 
-- [ ] Server apt lock/hold policy ထည့်ရန်: unattended `apt` upgrades မလုပ်စေရန်, package holds/deploy window သတ်မှတ်ရန်.
-- [ ] Test coverage တိုးရန်: VPN sync, orders, auth, payment, product import.
-- [ ] E2E tests တိုးရန်: checkout, admin approve, VPN key create/sync.
-- [ ] Error reporting/monitoring setup ထည့်ရန်: production crash, API failure, panel failure alerts.
-- [ ] Backup retention policy document/update လုပ်ရန်.
-- [ ] Server egress firewall policy document/update လုပ်ရန်.
+---
 
-## Phase 6 - Better Functions To Add
+## Phase 2 - Customer VPN Experience [≈30% complete]
 
-- [ ] Referral/affiliate system: invite code, reward coupon, referral dashboard.
-- [ ] Loyalty points: repeat customers အတွက် points/discount.
-- [ ] Support ticket chat: order/VPN issue ကို ticket နဲ့ track.
-- [ ] Product reviews/ratings: verified buyer only.
-- [ ] Subscription/bundle products: VPN + digital products bundle pricing.
-- [ ] Notification center: order, VPN, stock, support, promo notifications.
-- [ ] Admin command palette: search users/orders/keys quickly.
-- [ ] Mobile app plan: Expo/React Native foundation after web/admin reliability is stable.
-- [ ] PWA polish: install prompt, offline shell, cached product browsing.
-- [ ] Customer self-service repair: regenerate sub link, refresh QR, check status.
+- [x] VPN order flow: server selection, protocol choice, payment upload
+- [x] Multi-server subscription: single token aggregates all server configs
+- [x] VPN status API: live traffic stats from 3xUI, expiry countdown
+- [x] `/account/vpn-keys` page: basic list of provisioned keys
+- [ ] **VPN key page polish**: expiry countdown (live), traffic used/data limit graph, server status indicators (online/offline/latency)
+- [ ] **QR code per config + master sub link**: scan-to-import
+- [ ] **One-tap import buttons**: v2rayN, Clash Meta, NekoBox, Sing-box hints
+- [ ] **Renewal/extend flow**: extend existing key date, auto-sync to panels
+- [ ] **VPN expiry reminders**: 7d/3d/1d/expired notifications (Telegram + in-app)
+- [ ] **Free trial anti-abuse**: phone/device/IP/payment fingerprint + rate limits
+- [ ] **Customer-facing key status checker**: public page by token or sub link
+- [ ] **Migration page safety**: old key revoke confirmation, duplicate/orphan detection
+- [ ] **Protocol change on existing key**: e.g. trojan → vless without re-ordering
+- [ ] **Server change on existing key**: migrate to different server with data preserved
 
-## Immediate 7-Day Plan
+---
 
-Day 1:
-- [x] VPN reconciliation API/report စလုပ်.
-- [x] SG1 missing/stale link samples ကို reconciliation/orphan report ထဲမြင်နိုင်အောင်လုပ်.
+## Phase 3 - Store, Orders & Payments [≈50% complete]
 
-Day 2:
-- [x] Admin multi-server details page မှာ drift table ထည့်.
-- [x] Manual sync/repair button ထည့်.
+- [x] Product CRUD with categories, stock, details, images
+- [x] Order creation with payment screenshot upload + OCR
+- [x] Order approve/reject flow with Telegram notification
+- [x] Fraud detection: duplicate txid, screenshot hash, first-time user, amount threshold
+- [x] Coupon system: percentage/fixed, usage caps, per-user limits, categories
+- [x] Payment gateway config model + API
+- [x] Cart system with MongoDB persistence
+- [x] Order history in account dashboard
+- [ ] **Order approve flow unification**: checklist (OCR/fraud/amount/time), preview, approve/reject — all in one panel
+- [ ] **Payment method config UI**: active/inactive toggle, QR upload, account copy, per-method limits
+- [ ] **Fraud review queue**: dedicated admin page with flagged orders, severity sort, quick actions
+- [ ] **Product stock management**: low-stock alert, back-in-stock notification for customers
+- [ ] **Digital product delivery audit**: delivered key history, who approved, retry delivery button
+- [ ] **Cart abandoned analytics**: cart created but not paid → recovery campaign (email/Telegram)
+- [ ] **Coupon campaign tools**: usage cap per campaign, first-order-only, expiry date, per-category
+- [ ] **Invoice/receipt PDF**: downloadable from customer + admin UI
+- [ ] **Refund/partial refund workflow**: order status → refund, stock restore, notification
+- [ ] **Auto-reject stale payments**: cron for orders stuck in `verifying` beyond payment window
+- [ ] **Bulk order export**: CSV/JSON by date range, status, payment method
 
-Day 3:
-- [x] Orphan cleanup dry-run API/UI ထည့်.
-- [x] Invalid-email legacy client strategy ဆုံးဖြတ်: safe rename first, then UUID/password legacy update/delete fallback.
+---
 
-Day 4:
-- [ ] Tests: multi-server sync fallback + duplicate prevention.
-- [x] `npm run test`, `npx tsc --noEmit`, build check. (passed)
+## Phase 4 - AI Ops, Facebook & Social Tools [≈25% complete]
 
-Day 5:
-- [ ] Customer VPN key page polish: expiry countdown, QR, traffic, server list.
+- [x] AI chat widget (customer-facing) with GitHub Models API
+- [x] AI chat session management in MongoDB
+- [x] Basic AI ops module (`src/modules/ai-ops/`)
+- [ ] **AI support knowledge base**: clean source files → structured KB for accurate answers
+- [ ] **AI chat handoff flow**: bot cannot answer → admin queue with conversation history
+- [ ] **Facebook Messenger bot**: production-safe replies with rate limits, logging, fallback
+- [ ] **Social post scheduler**: draft → approve → schedule → publish status tracking
+- [ ] **Product/order knowledge sync**: AI knows current products, prices, promos
+- [ ] **Admin AI Ops dashboard**: unresolved customer questions list, answer quality metrics
+- [ ] **Auto FAQ generator**: repeated support questions → FAQ suggestions
+- [ ] **Telegram bot polish**: inline keyboards, order status queries, key regeneration
+- [ ] **Multi-language AI responses**: detect user language, respond in Myanmar/English
 
-Day 6:
-- [ ] Admin server health/alert improvements.
+---
 
-Day 7:
-- [ ] Deployment checklist + rollback plan.
-- [ ] Roadmap update: finished items check off, next sprint choose.
+## Phase 5 - Security, Quality & Maintainability [≈40% complete]
 
-## Decisions Needed
+- [x] Rate limiting on all API endpoints (Upstash Redis + in-memory fallback)
+- [x] JWT in HttpOnly cookies, bcrypt (12 rounds) for passwords
+- [x] Input validation (Zod schemas for env, sanitization utilities)
+- [x] CSP with nonces via middleware
+- [x] SSRF hardening with VPN_SERVER_ALLOWED_HOSTS
+- [x] Screenshot validation: type, size, path traversal protection
+- [x] QR code + PDF generation utilities
+- [x] ESLint + Husky + lint-staged pre-commit checks
+- [x] Basic test suite (Vitest) + E2E (Playwright)
+- [x] Error reporting setup with Telegram channel
+- [ ] **Server apt lock/hold policy**: prevent unattended upgrades, deployment window
+- [ ] **Test coverage expansion**: VPN sync, orders, auth, payment, product import — target 60%+ coverage
+- [ ] **E2E tests expansion**: checkout flow, admin approve, VPN key create/sync
+- [ ] **Backup retention policy**: document + auto-cleanup old backups
+- [ ] **Server egress firewall policy**: document + audit rules
+- [ ] **Secrets rotation**: auto-rotate 3xUI API keys, JWT secret, Telegram tokens
+- [ ] **Dependency audit**: automated `npm audit` + critical fix pipeline
+- [ ] **Load testing**: VPN sub endpoint, order creation, product listing under concurrent users
+- [ ] **TypeScript strictness**: reduce `any` usage, fully type API responses
 
-- [ ] Orphan/duplicate VPN clients ကို auto delete လုပ်မလား, admin approve after dry-run လုပ်မလား.
-- [x] Expiry date display/update သတ်မှတ်ပြီး: Myanmar local day end (`23:59:59 MMT`) ဖြင့် ပြသ/သတ်မှတ်မည်။ Server-side canonical storage ကို UTC ဖြင့် သိမ်းဆည်းပြီး UI (date picker/display) တွင် MMT အရ ပြသ/ပြောင်းလဲ၍ သိမ်းမည်။
-- [ ] Next sprint priority: VPN reliability first, or customer UX first.
-- [ ] Payment gateway priority: local manual payments polish, Stripe, crypto, or bank transfer.
-- [ ] Mobile app ကိုဘယ်အချိန်စမလဲ: web/admin stable ပြီးမှစတာ recommend.
+---
 
-## Parking Lot
+## Phase 6 - Feature Expansion
 
-ဒီ ideas တွေကကောင်းပေမယ့် အခုချက်ချင်းမလုပ်သေးသင့်တဲ့ backlog:
+- [ ] **Referral/affiliate system**: invite code, reward coupon, referral dashboard
+- [ ] **Loyalty points**: repeat customers → points → discount
+- [ ] **Support ticket system**: order/VPN issue tracking per customer
+- [ ] **Product reviews/ratings**: verified buyer only, helpful votes
+- [ ] **Subscription/bundle products**: VPN + streaming bundle pricing
+- [ ] **Notification center**: unified in-app notifications (order, VPN, stock, support, promo)
+- [ ] **Admin command palette**: Ctrl+K search for users/orders/keys
+- [ ] **Mobile app (Expo/React Native)**: after web/admin reliability is stable
+- [ ] **PWA polish**: install prompt UX, offline shell, cached product catalog
+- [ ] **Customer self-service repair**: regenerate sub link, refresh QR, check status without admin
+- [ ] **VPS marketplace**: VPS plans, provisioning, SSH key management
+- [ ] **Domain registration**: domain search, WHOIS lookup, DNS management
+- [ ] **WhatsApp integration**: order notifications + customer support channel
+- [ ] **Payment gateway expansion**: Stripe, PayPal, crypto (USDT)
 
-- [ ] Full mobile app.
-- [ ] Advanced AI sales agent with auto checkout.
-- [ ] Multi-language marketing landing pages.
-- [ ] Advanced analytics warehouse.
-- [ ] Auto server provisioning from cloud providers.
-- [ ] Public status page for VPN servers.
+---
 
-## Working Rule
+## Immediate 14-Day Sprint Plan
 
-အလုပ်စဉ်တိုင်း:
-1. Roadmap item ကို `[~]` ပြောင်း.
-2. Small branch/task တစ်ခုအနေနဲ့လုပ်.
-3. Test/typecheck/build စစ်.
-4. Result ကို roadmap ထဲ `[x]` ပြောင်းပြီး note ထည့်.
-5. Deploy မတိုင်ခင် rollback plan ရှိရမယ်.
+### Week 1: VPN Reliability & Admin Tools (Days 1-7)
+
+| Day | Focus | Tasks |
+|-----|-------|-------|
+| **1** | Reconciliation & Monitoring | ✓ Nightly drift audit cron ✓ Sub-link health check ✓ Reconciliation pagination |
+| **2** | Server Health Dashboard | ✓ Latency/status panel ✓ Enabled protocol view ✓ Port mismatch detection ✓ Drift alerts |
+| **3** | VPN Key UI Polish | ✓ Expiry countdown (live) ✓ Traffic usage graph ✓ Server status indicators ✓ QR code generation |
+| **4** | 3xUI Tests | ✓ Config link resolve fail ✓ Sub link stale ✓ Name fallback ✓ Duplicate prevention ✓ Panel mock tests |
+| **5** | Customer VPN Experience | ✓ Renewal/extend flow ✓ Free trial anti-abuse ✓ Key status checker (public) |
+| **6** | Admin Bulk Actions | ✓ Disable expired ✓ Sync selected ✓ Export selected ✓ Notify customers |
+| **7** | Admin Notification Center | ✓ In-app bell ✓ Drift warnings ✓ Order alerts ✓ System messages |
+
+### Week 2: Store & Payment Ops (Days 8-14)
+
+| Day | Focus | Tasks |
+|-----|-------|-------|
+| **8** | Order Approve Flow | ✓ Unified approve panel (checklist + OCR + fraud + preview) ✓ Payment method config UI |
+| **9** | Fraud Review Queue | ✓ Admin fraud page ✓ Severity sort ✓ Quick actions ✓ Duplicate detection dashboard |
+| **10** | Stock & Delivery | ✓ Low-stock alerts ✓ Back-in-stock notification ✓ Delivery audit log ✓ Retry delivery |
+| **11** | Cart & Coupon Tools | ✓ Cart abandoned analytics ✓ Recovery campaign ✓ Coupon campaign management ✓ Usage reports |
+| **12** | PDF & Refunds | ✓ Invoice/receipt PDF generation ✓ Refund workflow ✓ Auto-reject stale payments ✓ Bulk export |
+| **13** | AI & Telegram Polish | ✓ AI knowledge base cleanup ✓ Chat handoff to admin ✓ Telegram bot inline keyboards ✓ FAQ generator |
+| **14** | Security & Testing | ✓ Test coverage expansion ✓ E2E checkout VPN test ✓ Backup retention policy ✓ Secrets rotation |
+
+---
+
+## Decisions Made
+
+| Decision | Resolution |
+|----------|-----------|
+| Orphan/duplicate VPN clients auto-delete? | **No** — admin approve after dry-run report |
+| Expiry date display policy | **Myanmar local day end** (`23:59:59 MMT`) for UI, UTC for storage |
+| VPN source of truth | **3xUI live panel data**, WEB DB is index/mapping only |
+| Payment auto-approve | **Yes** — OCR match confidence > 60% + amount verification, configurable delay |
+| AI model | **GitHub Models (GPT-4.1)** — cheaper than OpenAI direct, good Myanmar language support |
+
+## Decisions Pending
+
+| Question | Options | Status |
+|----------|---------|--------|
+| Next sprint priority | VPN reliability vs Customer UX | Pending |
+| Payment gateway priority | Local manual payments polish → Stripe → Crypto → Bank | Pending |
+| Mobile app timing | After web/admin stable | Tentative |
+| AI chat enabled by default? | Toggle in env, currently off by default | Needs product decision |
+| Telegram bot: single vs split | Currently two bots (notification + VPN sales). Merge or keep separate? | Needs review |
+
+## Parking Lot (Backlog — Good Ideas, Not Now)
+
+- [ ] Full mobile app (Expo/React Native)
+- [ ] Advanced AI sales agent with auto-checkout
+- [ ] Multi-language marketing landing pages (JP, KR, TH)
+- [ ] Advanced analytics warehouse (product performance, user cohorts, LTV)
+- [ ] Auto server provisioning from cloud providers (Vultr, DigitalOcean, Hetzner)
+- [ ] Public VPN server status page (uptime, load, maintenance)
+- [ ] White-label/reseller platform
+- [ ] Cryptocurrency payment gateway (USDT TRC-20, Bitcoin)
+- [ ] One-click WooCommerce/Magento migration tool
+
+---
+
+## Working Rules
+
+1. **Roadmap-first**: update `[ ]` → `[~]` → `[x]` before/after every task
+2. **Branch per item**: small, focused branches per roadmap item
+3. **Quality gate**: `npm run test` + `npx tsc --noEmit` + `npm run build` must pass
+4. **Deploy check**: rollback plan must exist before deployment
+5. **Changelog**: every completed item gets a one-line summary in commit message
+6. **No auto-delete of VPN clients**: always admin-approve after dry-run
+7. **No hardcoded secrets**: `.env.local` for all sensitive values, validated via `src/lib/env.ts`
+8. **Fail-closed rate limiting**: default in production — disable only with explicit env flag

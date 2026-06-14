@@ -30,7 +30,6 @@ import {
 	ShieldCheck,
 	Terminal,
 	Trash2,
-	Upload,
 	XCircle,
 } from 'lucide-react';
 
@@ -96,10 +95,24 @@ type ServerPickerOption = {
 	value: string;
 	label: string;
 	resolvedIp?: string | null;
+	dropletCreatedAt?: string | null;
 	updatedAt?: string | null;
 	domain?: string;
 	enabled?: boolean;
 	badge?: string;
+};
+
+type DoAccountInfo = {
+	id: string;
+	label: string;
+	email: string;
+	status: string;
+	dropletLimit: number;
+	floatingIpLimit: number;
+	volumeLimit: number;
+	balance: string | number;
+	monthToDateCharges: string;
+	error?: string;
 };
 
 type DoSelectOption = {
@@ -118,6 +131,7 @@ type DoOptions = {
 	sshKeys: DoSelectOption[];
 	vpcs: DoSelectOption[];
 	volumes: DoSelectOption[];
+	accounts?: DoAccountInfo[];
 	errors?: string[];
 };
 
@@ -225,10 +239,10 @@ const DEFAULT_CONFIG: RotateConfig = {
 };
 
 const CONFIG_TABS: Array<{ id: ConfigTab; label: string; icon: any }> = [
+	{ id: 'servers', label: 'Servers', icon: Server },
 	{ id: 'digitalocean', label: 'DigitalOcean', icon: Cloud },
 	{ id: 'cloudflare', label: 'Cloudflare', icon: Globe },
 	{ id: 'panel', label: '3xUI', icon: PanelTop },
-	{ id: 'servers', label: 'Servers', icon: Server },
 	{ id: 'history', label: 'History', icon: History },
 ];
 
@@ -239,6 +253,7 @@ const EMPTY_DO_OPTIONS: DoOptions = {
 	sshKeys: [],
 	vpcs: [],
 	volumes: [],
+	accounts: [],
 	errors: [],
 };
 
@@ -403,18 +418,30 @@ function sleep(ms: number) {
 function formatRelativeTime(value?: string | null) {
 	if (!value) return 'unknown';
 
-	const date = new Date(value);
+	let date: Date;
+	
+	// Handle both ISO strings and numeric timestamps
+	if (typeof value === 'string') {
+		date = new Date(value);
+	} else if (typeof value === 'number') {
+		date = new Date(value);
+	} else {
+		return 'unknown';
+	}
+
 	if (Number.isNaN(date.getTime())) return 'unknown';
 
-	const diffSeconds = Math.round((date.getTime() - Date.now()) / 1000);
+	const now = Date.now();
+	const diffMs = now - date.getTime();
+	const diffSeconds = Math.round(diffMs / 1000);
 	const absSeconds = Math.abs(diffSeconds);
 	const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
-	if (absSeconds < 60) return formatter.format(diffSeconds, 'second');
-	if (absSeconds < 3600) return formatter.format(Math.round(diffSeconds / 60), 'minute');
-	if (absSeconds < 86400) return formatter.format(Math.round(diffSeconds / 3600), 'hour');
+	if (absSeconds < 60) return formatter.format(-Math.round(diffSeconds), 'second');
+	if (absSeconds < 3600) return formatter.format(-Math.round(diffSeconds / 60), 'minute');
+	if (absSeconds < 86400) return formatter.format(-Math.round(diffSeconds / 3600), 'hour');
 
-	return formatter.format(Math.round(diffSeconds / 86400), 'day');
+	return formatter.format(-Math.round(diffSeconds / 86400), 'day');
 }
 
 function formatDateTimeShort(value?: string | null) {
@@ -504,7 +531,6 @@ async function copyText(value: string) {
 export default function RotateWizardPage() {
 	const [loading, setLoading] = useState(true);
 	const [actionLoading, setActionLoading] = useState(false);
-	const [backupUploading, setBackupUploading] = useState(false);
 	const [currentStep, setCurrentStep] = useState(1);
 	const [targetServer, setTargetServer] = useState('sg1');
 	const [config, setConfig] = useState(DEFAULT_CONFIG);
@@ -513,10 +539,11 @@ export default function RotateWizardPage() {
 	const [cfAccounts, setCfAccounts] = useState<RotateCfAccountRow[]>(normalizeCfAccountsFromConfig(DEFAULT_CONFIG));
 	const [serverLinks, setServerLinks] = useState<RotateServerLinkRow[]>([]);
 	const [serverOptions, setServerOptions] = useState<ServerPickerOption[]>(SERVER_OPTIONS);
-	const [configTab, setConfigTab] = useState<ConfigTab>('digitalocean');
+	const [configTab, setConfigTab] = useState<ConfigTab>('servers');
 	const [doOptions, setDoOptions] = useState<DoOptions>(EMPTY_DO_OPTIONS);
 	const [doOptionsLoading, setDoOptionsLoading] = useState(false);
 	const [doOptionsError, setDoOptionsError] = useState('');
+	const [doAccounts, setDoAccounts] = useState<DoAccountInfo[]>([]);
 	const [panelServers, setPanelServers] = useState<PanelServerRow[]>([]);
 	const [panelDraft, setPanelDraft] = useState<PanelDraft>(EMPTY_PANEL_DRAFT);
 	const [editingPanelId, setEditingPanelId] = useState('');
@@ -677,6 +704,8 @@ export default function RotateWizardPage() {
 			value: server.serverId,
 			label: String(SERVER_LABELS[server.serverId] || server.name || server.serverId || 'Server'),
 			resolvedIp: server.resolvedIp || null,
+			dropletCreatedAt: server.dropletCreatedAt || null,
+			dropletCreatedAt: server.dropletCreatedAt || null,
 			updatedAt: server.updatedAt || null,
 			domain: server.domain || '',
 			enabled: server.enabled !== false,
@@ -708,6 +737,7 @@ export default function RotateWizardPage() {
 
 			if (data?.success && data?.data) {
 				setDoOptions({ ...EMPTY_DO_OPTIONS, ...data.data });
+				setDoAccounts(Array.isArray(data.data.accounts) ? data.data.accounts : []);
 				setDoOptionsError(Array.isArray(data.data.errors) && data.data.errors.length > 0 ? data.data.errors[0] : '');
 				if (!silent) toast.success('DigitalOcean choices refreshed');
 			} else {
@@ -851,6 +881,7 @@ export default function RotateWizardPage() {
 		setEditingPanelId('');
 		setPanelDraft(EMPTY_PANEL_DRAFT);
 		setShowPanelForm(true);
+		setConfigTab('panel');
 	}
 
 	function editPanel(server: PanelServerRow) {
@@ -1137,50 +1168,6 @@ export default function RotateWizardPage() {
 		}
 	}
 
-	async function uploadRestoreBackup(event: ChangeEvent<HTMLInputElement>) {
-		const file = event.target.files?.[0];
-		event.target.value = '';
-		if (!file) return;
-
-		const lowerName = file.name.toLowerCase();
-		if (!lowerName.endsWith('.tar.gz') && !lowerName.endsWith('.dump') && !lowerName.endsWith('.db')) {
-			toast.error('Upload .tar.gz, .dump, or .db backup files only.');
-			return;
-		}
-
-		setBackupUploading(true);
-		try {
-			const form = new FormData();
-			form.append('serverId', targetServer);
-			form.append('file', file);
-
-			const response = await fetch('/api/admin/rotate-backup', {
-				method: 'POST',
-				body: form,
-			});
-			const data = await readApiJson(response);
-			if (!data?.success) {
-				throw new Error(data?.error || 'Backup upload failed');
-			}
-
-			const message = data.message || 'Backup uploaded. Run Step 5 to restore it.';
-			setStepResults((prev) => ({
-				...prev,
-				5: { status: 'success', message },
-			}));
-			toast.success(message);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Backup upload failed';
-			setStepResults((prev) => ({
-				...prev,
-				5: { status: 'error', message },
-			}));
-			toast.error(message);
-		} finally {
-			setBackupUploading(false);
-		}
-	}
-
 	async function pollRotateJob(jobId: string, stepNumber: number) {
 		const deadline = Date.now() + 40 * 60 * 1000;
 
@@ -1377,7 +1364,7 @@ export default function RotateWizardPage() {
 																			) : null}
 																		</div>
 																		<p className="mt-1 truncate font-mono text-xs text-slate-400">{ipValue}</p>
-																		<p className="mt-1 text-xs text-slate-500">{formatRelativeTime(option.updatedAt)}</p>
+																		<p className="mt-1 text-xs text-slate-500">{formatRelativeTime(option.dropletCreatedAt || option.updatedAt)}</p>
 																	</div>
 																	<div className={`mt-1 h-3 w-3 shrink-0 rounded-full ${selected ? 'bg-sky-300' : 'bg-slate-600'}`} />
 																</div>
@@ -1503,6 +1490,44 @@ export default function RotateWizardPage() {
 													))}
 												</div>
 											</SectionPanel>
+
+{doAccounts.length > 0 ? (
+														<SectionPanel title="DigitalOcean accounts" description="Current account status, credit, and limits." icon={ShieldCheck}>
+										<div className="grid gap-4 lg:grid-cols-2">
+											{doAccounts.map((account) => (
+												<div key={account.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+													<p className="text-xs text-slate-400">Account</p>
+													<p className="mt-1 text-sm font-semibold text-slate-100">{account.label || account.email}</p>
+													<div className="mt-4 grid gap-3">
+														<div>
+															<p className="text-xs text-slate-400">Email</p>
+															<p className="mt-1 font-mono text-xs text-slate-200">{account.email}</p>
+														</div>
+														<div>
+															<p className="text-xs text-slate-400">Status</p>
+															<p className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold text-emerald-200">
+																<span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+																{account.status}
+															</p>
+														</div>
+														<div>
+															<p className="text-xs text-slate-400">Droplet limit</p>
+															<p className="mt-1 text-sm font-semibold text-sky-200">{account.dropletLimit}</p>
+														</div>
+														<div>
+															<p className="text-xs text-slate-400">Floating IPs</p>
+															<p className="mt-1 text-sm font-semibold text-sky-200">{account.floatingIpLimit}</p>
+														</div>
+														<div>
+															<p className="text-xs text-slate-400">Balance</p>
+															<p className="mt-1 text-sm font-semibold text-amber-200">{account.balance}</p>
+														</div>
+													</div>
+												</div>
+											))}
+										</div>
+									</SectionPanel>
+								) : null}
 
 											<SectionPanel
 												title="Droplet create setup"
@@ -1850,8 +1875,8 @@ export default function RotateWizardPage() {
 																		<span className="font-medium text-slate-300">IP:</span> {ipValue}
 																	</div>
 																	<div>
-																		<span className="font-medium text-slate-300">Time:</span> {formatDateTimeShort(option.updatedAt)}
-																		<span className="ml-2 text-slate-500">({formatRelativeTime(option.updatedAt)})</span>
+																		<span className="font-medium text-slate-300">Time:</span> {formatDateTimeShort(option.dropletCreatedAt || option.updatedAt)}
+																		<span className="ml-2 text-slate-500">({formatRelativeTime(option.dropletCreatedAt || option.updatedAt)})</span>
 																	</div>
 																</div>
 															</div>
@@ -1981,53 +2006,74 @@ export default function RotateWizardPage() {
 										</p>
 										<div className="mt-4 grid gap-4">
 											<div className="space-y-3">
-												{doTokens.map((row, index) => (
-													<div key={row.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-														<div className="flex items-center justify-between gap-3">
-															<div className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300/80">
-																{row.label || `Token ${index + 1}`}
+												{doTokens.map((row, index) => {
+													const accountInfo = doAccounts.find((acc) => normalizeKey(acc.id) === normalizeKey(row.id));
+													return (
+														<div key={row.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+															<div className="flex items-center justify-between gap-3">
+																<div className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300/80">
+																	{row.label || `Token ${index + 1}`}
+																</div>
+																<button
+																	type="button"
+																	onClick={() => removeDoTokenRow(index)}
+																	className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white"
+																>
+																	<XCircle className="h-3.5 w-3.5" />
+																	Remove
+																</button>
 															</div>
-															<button
-																type="button"
-																onClick={() => removeDoTokenRow(index)}
-																className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white"
-															>
-																<XCircle className="h-3.5 w-3.5" />
-																Remove
-															</button>
+															{accountInfo && (
+																<div className="mt-3 grid gap-2 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
+																	<div>
+																		<p className="text-[10px] font-semibold uppercase tracking-widest text-amber-300/70">Account Balance</p>
+																		<p className="mt-1 text-sm font-bold text-amber-100">${typeof accountInfo.balance === 'number' ? accountInfo.balance.toFixed(2) : accountInfo.balance}</p>
+																	</div>
+																	<div className="flex gap-3 text-[10px]">
+																		<div>
+																			<p className="text-slate-500">Email</p>
+																			<p className="truncate font-mono text-slate-300">{accountInfo.email}</p>
+																		</div>
+																		<div>
+																			<p className="text-slate-500">Droplets</p>
+																			<p className="font-semibold text-slate-200">{accountInfo.dropletLimit}</p>
+																		</div>
+																	</div>
+																</div>
+															)}
+															<div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+																<input
+																	type="text"
+																	value={row.label}
+																	onChange={(e) => updateDoToken(index, 'label', e.target.value)}
+																	placeholder="Token label"
+																	className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
+																/>
+																<button
+																	type="button"
+																	onClick={() => updateDoToken(index, 'enabled', !row.enabled)}
+																	className={`inline-flex w-fit items-center gap-2 justify-self-start rounded-full border px-3 py-2 text-xs font-semibold transition ${
+																		row.enabled
+																			? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+																			: 'border-white/10 bg-white/5 text-slate-400'
+																	}`}
+																>
+																	<span className={`h-2.5 w-2.5 rounded-full ${row.enabled ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+																	{row.enabled ? 'On' : 'Off'}
+																</button>
+															</div>
+															<div className="mt-3">
+																<Field
+																	label="Token"
+																	name={`doToken-${index}`}
+																	value={row.token}
+																	onChange={(event) => updateDoToken(index, 'token', event.target.value)}
+																	type="password"
+																/>
+															</div>
 														</div>
-														<div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
-															<input
-																type="text"
-																value={row.label}
-																onChange={(e) => updateDoToken(index, 'label', e.target.value)}
-																placeholder="Token label"
-																className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/60 focus:ring-2 focus:ring-sky-400/20"
-															/>
-															<button
-																type="button"
-																onClick={() => updateDoToken(index, 'enabled', !row.enabled)}
-																className={`inline-flex w-fit items-center gap-2 justify-self-start rounded-full border px-3 py-2 text-xs font-semibold transition ${
-																	row.enabled
-																		? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
-																		: 'border-white/10 bg-white/5 text-slate-400'
-																}`}
-															>
-																<span className={`h-2.5 w-2.5 rounded-full ${row.enabled ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-																{row.enabled ? 'On' : 'Off'}
-															</button>
-														</div>
-														<div className="mt-3">
-															<Field
-																label="Token"
-																name={`doToken-${index}`}
-																value={row.token}
-																onChange={(event) => updateDoToken(index, 'token', event.target.value)}
-																type="password"
-															/>
-														</div>
-													</div>
-												))}
+													);
+												})}
 											</div>
 											<div className="grid gap-4 sm:grid-cols-2">
 												<SelectField
@@ -2128,20 +2174,6 @@ export default function RotateWizardPage() {
 									</div>
 
 									<div className="mt-6 flex flex-wrap gap-3">
-										{currentStep === 5 ? (
-											<label className={`inline-flex cursor-pointer items-center justify-center rounded-full border border-sky-400/30 bg-sky-400/10 px-6 py-3 text-sm font-semibold text-sky-100 transition-all hover:bg-sky-400/20 ${backupUploading || actionLoading ? 'pointer-events-none opacity-60' : ''}`}>
-												{backupUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-												Upload restore backup
-												<input
-													type="file"
-													accept=".dump,.db,.gz,application/gzip,application/x-gzip,application/octet-stream"
-													className="hidden"
-													disabled={backupUploading || actionLoading}
-													onChange={uploadRestoreBackup}
-												/>
-											</label>
-										) : null}
-
 										<button
 											type="button"
 											onClick={() => {

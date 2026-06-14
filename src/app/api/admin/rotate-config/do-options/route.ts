@@ -24,7 +24,7 @@ function normalizeKey(value?: unknown): string {
   return String(value || '').trim().toLowerCase();
 }
 
-function selectDoToken(config: any, serverId?: string | null, tokenId?: string | null): string {
+function getDoTokens(config: any) {
   const configuredTokens = (Array.isArray(config.doTokens) ? config.doTokens : [])
     .map((entry: any, index: number) => ({
       id: normalizeKey(entry.id || `do-token-${index + 1}`),
@@ -35,13 +35,17 @@ function selectDoToken(config: any, serverId?: string | null, tokenId?: string |
     .filter((entry: any) => entry.token && entry.enabled);
 
   const legacyTokens = [
-    { id: 'do-token-1', token: cleanSecret(config.doToken1), enabled: true },
-    { id: 'do-token-2', token: cleanSecret(config.doToken2), enabled: true },
-    { id: 'do-token-3', token: cleanSecret(config.doToken3), enabled: true },
-    { id: 'do-token-4', token: cleanSecret(config.doToken4), enabled: true },
-  ].filter((entry) => entry.token);
+    { id: 'do-token-1', label: 'DigitalOcean 1', token: cleanSecret(config.doToken1), enabled: Boolean(config.doToken1) },
+    { id: 'do-token-2', label: 'DigitalOcean 2', token: cleanSecret(config.doToken2), enabled: Boolean(config.doToken2) },
+    { id: 'do-token-3', label: 'DigitalOcean 3', token: cleanSecret(config.doToken3), enabled: Boolean(config.doToken3) },
+    { id: 'do-token-4', label: 'DigitalOcean 4', token: cleanSecret(config.doToken4), enabled: Boolean(config.doToken4) },
+  ].filter((entry) => entry.token && entry.enabled);
 
-  const tokenPool = configuredTokens.length > 0 ? configuredTokens : legacyTokens;
+  return configuredTokens.length > 0 ? configuredTokens : legacyTokens;
+}
+
+function selectDoToken(config: any, serverId?: string | null, tokenId?: string | null): string {
+  const tokenPool = getDoTokens(config);
   const normalizedTokenId = normalizeKey(tokenId);
   if (normalizedTokenId) {
     const directToken = tokenPool.find((entry: any) => normalizeKey(entry.id) === normalizedTokenId);
@@ -101,6 +105,20 @@ async function safeCollection(pathOrUrl: string, key: string, headers: HeaderMap
   }
 }
 
+async function fetchDoObject(pathOrUrl: string, headers: HeaderMap) {
+  const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${DO_API}${pathOrUrl}`;
+  const res = await fetch(url, { headers, cache: 'no-store' });
+  return readDoJson(res, pathOrUrl);
+}
+
+async function safeObject(pathOrUrl: string, headers: HeaderMap) {
+  try {
+    return { data: await fetchDoObject(pathOrUrl, headers), error: '' };
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 function uniqueByValue<T extends { value: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   return items.filter((item) => {
@@ -125,7 +143,8 @@ export async function GET(request: NextRequest) {
       request.nextUrl.searchParams.get('tokenId')
     );
 
-    if (!token) {
+    const enabledTokens = getDoTokens(config);
+    if (!token || enabledTokens.length === 0) {
       return NextResponse.json(
         { success: false, error: 'No enabled DigitalOcean token is saved for this server.' },
         { status: 400 }
@@ -148,6 +167,44 @@ export async function GET(request: NextRequest) {
         safeCollection('/vpcs?per_page=200', 'vpcs', headers),
         safeCollection('/volumes?per_page=200', 'volumes', headers),
       ]);
+
+    const accountResults = await Promise.all(
+      enabledTokens.map(async (tokenEntry: any) => {
+        const accountHeaders = {
+          Authorization: `Bearer ${tokenEntry.token}`,
+          'Content-Type': 'application/json',
+        };
+
+        const [accountRes, balanceRes] = await Promise.all([
+          safeObject('/account', accountHeaders),
+          safeObject('/customers/my/balance', accountHeaders),
+        ]);
+
+        const accountData = accountRes.data?.account || accountRes.data || {};
+        const balanceData = balanceRes.data || {};
+
+        return {
+          id: tokenEntry.id,
+          label: tokenEntry.label,
+          email: accountData.email || tokenEntry.label || 'Unknown',
+          status: accountData.status || 'unknown',
+          floatingIpLimit: accountData.floating_ip_limit || 0,
+          dropletLimit: accountData.droplet_limit || 0,
+          volumeLimit: accountData.volume_limit || 0,
+          balance:
+            balanceData.month_to_date_balance ??
+            balanceData.balance?.amount ??
+            balanceData.balance ??
+            0,
+          monthToDateCharges:
+            balanceData.month_to_date_charges ||
+            balanceData.month_to_date_balance ||
+            balanceData.balance?.amount ||
+            '$0.00',
+          error: [accountRes.error, balanceRes.error].filter(Boolean).join(' | '),
+        };
+      })
+    );
 
     const images = uniqueByValue([
       ...distroImagesRes.items.map((image: any) => ({
@@ -179,7 +236,11 @@ export async function GET(request: NextRequest) {
       keysRes.error,
       vpcsRes.error,
       volumesRes.error,
+      accountRes.error,
+      balanceRes.error,
     ].filter(Boolean);
+
+    const accountData = accountRes.data?.account || accountRes.data || {};
 
     return NextResponse.json({
       success: true,
@@ -214,6 +275,24 @@ export async function GET(request: NextRequest) {
           description: `${volume.size_gigabytes || '?'} GB${volume.region?.slug ? ` / ${volume.region.slug}` : ''}`,
           region: volume.region?.slug || '',
         })),
+        account: {
+          email: accountData?.email || 'Unknown',
+          status: accountData?.status || 'active',
+          floatingIpLimit: accountData?.floating_ip_limit || 0,
+          dropletLimit: accountData?.droplet_limit || 0,
+          volumeLimit: accountData?.volume_limit || 0,
+          balance:
+            balanceRes.data?.month_to_date_balance ??
+            balanceRes.data?.balance?.amount ??
+            balanceRes.data?.balance ??
+            0,
+          monthToDateCharges:
+            balanceRes.data?.month_to_date_charges ||
+            balanceRes.data?.month_to_date_balance ||
+            balanceRes.data?.balance?.amount ||
+            '$0.00',
+        },
+        accounts: accountResults,
         errors,
       },
     });

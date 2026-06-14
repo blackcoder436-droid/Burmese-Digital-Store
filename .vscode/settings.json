@@ -1,8 +1,43 @@
 {
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/backups": true,
+    "**/public/uploads": true
+  },
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.git": true,
+    "**/backups": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/.git/**": true,
+    "**/backups/**": true
+  }
+}{
   "css.validate": false,
   "less.validate": false,
   "scss.validate": false,
   "files.associations": {
     "*.css": "tailwindcss"
-  }
+  },
+  "search.exclude": {
+"/node_modules": true,
+"/dist": true,
+"/build": true,
+"/backups": true,
+"/public/uploads": true
+},
+"files.exclude": {
+"/node_modules": true,
+"/.git": true,
+"/backups": true
+},
+"files.watcherExclude": {
+"/node_modules/": true,
+".git": true,
+"/backups/": true
+}
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import VpnServer from '@/models/VpnServer';
+import { getRotateConfig } from '@/models/RotateConfig';
 import { requireAdmin } from '@/lib/auth';
 import { apiLimiter } from '@/lib/rateLimit';
 import { logActivity } from '@/models/ActivityLog';
@@ -35,6 +36,88 @@ async function resolveServerIp(server: { url?: string; domain?: string }): Promi
   }
 }
 
+const DO_API = 'https://api.digitalocean.com/v2';
+
+function normalizeKey(value?: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function selectDoToken(config: any, serverId?: string): string {
+  const configuredTokens = (Array.isArray(config.doTokens) ? config.doTokens : [])
+    .map((entry: any, index: number) => ({
+      id: normalizeKey(entry.id || `do-token-${index + 1}`),
+      token: String(entry.token || '').trim(),
+      enabled: entry.enabled !== false,
+    }))
+    .filter((entry: any) => entry.token && entry.enabled);
+
+  const legacyTokens = [
+    { id: 'do-token-1', token: String(config.doToken1 || '').trim(), enabled: true },
+    { id: 'do-token-2', token: String(config.doToken2 || '').trim(), enabled: true },
+    { id: 'do-token-3', token: String(config.doToken3 || '').trim(), enabled: true },
+    { id: 'do-token-4', token: String(config.doToken4 || '').trim(), enabled: true },
+  ].filter((entry) => entry.token);
+
+  const tokenPool = configuredTokens.length > 0 ? configuredTokens : legacyTokens;
+  const normalizedServerId = normalizeKey(serverId);
+  const linkedServer = Array.isArray(config.serverLinks)
+    ? config.serverLinks.find((entry: any) => normalizeKey(entry.serverName) === normalizedServerId && entry.enabled !== false)
+    : null;
+
+  if (linkedServer?.tokenId) {
+    const linkedToken = tokenPool.find((entry: any) => normalizeKey(entry.id) === normalizeKey(linkedServer.tokenId));
+    if (linkedToken?.token) return linkedToken.token;
+  }
+
+  return tokenPool[0]?.token || '';
+}
+
+async function fetchDroplets(doToken: string) {
+  const res = await fetch(`${DO_API}/droplets?per_page=200`, {
+    headers: { Authorization: `Bearer ${doToken}`, 'Content-Type': 'application/json' },
+  });
+  const data = await res.json();
+  return Array.isArray(data.droplets) ? data.droplets : [];
+}
+
+async function getDropletMaps(config: any) {
+  const tokens = (Array.isArray(config.doTokens) ? config.doTokens : [])
+    .map((entry: any, index: number) => ({
+      id: normalizeKey(entry.id || `do-token-${index + 1}`),
+      token: String(entry.token || '').trim(),
+      enabled: entry.enabled !== false,
+    }))
+    .filter((entry: any) => entry.token && entry.enabled);
+
+  const legacyTokens = [
+    { id: 'do-token-1', token: String(config.doToken1 || '').trim(), enabled: true },
+    { id: 'do-token-2', token: String(config.doToken2 || '').trim(), enabled: true },
+    { id: 'do-token-3', token: String(config.doToken3 || '').trim(), enabled: true },
+    { id: 'do-token-4', token: String(config.doToken4 || '').trim(), enabled: true },
+  ].filter((entry) => entry.token);
+
+  const tokenPool = tokens.length > 0 ? tokens : legacyTokens;
+  const dropletMap = new Map<string, Map<string, any>>();
+
+  for (const entry of tokenPool) {
+    if (!entry.token) continue;
+    try {
+      const droplets = await fetchDroplets(entry.token);
+      const map = new Map<string, any>();
+      for (const droplet of droplets) {
+        if (droplet?.name) {
+          map.set(String(droplet.name), droplet);
+        }
+      }
+      dropletMap.set(entry.token, map);
+    } catch {
+      // ignore failed droplet list for this token
+    }
+  }
+
+  return dropletMap;
+}
+
 // ==========================================
 // GET /api/admin/servers — List all servers
 // ==========================================
@@ -49,12 +132,23 @@ export async function GET(request: NextRequest) {
 
   try {
     await connectDB();
+    const config = await getRotateConfig();
+    const dropletMap = await getDropletMaps(config);
+
     const servers = await VpnServer.find().sort({ createdAt: 1 }).lean();
     const serversWithResolvedIp = await Promise.all(
-      servers.map(async (server) => ({
-        ...server,
-        resolvedIp: await resolveServerIp(server as { url?: string; domain?: string }),
-      }))
+      servers.map(async (server) => {
+        const serverId = String(server.serverId || server.id || '');
+        const token = selectDoToken(config, serverId);
+        const droplet = token ? dropletMap.get(token)?.get(serverId) : null;
+
+        return {
+          ...server,
+          resolvedIp: await resolveServerIp(server as { url?: string; domain?: string }),
+          dropletCreatedAt: droplet?.created_at || null,
+          dropletStatus: droplet?.status || null,
+        };
+      })
     );
 
     return NextResponse.json({
