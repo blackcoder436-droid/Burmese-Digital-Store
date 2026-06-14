@@ -6,15 +6,16 @@ import VpnServer from '@/models/VpnServer';
 
 const DO_API = 'https://api.digitalocean.com/v2';
 const CF_API = 'https://api.cloudflare.com/client/v4';
-const DROPLET_IP_WAIT_MS = 10 * 60 * 1000;
+const DROPLET_IP_WAIT_MS = 5 * 60 * 1000;
 const DROPLET_IP_POLL_MS = 15000;
-const DO_LIST_PER_PAGE = 200;
-const CF_RETRY_COUNT = 3;
-const CF_RETRY_DELAY_MS = 3000;
 const XUI_READY_WAIT_MS = 5 * 60 * 1000;
 const XUI_READY_POLL_MS = 10000;
 const SSH_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+// Allow more time for SSH to accept connections on slow hosts or cloud providers
+const SSH_READY_TIMEOUT_MS = Number(process.env.SSH_READY_TIMEOUT_MS || String(60 * 1000));
 const XUI_INSTALL_TIMEOUT_MS = 12 * 60 * 1000;
+const BACKUP_INSPECT_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_XUI_INSTALL_VERSION = 'v3.2.8';
 
 // ================= Helpers =================
 
@@ -24,13 +25,20 @@ type ProgressReporter = (message: string) => void | Promise<void>;
 type PanelProtocol = 'https' | 'http';
 type BackupDatabaseKind = 'sqlite' | 'postgres';
 type BackupCandidate = {
-  kind: 'archive' | 'sqlite';
+  kind: 'archive' | 'sqlite' | 'postgres';
   localPath: string;
   remotePath: string;
 };
 type ValidatedBackup = BackupCandidate & {
   databaseKind: BackupDatabaseKind;
   inboundCount: number;
+};
+type PanelTarget = {
+  domain: string;
+  port: number;
+  panelPath: string;
+  subPort?: number;
+  protocolPorts?: Record<string, number | null | undefined>;
 };
 
 export async function sleep(ms: number) {
@@ -46,6 +54,125 @@ function shellQuote(value: string): string {
   return `'${escaped}'`;
 }
 
+function getXuiInstallVersion(): string {
+  const version = (process.env.XUI_INSTALL_VERSION || DEFAULT_XUI_INSTALL_VERSION).trim();
+  if (!/^v\d+\.\d+\.\d+$/.test(version)) {
+    throw new Error(`Invalid XUI_INSTALL_VERSION "${version}". Expected a pinned tag like v3.2.8.`);
+  }
+  return version;
+}
+
+function hasNonEmptyFile(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).size > 0;
+  } catch {
+    return false;
+  }
+}
+
+function preserveExistingBackup(filePath: string): string | null {
+  if (!hasNonEmptyFile(filePath)) return null;
+
+  const parsed = path.parse(filePath);
+  const timestamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  const suffix = parsed.base.toLowerCase().endsWith('.tar.gz') ? '.tar.gz' : parsed.ext;
+  const baseName = parsed.base.toLowerCase().endsWith('.tar.gz')
+    ? parsed.base.slice(0, -'.tar.gz'.length)
+    : parsed.name;
+  const preservedPath = path.join(parsed.dir, `${baseName}_${timestamp}${suffix || '.bak'}`);
+
+  fs.copyFileSync(filePath, preservedPath);
+  return path.basename(preservedPath);
+}
+
+// Shell snippet to wait for apt/dpkg locks to clear on remote hosts. Insert
+// ${aptWaitShell} at the top of remote command templates that run
+// `apt-get` so the script will wait (with timeout) for package manager locks.
+// This version will optionally kill stale apt processes (after a threshold)
+// and performs basic recovery (`dpkg --configure -a`) to avoid blocking
+// rotation. It prints diagnostics on timeout.
+const aptWaitShell = `
+apt_lock_holders() {
+  lock_files="/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock"
+  holders=""
+  if command -v fuser >/dev/null 2>&1; then
+    holders=$(fuser $lock_files 2>/dev/null | tr ' ' '\\n' | awk 'NF' | sort -u || true)
+  fi
+  if [ -z "$holders" ]; then
+    holders=$(pgrep -x "apt|apt-get|aptitude|dpkg|unattended-upgrade|unattended-upgrades" 2>/dev/null | sort -u || true)
+  fi
+  for pid in $holders; do
+    [ "$pid" = "$$" ] && continue
+    [ "$pid" = "$PPID" ] && continue
+    printf '%s\\n' "$pid"
+  done
+}
+
+prepare_apt() {
+  max_wait=\${MAX_APT_WAIT_SECS:-900}
+  kill_threshold=\${APT_KILL_OLD_SEC:-900}
+  waited=0
+  interval=5
+  while :; do
+    apt_pids=$(apt_lock_holders || true)
+    if [ -z "$apt_pids" ]; then
+      dpkg --configure -a || true
+      return 0
+    fi
+    kill_list=""
+    for pid in $apt_pids; do
+      etimes=$(ps -o etimes= -p "$pid" 2>/dev/null || echo 0)
+      if [ -n "$etimes" ] && [ "$etimes" -ge "$kill_threshold" ]; then
+        kill_list="$kill_list $pid"
+      fi
+    done
+    if [ -n "$kill_list" ]; then
+      echo "KILL_OLD_APT:$kill_list"
+      kill -TERM $kill_list 2>/dev/null || true
+      sleep 5
+      for pid in $kill_list; do
+        if kill -0 "$pid" >/dev/null 2>&1; then
+          kill -KILL "$pid" 2>/dev/null || true
+        fi
+      done
+      dpkg --configure -a || true
+      return 0
+    fi
+    if [ "$waited" -ge "$max_wait" ]; then
+      echo "APT_LOCK_TIMEOUT"
+      echo "Held by pids: $apt_pids"
+      ps -o pid,etime,cmd -p $apt_pids 2>/dev/null || true
+      if command -v lsof >/dev/null 2>&1; then
+        lsof /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock 2>/dev/null || true
+      fi
+      return 1
+    fi
+    sleep $interval
+    waited=$((waited+interval))
+  done
+}
+
+run_apt() {
+  tries=\${APT_RETRIES:-3}
+  attempt=1
+  while [ "$attempt" -le "$tries" ]; do
+    wait_for_apt || return 1
+    if apt-get -o DPkg::Lock::Timeout=120 "$@"; then
+      return 0
+    fi
+    rc=$?
+    echo "APT_COMMAND_FAILED attempt=$attempt rc=$rc: apt-get $*"
+    dpkg --configure -a || true
+    sleep $((attempt * 10))
+    attempt=$((attempt+1))
+  done
+  return "$rc"
+}
+
+# Backwards-compatible wrapper
+wait_for_apt() { prepare_apt "$@"; }
+`;
+
 function normalizePanelPath(value?: string): string {
   const raw = (value || '/mka').trim();
   if (!raw || raw === '/') return '/';
@@ -59,15 +186,32 @@ function getPanelBasePath(panelPath: string): string {
 
 function getPanelUiPath(panelPath: string): string {
   const basePath = getPanelBasePath(panelPath);
-  return `${basePath}/panel`;
+  return basePath ? `${basePath}/` : '/';
+}
+
+function isBackupFileForServer(fileName: string, serverName: string): boolean {
+  const normalizedFile = fileName.toLowerCase();
+  const normalizedServer = serverName.toLowerCase();
+  return (
+    normalizedFile === `${normalizedServer}.dump` ||
+    normalizedFile === `${normalizedServer}.db` ||
+    normalizedFile === `${normalizedServer}.tar.gz` ||
+    normalizedFile === `${normalizedServer}.tgz` ||
+    normalizedFile.startsWith(`${normalizedServer}_`)
+  );
 }
 
 function getBackupCandidates(backupsDir: string, serverName: string): BackupCandidate[] {
   const candidates: BackupCandidate[] = [];
   const archivePath = path.join(backupsDir, `${serverName}_backup.tar.gz`);
+  const tgzArchivePath = path.join(backupsDir, `${serverName}_backup.tgz`);
   const sqlitePath = path.join(backupsDir, `${serverName}_backup.db`);
+  const postgresDumpPath = path.join(backupsDir, `${serverName}_backup.dump`);
+  const postgresShortDumpPath = path.join(backupsDir, `${serverName}.dump`);
+  const sqliteShortPath = path.join(backupsDir, `${serverName}.db`);
+  const tgzShortArchivePath = path.join(backupsDir, `${serverName}.tgz`);
 
-  if (fs.existsSync(archivePath)) {
+  if (hasNonEmptyFile(archivePath)) {
     candidates.push({
       kind: 'archive',
       localPath: archivePath,
@@ -75,7 +219,15 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
     });
   }
 
-  if (fs.existsSync(sqlitePath)) {
+  if (hasNonEmptyFile(tgzArchivePath)) {
+    candidates.push({
+      kind: 'archive',
+      localPath: tgzArchivePath,
+      remotePath: '/root/backup.tgz',
+    });
+  }
+
+  if (hasNonEmptyFile(sqlitePath)) {
     candidates.push({
       kind: 'sqlite',
       localPath: sqlitePath,
@@ -83,20 +235,143 @@ function getBackupCandidates(backupsDir: string, serverName: string): BackupCand
     });
   }
 
+  if (hasNonEmptyFile(postgresDumpPath)) {
+    candidates.push({
+      kind: 'postgres',
+      localPath: postgresDumpPath,
+      remotePath: `/root/${serverName}_backup.dump`,
+    });
+  }
+
+  if (hasNonEmptyFile(postgresShortDumpPath)) {
+    candidates.push({
+      kind: 'postgres',
+      localPath: postgresShortDumpPath,
+      remotePath: `/root/${serverName}.dump`,
+    });
+  }
+
+  if (hasNonEmptyFile(sqliteShortPath)) {
+    candidates.push({
+      kind: 'sqlite',
+      localPath: sqliteShortPath,
+      remotePath: `/root/${serverName}.db`,
+    });
+  }
+
+  if (hasNonEmptyFile(tgzShortArchivePath)) {
+    candidates.push({
+      kind: 'archive',
+      localPath: tgzShortArchivePath,
+      remotePath: `/root/${serverName}.tgz`,
+    });
+  }
+
+  if (fs.existsSync(backupsDir)) {
+    const extraArchiveFiles = fs.readdirSync(backupsDir)
+      .filter((file) => {
+        const normalizedFile = file.toLowerCase();
+        return normalizedFile.endsWith('.tar.gz') || normalizedFile.endsWith('.tgz');
+      })
+      .filter((file) => isBackupFileForServer(file, serverName))
+      .map((file) => ({
+        kind: 'archive' as const,
+        localPath: path.join(backupsDir, file),
+        remotePath: `/root/${file}`,
+      }))
+      .filter((candidate) => hasNonEmptyFile(candidate.localPath));
+
+    for (const candidate of extraArchiveFiles) {
+      if (!candidates.some((existing) => existing.localPath === candidate.localPath)) {
+        candidates.push(candidate);
+      }
+    }
+
+    const extraDumpFiles = fs.readdirSync(backupsDir)
+      .filter((file) => file.toLowerCase().endsWith('.dump'))
+      .filter((file) => isBackupFileForServer(file, serverName))
+      .map((file) => ({
+        kind: 'postgres' as const,
+        localPath: path.join(backupsDir, file),
+        remotePath: `/root/${file}`,
+      }))
+      .filter((candidate) => hasNonEmptyFile(candidate.localPath));
+
+    for (const candidate of extraDumpFiles) {
+      if (!candidates.some((existing) => existing.localPath === candidate.localPath)) {
+        candidates.push(candidate);
+      }
+    }
+  }
+
   return candidates;
 }
+
+const ensurePostgresRestoreToolsShell = `
+ensure_pg_restore_tools() {
+  target_major=\${PG_RESTORE_MAJOR:-18}
+  if command -v pg_restore >/dev/null 2>&1; then
+    pg_major=$(pg_restore --version | awk '{print $3}' | cut -d. -f1)
+    if [ -n "$pg_major" ] && [ "$pg_major" -ge "$target_major" ] 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  run_apt update -qq
+  run_apt install -y -qq ca-certificates curl gnupg lsb-release >/tmp/bds-pgdg-prep.log 2>&1 || { tail -80 /tmp/bds-pgdg-prep.log; exit 1; }
+  install -d /usr/share/postgresql-common/pgdg
+  if [ ! -s /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg ]; then
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+  fi
+  . /etc/os-release
+  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt \${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+  run_apt update -qq
+  run_apt install -y -qq postgresql-client-\${target_major} >/tmp/bds-pg-client-install.log 2>&1 || { tail -120 /tmp/bds-pg-client-install.log; exit 1; }
+  ln -sf /usr/lib/postgresql/\${target_major}/bin/pg_restore /usr/local/bin/pg_restore
+  ln -sf /usr/lib/postgresql/\${target_major}/bin/pg_dump /usr/local/bin/pg_dump
+}
+`;
 
 function getRotationPanelPort(serverName: string): number {
   return serverName === 'sg4' ? 2053 : 8080;
 }
 
-async function getPanelTarget(serverName: string) {
+async function getPanelTarget(serverName: string): Promise<PanelTarget> {
   const server = await VpnServer.findOne({ serverId: serverName }).lean().catch(() => null);
   return {
     domain: (server?.domain || `${serverName}.burmesedigital.store`).trim(),
     port: getRotationPanelPort(serverName),
     panelPath: normalizePanelPath(server?.panelPath),
+    subPort: typeof server?.subPort === 'number' ? server.subPort : undefined,
+    protocolPorts: server?.protocolPorts || undefined,
   };
+}
+
+function getFirewallPortsForServer(serverName: string, target: PanelTarget): number[] {
+  const ports = new Set<number>();
+  const addPort = (value?: number | null) => {
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 65535) {
+      ports.add(value);
+    }
+  };
+
+  addPort(target.port);
+  addPort(target.subPort);
+
+  for (const port of Object.values(target.protocolPorts || {})) {
+    addPort(port);
+  }
+
+  if (normalizeServerName(serverName) === 'sg4') {
+    // Cloudflare orange-cloud HTTPS proxy ports used for sg4 panel, sub links, and inbounds.
+    [443, 2053, 2083, 2087, 2096, 8443].forEach(addPort);
+  }
+
+  return [...ports].sort((a, b) => a - b);
+}
+
+function shouldProxyDnsForServer(serverName: string): boolean {
+  return normalizeServerName(serverName) === 'sg4';
 }
 
 function cleanSecret(value?: string): string {
@@ -355,62 +630,21 @@ async function fetchCloudflareJson(
   label: string
 ): Promise<JsonObject> {
   const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${CF_API}${pathOrUrl}`;
-  let lastError: Error | null = null;
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      ...headers,
+      ...(init.headers || {}),
+    },
+  });
+  const data = await readJsonResponse(res, label);
 
-  for (let attempt = 1; attempt <= CF_RETRY_COUNT; attempt += 1) {
-    const res = await fetch(url, {
-      ...init,
-      headers: {
-        ...headers,
-        ...(init.headers || {}),
-      },
-    });
-
-    const text = await res.text();
-    const shouldRetry = res.status >= 500 && res.status < 600 && attempt < CF_RETRY_COUNT;
-
-    let data: JsonObject;
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch (parseError) {
-      const preview = text.replace(/\s+/g, ' ').slice(0, 160);
-      const message = `${label}: Expected JSON but received HTTP ${res.status} ${res.statusText || ''}: ${preview || '(empty response)'}`;
-      lastError = new Error(message);
-      if (shouldRetry) {
-        await sleep(CF_RETRY_DELAY_MS * attempt);
-        continue;
-      }
-      throw lastError;
-    }
-
-    if (!res.ok) {
-      const message =
-        data.errors?.[0]?.message ||
-        data.message ||
-        data.error ||
-        `HTTP ${res.status} ${res.statusText || 'request failed'}`;
-      lastError = new Error(`${label}: ${message}`);
-      if (shouldRetry) {
-        await sleep(CF_RETRY_DELAY_MS * attempt);
-        continue;
-      }
-      throw lastError;
-    }
-
-    if (data.success === false) {
-      const message = data.errors?.[0]?.message || 'Unknown Cloudflare error';
-      lastError = new Error(`${label}: CF Error: ${message}`);
-      if (shouldRetry) {
-        await sleep(CF_RETRY_DELAY_MS * attempt);
-        continue;
-      }
-      throw lastError;
-    }
-
-    return data;
+  if (data.success === false) {
+    const message = data.errors?.[0]?.message || 'Unknown Cloudflare error';
+    throw new Error(`${label}: CF Error: ${message}`);
   }
 
-  throw lastError || new Error(`${label}: Cloudflare request failed after ${CF_RETRY_COUNT} attempts.`);
+  return data;
 }
 
 function getCloudflareZoneCandidates(domain?: string): string[] {
@@ -485,34 +719,50 @@ async function sendFileTg(botToken: string, chatId: string, filePath: string, ca
   if (!data.ok) throw new Error(data.description);
 }
 
-async function getDropletByName(doToken: string, serverName: string): Promise<any | null> {
-  const res = await fetch(`${DO_API}/droplets?per_page=${DO_LIST_PER_PAGE}`, {
+async function getDropletPublicIp(doToken: string, serverName: string): Promise<string | null> {
+  const res = await fetch(`${DO_API}/droplets`, {
     headers: { 'Authorization': `Bearer ${doToken}`, 'Content-Type': 'application/json' }
   });
   const data = await res.json();
-  return data.droplets?.find((d: any) => d.name === serverName) || null;
+  const droplets = Array.isArray(data.droplets) ? data.droplets : [];
+  const droplet = findDropletForServer(droplets, serverName);
+  return droplet?.networks?.v4?.find((n: any) => n.type === 'public')?.ip_address || null;
 }
 
-async function getDropletPublicIp(doToken: string, serverName: string): Promise<string | null> {
-  const droplet = await getDropletByName(doToken, serverName);
-  return droplet?.networks?.v4?.find((n: any) => n.type === 'public')?.ip_address || null;
+function findDropletForServer(droplets: any[], serverName: string) {
+  const normalized = String(serverName || '').trim().toLowerCase();
+  if (!Array.isArray(droplets) || droplets.length === 0) return undefined;
+
+  // Preferred exact matches first
+  for (const d of droplets) {
+    const name = String(d?.name || '').toLowerCase();
+    if (!name) continue;
+    if (name === normalized) return d;
+    if (name === `${normalized}.burmesedigital.store`) return d;
+  }
+
+  // Next, try tag-based or contains/starts-with heuristics
+  for (const d of droplets) {
+    const name = String(d?.name || '').toLowerCase();
+    const tags = Array.isArray(d?.tags) ? d.tags.map(String) : [];
+    if (!name) continue;
+    if (tags.includes(normalized) || tags.includes(`server:${normalized}`)) return d;
+    if (name.startsWith(normalized) || name.includes(normalized)) return d;
+  }
+
+  return undefined;
 }
 
 async function waitForDropletPublicIp(doToken: string, serverName: string): Promise<string> {
   const deadline = Date.now() + DROPLET_IP_WAIT_MS;
 
   while (Date.now() < deadline) {
-    const droplet = await getDropletByName(doToken, serverName);
-    if (droplet) {
-      if (droplet.status === 'active') {
-        const ip = droplet.networks?.v4?.find((n: any) => n.type === 'public')?.ip_address;
-        if (ip) return ip;
-      }
-    }
+    const ip = await getDropletPublicIp(doToken, serverName);
+    if (ip) return ip;
     await sleep(DROPLET_IP_POLL_MS);
   }
 
-  throw new Error('Could not find public IP for new droplet. Ensure it is fully created, active, and the name is correct.');
+  throw new Error('Could not find public IP for new droplet. Ensure it is fully created.');
 }
 
 function sftpDownload(host: string, remotePath: string, localPath: string): Promise<void> {
@@ -528,11 +778,11 @@ function sftpDownload(host: string, remotePath: string, localPath: string): Prom
         });
       });
     }).on('error', reject).connect({
-      host, 
-      port: 22, 
+      host,
+      port: 22,
       username: 'root',
       password: 'Mka@2016Omk', // Hardcoded universal password as requested
-      readyTimeout: 20000
+      readyTimeout: SSH_READY_TIMEOUT_MS,
     });
   });
 }
@@ -545,16 +795,9 @@ export async function actionBackupServer(serverName: string) {
   const doToken = getDoTokenForServer(serverName, config);
   const panelTarget = await getPanelTarget(serverName);
   
-  // 1. Get current IP from DO
-  const res = await fetch(`${DO_API}/droplets`, {
-    headers: { 'Authorization': `Bearer ${doToken}`, 'Content-Type': 'application/json' }
-  });
-  const data = await res.json();
-  const droplet = data.droplets?.find((d: any) => d.name === serverName);
-  
-  if (!droplet) throw new Error(`Droplet ${serverName} not found in DigitalOcean account.`);
-  const oldIp = droplet.networks.v4.find((n: any) => n.type === 'public')?.ip_address;
-  if (!oldIp) throw new Error("Could not find public IP for current droplet.");
+  // 1. Get current IP from DO (use flexible droplet matching)
+  const oldIp = await getDropletPublicIp(doToken, serverName);
+  if (!oldIp) throw new Error(`Droplet ${serverName} not found in DigitalOcean account or it has no public IP.`);
 
   // 2. Backup DB and SSL Certs via SSH into a tar.gz
   const backupsDir = path.join(process.cwd(), 'backups');
@@ -615,7 +858,56 @@ else
   tar -tzf "$backup" | grep -qx 'etc/x-ui/x-ui.db'
 fi
 `;
-  await execSsh(oldIp, tarCmd);
+  try {
+    await execSsh(oldIp, tarCmd);
+  } catch (err: any) {
+    const msg = err instanceof Error ? err.message : String(err || '');
+    // Detect Postgres client/server version mismatch and attempt to install a compatible client
+    const versionMatch = msg.match(/server version:\s*([0-9]+)\./i);
+    if (versionMatch) {
+      const major = Number(versionMatch[1]);
+      try {
+        const installScript = `
+set -e
+export DEBIAN_FRONTEND=noninteractive
+${aptWaitShell}
+ensure_pg_client() {
+  if command -v pg_dump >/dev/null 2>&1; then
+    pg_major=$(pg_dump --version | awk '{print $3}' | cut -d. -f1)
+    if [ -n "$pg_major" ] && [ "$pg_major" -ge ${major} ] 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  run_apt update -qq
+  run_apt install -y -qq ca-certificates curl gnupg lsb-release >/tmp/bds-pgdg-prep.log 2>&1 || { tail -80 /tmp/bds-pgdg-prep.log; exit 1; }
+  install -d /usr/share/postgresql-common/pgdg
+  if [ ! -s /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg ]; then
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+  fi
+  . /etc/os-release
+  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt \${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+  run_apt update -qq
+  run_apt install -y -qq postgresql-client-${major} >/tmp/bds-pg-client-install.log 2>&1 || { tail -120 /tmp/bds-pg-client-install.log; exit 1; }
+  ln -sf /usr/lib/postgresql/${major}/bin/pg_restore /usr/local/bin/pg_restore || true
+  ln -sf /usr/lib/postgresql/${major}/bin/pg_dump /usr/local/bin/pg_dump || true
+}
+ensure_pg_client
+`;
+
+        await execSsh(oldIp, `timeout 15m bash -lc ${shellQuote(installScript)}`, 15 * 60 * 1000);
+        // Retry the original backup command after installing matching client
+        await execSsh(oldIp, tarCmd);
+      } catch (installErr: any) {
+        const installMsg = installErr instanceof Error ? installErr.message : String(installErr || '');
+        throw new Error(`PostgreSQL ${major} client install/retry failed after pg_dump version mismatch. Original error: ${msg}. Install/retry error: ${installMsg}`);
+      }
+
+      // proceed normally if retry succeeded
+    } else {
+      throw err;
+    }
+  }
   
   // Verify the file was created
   const checkTar = await execSsh(oldIp, `ls -l /root/${serverName}_backup.tar.gz || echo "NOT_FOUND"`);
@@ -623,24 +915,36 @@ fi
     throw new Error("Backup process failed to create the tar.gz file. The x-ui database may be missing on the server.");
   }
   
+  const preservedBackupName = preserveExistingBackup(localDbPath);
   await sftpDownload(oldIp, `/root/${serverName}_backup.tar.gz`, localDbPath);
   
   // Clean up remote tar
   await execSsh(oldIp, `rm -f /root/${serverName}_backup.tar.gz`);
 
-  // 3. Send to Telegram
+  // 3. Optionally send to Telegram (do not fail backup if Telegram not configured)
   const tgToken = process.env.TELEGRAM_BOT_TOKEN;
   const tgChatId = process.env.TELEGRAM_CHANNEL_ID || process.env.TELEGRAM_CHAT_ID;
-  if (!tgToken || !tgChatId) throw new Error("Telegram Bot Token or Chat ID not found in .env");
-
-  await sendFileTg(tgToken, tgChatId, localDbPath, `🔄 Backup DB for [ ${serverName} ] before rotation\nTimestamp: ${new Date().toISOString()}`);
+  let tgSent = false;
+  if (tgToken && tgChatId) {
+    try {
+      await sendFileTg(tgToken, tgChatId, localDbPath, `🔄 Backup DB for [ ${serverName} ] before rotation\nTimestamp: ${new Date().toISOString()}`);
+      tgSent = true;
+    } catch (err) {
+      // Do not fail the whole backup just because Telegram upload failed
+      console.error('Telegram send failed for backup:', err instanceof Error ? err.message : String(err));
+    }
+  }
 
   return {
     success: true,
-    message: `Database downloaded and sent to Telegram! Old IP was ${oldIp}`,
+    message: tgSent
+      ? `Database downloaded and sent to Telegram! Old IP was ${oldIp}`
+      : `Database downloaded to backups folder: ${localDbPath}. Telegram not configured or upload failed. Old IP was ${oldIp}`,
     oldIp,
     domain: panelTarget.domain,
     panelUrl: `https://${panelTarget.domain}:${panelTarget.port}${getPanelUiPath(panelTarget.panelPath)}`,
+    preservedBackup: preservedBackupName,
+    telegramSent: tgSent,
   };
 }
 
@@ -651,12 +955,13 @@ export async function actionRecreateServer(serverName: string) {
   const dropletPayload = buildDropletCreatePayload(serverName, config);
   const region = dropletPayload.region;
 
-  // 1. Fetch current droplets to find ID
+  // 1. Fetch current droplets to find ID (use flexible droplet matching)
   const listRes = await fetch(`${DO_API}/droplets`, {
     headers: { 'Authorization': `Bearer ${doToken}`, 'Content-Type': 'application/json' }
   });
   const listData = await listRes.json();
-  const oldDroplet = listData.droplets?.find((d: any) => d.name === serverName);
+  const droplets = Array.isArray(listData.droplets) ? listData.droplets : [];
+  const oldDroplet = findDropletForServer(droplets, serverName);
   const oldIp = oldDroplet?.networks?.v4?.find((n: any) => n.type === 'public')?.ip_address || null;
 
   // 2. Delete old droplet if exists
@@ -724,7 +1029,8 @@ export async function actionUpdateDNS(serverName: string) {
     throw new Error(`Cloudflare DNS Records Error: ${err.message}`);
   }
 
-  const body = JSON.stringify({ type: 'A', name: DOMAIN, content: newIp, proxied: false, ttl: 60 });
+  const proxied = shouldProxyDnsForServer(serverName);
+  const body = JSON.stringify({ type: 'A', name: DOMAIN, content: newIp, proxied, ttl: proxied ? 1 : 60 });
 
   // Update or Create
   try {
@@ -749,7 +1055,7 @@ export async function actionUpdateDNS(serverName: string) {
 
   return {
     success: true,
-    message: `DNS updated successfully via ${authLabel}: ${DOMAIN} -> ${newIp}`,
+    message: `DNS updated successfully via ${authLabel}: ${DOMAIN} -> ${newIp}${proxied ? ' (Cloudflare proxied)' : ''}`,
     newIp,
     domain: DOMAIN,
     panelUrl: `https://${DOMAIN}:${panelTarget.port}${getPanelUiPath(panelTarget.panelPath)}`,
@@ -791,7 +1097,7 @@ function execSsh(host: string, command: string, timeoutMs = SSH_COMMAND_TIMEOUT_
           finish();
         }).on('data', appendOutput).stderr.on('data', appendOutput);
       });
-    }).on('error', (err: Error) => finish(err)).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: 20000 });
+    }).on('error', (err: Error) => finish(err)).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: SSH_READY_TIMEOUT_MS });
   });
 }
 
@@ -810,9 +1116,16 @@ async function installFail2BanIpLimit(host: string, progress?: ProgressReporter)
 set -e
 export DEBIAN_FRONTEND=noninteractive
 
+${aptWaitShell}
+
 if command -v apt-get >/dev/null 2>&1; then
-  apt-get update
-  apt-get install -y fail2ban nftables iptables python3-pip
+  export NEEDRESTART_MODE=a
+  export MAX_APT_WAIT_SECS=120
+  export APT_KILL_OLD_SEC=900
+  wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+  run_apt update
+  wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+  run_apt install -y fail2ban nftables iptables python3-pip
   python3 -m pip install pyasynchat --break-system-packages >/dev/null 2>&1 || true
 elif command -v dnf >/dev/null 2>&1; then
   dnf -y install fail2ban nftables iptables
@@ -895,7 +1208,7 @@ fi
 sleep 2
 fail2ban-client status 3x-ipl
 `;
-  await execSsh(host, `timeout 8m bash -lc ${shellQuote(script)}`, 9 * 60 * 1000);
+  await execSsh(host, `timeout 3m bash -lc ${shellQuote(script)}`, 4 * 60 * 1000);
   await reportProgress(progress, 'Fail2Ban IP Limit jail is active.');
 }
 
@@ -976,7 +1289,7 @@ if not data.get("success") or not isinstance(data.get("obj"), list):
 print(f"INBOUND_COUNT:{len(data['obj'])}")
 `)}
 `;
-  const output = await execSsh(host, command, 30000);
+  const output = await execSsh(host, command);
   const match = output.match(/INBOUND_COUNT:(\d+)/);
   if (!match) {
     throw new Error(`Panel API did not return an inbound count after restore: ${output.slice(0, 300) || '(empty)'}`);
@@ -985,8 +1298,56 @@ print(f"INBOUND_COUNT:{len(data['obj'])}")
   return Number(match[1]);
 }
 
+async function getRestoredDatabaseInboundCount(host: string): Promise<number> {
+  const command = `
+set -e
+[ -f /etc/default/x-ui ] || { echo "XUI_ENV_MISSING"; exit 1; }
+set -a
+. /etc/default/x-ui
+set +a
+[ "\${XUI_DB_TYPE:-}" = "postgres" ] || { echo "XUI_DB_TYPE_NOT_POSTGRES"; exit 1; }
+[ -n "\${XUI_DB_DSN:-}" ] || { echo "XUI_DB_DSN_MISSING"; exit 1; }
+psql "$XUI_DB_DSN" -tAc "select 'INBOUND_COUNT:' || count(*) from inbounds;"
+`;
+  const output = await execSsh(host, command, BACKUP_INSPECT_TIMEOUT_MS);
+  const match = output.match(/INBOUND_COUNT:(\d+)/);
+  if (!match) {
+    throw new Error(`PostgreSQL did not return an inbound count after restore: ${output.slice(0, 300) || '(empty)'}`);
+  }
+
+  return Number(match[1]);
+}
+
 async function inspectRemoteBackup(host: string, backup: BackupCandidate): Promise<{ databaseKind: BackupDatabaseKind; inboundCount: number }> {
-  const archivePrepare = backup.kind === 'archive'
+  let command: string;
+
+  if (backup.kind === 'postgres') {
+    command = `
+set -e
+backup=${shellQuote(backup.remotePath)}
+[ -s "$backup" ] || { echo "BACKUP_DB_MISSING"; exit 1; }
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+${aptWaitShell}
+${ensurePostgresRestoreToolsShell}
+export MAX_APT_WAIT_SECS=300
+wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+ensure_pg_restore_tools
+pg_restore --data-only --table=inbounds --file=- "$backup" 2>/dev/null | python3 -c 'import sys
+count = 0
+in_copy = False
+for line in sys.stdin:
+    if line.startswith("COPY ") and "inbounds" in line:
+        in_copy = True
+        continue
+    if in_copy:
+        if line.strip() == "\\\\.":
+            break
+        count += 1
+print(f"BACKUP_KIND:postgres\\nINBOUND_COUNT:{count}")'
+`;
+  } else {
+    const archivePrepare = backup.kind === 'archive'
     ? `
 workdir=$(mktemp -d)
 cleanup() { rm -rf "$workdir"; }
@@ -996,12 +1357,13 @@ tar -tzf ${shellQuote(backup.remotePath)} > "$workdir/list.txt"
 if grep -qx 'x-ui-postgres.dump' "$workdir/list.txt"; then
   tar -xzf ${shellQuote(backup.remotePath)} -C "$workdir" x-ui-postgres.dump
   [ -s "$workdir/x-ui-postgres.dump" ] || { echo "BACKUP_DB_MISSING"; exit 1; }
-  if ! command -v pg_restore >/dev/null 2>&1; then
-    export DEBIAN_FRONTEND=noninteractive
-    export NEEDRESTART_MODE=a
-    apt-get update -qq
-    apt-get install -y -qq postgresql-client >/tmp/bds-pg-client-install.log 2>&1 || { tail -80 /tmp/bds-pg-client-install.log; exit 1; }
-  fi
+  export DEBIAN_FRONTEND=noninteractive
+  export NEEDRESTART_MODE=a
+  ${aptWaitShell}
+  ${ensurePostgresRestoreToolsShell}
+  export MAX_APT_WAIT_SECS=300
+  wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+  ensure_pg_restore_tools
   pg_restore --data-only --table=inbounds --file=- "$workdir/x-ui-postgres.dump" 2>/dev/null | python3 -c 'import sys
 count = 0
 in_copy = False
@@ -1025,7 +1387,7 @@ db="$workdir/etc/x-ui/x-ui.db"
     : `
 db=${shellQuote(backup.remotePath)}
 `;
-  const command = `
+    command = `
 set -e
 ${archivePrepare}
 [ -s "$db" ] || { echo "BACKUP_DB_MISSING"; exit 1; }
@@ -1050,7 +1412,9 @@ finally:
     conn.close()
 PY
 `;
-  const output = await execSsh(host, command, 30000);
+  }
+
+  const output = await execSsh(host, command, BACKUP_INSPECT_TIMEOUT_MS);
   const kindMatch = output.match(/BACKUP_KIND:(sqlite|postgres)/);
   const match = output.match(/INBOUND_COUNT:(\d+)/);
   if (!kindMatch || !match) {
@@ -1078,7 +1442,7 @@ function sftpUpload(host: string, localPath: string, remotePath: string): Promis
           else resolve();
         });
       });
-    }).on('error', reject).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: 20000 });
+    }).on('error', reject).connect({ host, port: 22, username: 'root', password: 'Mka@2016Omk', readyTimeout: SSH_READY_TIMEOUT_MS });
   });
 }
 
@@ -1087,6 +1451,16 @@ export async function actionInstall3xUI(serverName: string, progress?: ProgressR
   const config = await getRotateConfig();
   const doToken = getDoTokenForServer(serverName, config);
   const panelTarget = await getPanelTarget(serverName);
+  const xuiInstallVersion = getXuiInstallVersion();
+  const backupsDir = path.join(process.cwd(), 'backups');
+  const backupCandidates = getBackupCandidates(backupsDir, serverName);
+  const expectedBackupNames = `${serverName}_backup.tar.gz, ${serverName}_backup.tgz, ${serverName}_backup.dump, ${serverName}.dump, ${serverName}_backup.db, or ${serverName}.db`;
+
+  if (backupCandidates.length < 1) {
+    throw new Error(`Backup file not found or empty before install. Put one of these files in ${backupsDir}: ${expectedBackupNames}.`);
+  }
+
+  await reportProgress(progress, `Using 3x-ui ${xuiInstallVersion} and ${backupCandidates.length} backup candidate(s) for ${serverName}.`);
 
   // Get New IP
   await reportProgress(progress, 'Finding the new DigitalOcean public IP...');
@@ -1105,7 +1479,7 @@ export async function actionInstall3xUI(serverName: string, progress?: ProgressR
 set -e
 export DEBIAN_FRONTEND=noninteractive
 curl -fsSL https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh -o /tmp/3x-ui-install.sh
-printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.2.5
+printf '2\\n1\\ny\\n${panelTarget.port}\\n4\\n' | bash /tmp/3x-ui-install.sh ${xuiInstallVersion}
 `;
     const installCmd = `timeout 12m bash -lc ${shellQuote(installScript)}`;
 
@@ -1131,12 +1505,7 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.2.5
 
   if (!installed) throw new Error("Failed to connect via SSH and install 3x-ui. VPS might still be booting.");
 
-  await installFail2BanIpLimit(newIp, progress);
-
   // Restore DB and SSL Certificates
-  const backupsDir = path.join(process.cwd(), 'backups');
-  const backupCandidates = getBackupCandidates(backupsDir, serverName);
-
   if (backupCandidates.length > 0) {
     let selectedBackup: ValidatedBackup | null = null;
     const validationErrors: string[] = [];
@@ -1159,7 +1528,7 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.2.5
     }
 
     if (!selectedBackup) {
-      throw new Error(`No usable x-ui backup found for ${serverName}. ${validationErrors.join(' | ')}. Put a valid ${serverName}_backup.tar.gz or ${serverName}_backup.db in the backups folder and rerun Panel.`);
+      throw new Error(`No usable x-ui backup found for ${serverName}. ${validationErrors.join(' | ')}. Put a valid ${expectedBackupNames} in the backups folder and rerun Panel.`);
     }
 
     await reportProgress(progress, 'Stopping 3x-ui before database and certificate restore...');
@@ -1169,7 +1538,8 @@ printf '1\\nn\\nn\\nn\\nn\\n' | bash /tmp/3x-ui-install.sh v3.2.5
     await reportProgress(progress, 'Restoring x-ui database and SSL certificate files...');
     const postgresDbName = `xui_${serverName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}`;
     const extractCmd = selectedBackup.databaseKind === 'postgres'
-      ? `
+      ? selectedBackup.kind === 'archive'
+        ? `
 set -e
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
@@ -1186,8 +1556,14 @@ tar -xzf "$backup" -C "$workdir" x-ui-default.env 2>/dev/null || true
 tar -xzf "$backup" -C / root/cert 2>/dev/null || true
 tar -xzf "$backup" -C / root/.acme.sh 2>/dev/null || true
 [ -s "$workdir/x-ui-postgres.dump" ] || { echo "Restored PostgreSQL dump is missing or empty"; exit 1; }
-apt-get update -qq
-apt-get install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
+${aptWaitShell}
+${ensurePostgresRestoreToolsShell}
+export MAX_APT_WAIT_SECS=300
+wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+run_apt update -qq
+wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+run_apt install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
+ensure_pg_restore_tools
 systemctl enable --now postgresql >/dev/null
 if [ -s "$pass_file" ]; then
   db_pass=$(cat "$pass_file")
@@ -1205,13 +1581,67 @@ if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname='
   runuser -u postgres -- createdb -O "$db_user" "$db_name"
 fi
 runuser -u postgres -- psql -v ON_ERROR_STOP=1 -d "$db_name" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION $db_user;" >/dev/null
-PGPASSWORD="$db_pass" pg_restore -h 127.0.0.1 -U "$db_user" -d "$db_name" --no-owner --no-privileges "$workdir/x-ui-postgres.dump"
+restore_sql="$workdir/x-ui-postgres.sql"
+pg_restore --no-owner --no-privileges --file="$restore_sql" "$workdir/x-ui-postgres.dump"
+sed -i '/^SET transaction_timeout = 0;$/d' "$restore_sql"
+PGPASSWORD="$db_pass" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$db_user" -d "$db_name" -f "$restore_sql"
 dsn="postgres://$db_user:$db_pass@127.0.0.1:5432/$db_name?sslmode=disable"
 if [ -f "$workdir/x-ui-default.env" ]; then
   grep -v -E '^(XUI_DB_TYPE|XUI_DB_DSN)=' "$workdir/x-ui-default.env" > /etc/default/x-ui || true
 else
   : > /etc/default/x-ui
 fi
+{
+  echo 'XUI_DB_TYPE=postgres'
+  echo "XUI_DB_DSN=$dsn"
+} >> /etc/default/x-ui
+chmod 600 /etc/default/x-ui
+rm -f "$backup"
+PGPASSWORD="$db_pass" psql -h 127.0.0.1 -U "$db_user" -d "$db_name" -tAc "select 'RESTORED_PG_INBOUNDS=' || count(*) from inbounds;"
+`
+        : `
+set -e
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+backup=${shellQuote(selectedBackup.remotePath)}
+db_name=${shellQuote(postgresDbName)}
+db_user=${shellQuote(postgresDbName)}
+pass_file="/root/.${postgresDbName}_pg_password"
+workdir=$(mktemp -d)
+cleanup() { rm -rf "$workdir"; }
+trap cleanup EXIT
+[ -s "$backup" ] || { echo "Restored PostgreSQL dump is missing or empty"; exit 1; }
+${aptWaitShell}
+${ensurePostgresRestoreToolsShell}
+export MAX_APT_WAIT_SECS=300
+wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+run_apt update -qq
+wait_for_apt || { echo "Could not acquire apt lock"; exit 1; }
+run_apt install -y -qq postgresql postgresql-client postgresql-contrib >/tmp/bds-pg-restore-install.log 2>&1 || { tail -120 /tmp/bds-pg-restore-install.log; exit 1; }
+ensure_pg_restore_tools
+systemctl enable --now postgresql >/dev/null
+if [ -s "$pass_file" ]; then
+  db_pass=$(cat "$pass_file")
+else
+  db_pass=$(openssl rand -hex 24)
+  umask 077
+  printf '%s' "$db_pass" > "$pass_file"
+fi
+if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$db_user'" | grep -q 1; then
+  runuser -u postgres -- psql -v ON_ERROR_STOP=1 -c "CREATE ROLE $db_user LOGIN PASSWORD '$db_pass';" >/dev/null
+else
+  runuser -u postgres -- psql -v ON_ERROR_STOP=1 -c "ALTER ROLE $db_user WITH LOGIN PASSWORD '$db_pass';" >/dev/null
+fi
+if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname='$db_name'" | grep -q 1; then
+  runuser -u postgres -- createdb -O "$db_user" "$db_name"
+fi
+runuser -u postgres -- psql -v ON_ERROR_STOP=1 -d "$db_name" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION $db_user;" >/dev/null
+restore_sql="$workdir/x-ui-postgres.sql"
+pg_restore --no-owner --no-privileges --file="$restore_sql" "$backup"
+sed -i '/^SET transaction_timeout = 0;$/d' "$restore_sql"
+PGPASSWORD="$db_pass" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$db_user" -d "$db_name" -f "$restore_sql"
+dsn="postgres://$db_user:$db_pass@127.0.0.1:5432/$db_name?sslmode=disable"
+: > /etc/default/x-ui
 {
   echo 'XUI_DB_TYPE=postgres'
   echo "XUI_DB_DSN=$dsn"
@@ -1276,8 +1706,12 @@ fi
     const sslOutput = await execSsh(newIp, sslCmd);
     const sslApplied = sslOutput.includes('SSL_APPLIED');
 
-    await reportProgress(progress, `Opening panel port ${panelTarget.port} on the VPS firewall...`);
-    await execSsh(newIp, `ufw allow ${panelTarget.port}/tcp || true`);
+    const firewallPorts = getFirewallPortsForServer(serverName, panelTarget);
+    await reportProgress(progress, `Opening VPS firewall ports: ${firewallPorts.join(', ')}...`);
+    const firewallCmd = firewallPorts
+      .map((port) => `ufw allow ${port}/tcp || true`)
+      .join('\n');
+    await execSsh(newIp, firewallCmd);
 
     await restartPanelAndXray(newIp, progress);
 
@@ -1301,23 +1735,38 @@ fi
     await reportProgress(progress, 'Checking whether the restored panel is serving HTTPS...');
     const protocol = await detectPanelProtocol(newIp, panelTarget.port, panelTarget.panelPath);
     await reportProgress(progress, 'Verifying restored database through the panel API...');
-    const inboundCount = await getRestoredInboundCount(
-      newIp,
-      protocol,
-      panelTarget.port,
-      panelTarget.panelPath,
-      config.xuiUsername || 'admin',
-      config.xuiPassword || 'admin'
-    );
+    let inboundCount: number;
+    try {
+      inboundCount = await getRestoredInboundCount(
+        newIp,
+        protocol,
+        panelTarget.port,
+        panelTarget.panelPath,
+        config.xuiUsername || 'admin',
+        config.xuiPassword || 'admin'
+      );
+    } catch (err) {
+      if (selectedBackup.databaseKind !== 'postgres') throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      await reportProgress(progress, `Panel API verification failed (${message.slice(0, 180)}). Checking restored PostgreSQL database directly...`);
+      inboundCount = await getRestoredDatabaseInboundCount(newIp);
+    }
 
     if (inboundCount < 1) {
-      throw new Error(`Database restore completed from ${path.basename(selectedBackup.localPath)}, but the panel API still shows 0 inbounds. Restore a valid ${serverName}_backup.tar.gz or legacy ${serverName}_backup.db from Telegram/backups.`);
+      throw new Error(`Database restore completed from ${path.basename(selectedBackup.localPath)}, but the panel API still shows 0 inbounds. Restore a valid ${expectedBackupNames} from Telegram/backups.`);
     }
 
     const urlPath = getPanelUiPath(panelTarget.panelPath);
     const sslNote = sslApplied
       ? (protocol === 'https' ? '' : ' SSL certificate files were applied, but HTTPS did not respond after restart, so the panel URL is HTTP.')
       : ' SSL certificate files were not found in the backup, so the panel URL is HTTP.';
+
+    try {
+      await installFail2BanIpLimit(newIp, progress);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await reportProgress(progress, `Fail2Ban IP Limit setup did not complete: ${message.slice(0, 500)}. Panel restore already succeeded; you can rerun Fail2Ban setup later.`);
+    }
 
     return {
       success: true,
@@ -1329,6 +1778,6 @@ fi
       inboundCount,
     };
   } else {
-    throw new Error(`Backup file not found to restore! Expected ${path.join(backupsDir, `${serverName}_backup.tar.gz`)} or ${path.join(backupsDir, `${serverName}_backup.db`)}`);
+    throw new Error(`Backup file not found to restore! Put one of these files in ${backupsDir}: ${expectedBackupNames}.`);
   }
 }
